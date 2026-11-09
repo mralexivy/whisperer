@@ -279,7 +279,16 @@ actor AudioEngineLifecycle {
         route: ResolvedInputRoute,
         onBuffer: @escaping ([Float]) -> Void
     ) throws -> (deviceID: AudioDeviceID?, settledFormat: AVAudioFormat?) {
+        // Each step's time, logged once the graph is built: an AirPods start took 6 s with no
+        // way to tell how much was macOS switching the headset to call mode and how much was ours.
+        let buildStart = ContinuousClock.now
+        var marks: [(String, Double)] = []
+        func mark(_ step: String) { marks.append((step, buildStart.duration(to: .now).seconds * 1000)) }
+        defer {
+            Logger.step(.engBuild, .audio, ["timing": .string(marks.map { "\($0.0)=\(Int($0.1))ms" }.joined(separator: " "))])
+        }
         let inputNode = engine.inputNode  // force AUHAL AudioUnit creation
+        mark("unit")
         Logger.step(.engBuild, .audio, ["unit": .bool(inputNode.audioUnit != nil)])
 
         // Bind device — skip CADefaultDeviceAggregate-* UIDs that CoreAudio creates during
@@ -308,8 +317,10 @@ actor AudioEngineLifecycle {
             }
         }
 
+        mark("bind")
         // Prepare BEFORE querying format (allocates resources for the bound device)
         engine.prepare()
+        mark("prepare")
 
         // Settle the input format. On Bluetooth (especially after a handoff on macOS 26.2), the
         // HAL negotiates the mic sample rate inside `prepare()`. The format read immediately after
@@ -317,6 +328,7 @@ actor AudioEngineLifecycle {
         // asserts the tap format matches the *live* hardware format at install time. Wait until
         // two consecutive reads agree (or the budget expires).
         let settledFormat = settledInputFormat(inputNode: inputNode, deviceID: boundDeviceID)
+        mark("settle")
         guard let inputFormat = settledFormat,
               inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
             let badSR = inputNode.outputFormat(forBus: 0).sampleRate
@@ -437,6 +449,7 @@ actor AudioEngineLifecycle {
             }
         }
 
+        mark("tap")
         guard tapOk else {
             throw RecordingError.audioUnitFailed
         }
@@ -496,6 +509,22 @@ actor AudioEngineLifecycle {
             let nominalRate = deviceID.flatMap { nominalSampleRate($0) }
             let ratesAgree = nominalRate.map { abs($0 - cur.sampleRate) < 1.0 } ?? true
 
+            // A Bluetooth headset in call mode: the node keeps reporting the rate it had before
+            // (48 kHz) while the hardware has settled at the call rate the HAL reports. Waiting
+            // for the node never ends — it cost the whole 1.2 s budget on every AirPods start.
+            // The tap is installed at the hardware rate (`tapInstallFormat`), so the hardware
+            // agreeing with the HAL is settled enough.
+            let hardware = inputNode.inputFormat(forBus: 0)
+            if let nominalRate, hardware.sampleRate > 0, hardware.channelCount > 0,
+               abs(hardware.sampleRate - nominalRate) < 1, abs(cur.sampleRate - nominalRate) >= 1 {
+                Logger.step(.engBuild, .audio, [
+                    "sr": .double(hardware.sampleRate),
+                    "node_sr": .double(cur.sampleRate),
+                    "settle_ms": .int(Int(Date().timeIntervalSince(startMs) * 1000)),
+                    "settled": .string("hardware")
+                ])
+                return cur
+            }
             if cur.sampleRate > 0 && cur.channelCount > 0 &&
                cur.sampleRate == prev.sampleRate && ratesAgree {
                 let elapsedMs = Int(Date().timeIntervalSince(startMs) * 1000)
