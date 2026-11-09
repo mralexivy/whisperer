@@ -20,6 +20,16 @@ struct MeetingOverviewView: View {
 
     private var summary: MeetingAISummary? { meeting?.aiSummary }
 
+    /// A Hebrew or Arabic overview reads right to left as a whole: bullets, icons and
+    /// checkboxes on the right, timestamps on the left, every paragraph RTL-based. Decided by the
+    /// overview's own text (it is written in the meeting's language), the meeting's language
+    /// only when there is too little text to tell.
+    private func isRTL(_ s: MeetingAISummary) -> Bool {
+        let sample = ([s.overview] + s.keyTopics.map(\.text) + s.openQuestions.map(\.text)).joined(separator: " ")
+        return MeetingTranscriptText.isRightToLeft(
+            text: sample, fallback: meeting.flatMap { TranscriptionLanguage(rawValue: $0.language) })
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -66,18 +76,26 @@ struct MeetingOverviewView: View {
     // MARK: - Content
 
     private func overviewContent(_ s: MeetingAISummary) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Provenance bar
+        let rtl = isRTL(s)
+        return VStack(alignment: .leading, spacing: 16) {
+            // Provenance bar — app chrome, stays left to right.
             provenanceBar(s)
 
+            overviewSections(s, rtl: rtl)
+                .environment(\.layoutDirection, rtl ? .rightToLeft : .leftToRight)
+        }
+    }
+
+    private func overviewSections(_ s: MeetingAISummary, rtl: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
             // AI overview card
-            overviewCard(s)
+            overviewCard(s, rtl: rtl)
 
             // Key topics
             if !s.keyTopics.isEmpty {
                 sectionCard(title: "KEY TOPICS", icon: "tag.fill", color: Color(hex: "5B6CF7")) {
                     ForEach(s.keyTopics) { topic in
-                        topicRow(topic)
+                        topicRow(topic, rtl: rtl)
                     }
                 }
             }
@@ -86,7 +104,7 @@ struct MeetingOverviewView: View {
             if !s.decisions.isEmpty {
                 sectionCard(title: "DECISIONS", icon: "checkmark.seal.fill", color: Color(hex: "10B981")) {
                     ForEach(s.decisions) { decision in
-                        decisionRow(decision)
+                        decisionRow(decision, rtl: rtl)
                     }
                 }
             }
@@ -95,19 +113,19 @@ struct MeetingOverviewView: View {
             if !s.openQuestions.isEmpty {
                 sectionCard(title: "OPEN QUESTIONS", icon: "questionmark.circle.fill", color: Color(hex: "F59E0B")) {
                     ForEach(s.openQuestions) { q in
-                        questionRow(q)
+                        questionRow(q, rtl: rtl)
                     }
                 }
             }
 
             // Next meeting
             if let next = s.nextMeeting, !next.isEmpty {
-                nextMeetingCard(next)
+                nextMeetingCard(next, rtl: rtl)
             }
 
             // Action items
             if !s.actionItems.isEmpty {
-                actionItemsCard(s.actionItems)
+                actionItemsCard(s.actionItems, rtl: rtl)
             }
         }
     }
@@ -156,7 +174,7 @@ struct MeetingOverviewView: View {
 
     // MARK: - Overview card
 
-    private func overviewCard(_ s: MeetingAISummary) -> some View {
+    private func overviewCard(_ s: MeetingAISummary, rtl: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Text("✦")
@@ -169,10 +187,7 @@ struct MeetingOverviewView: View {
                 Spacer()
             }
 
-            Text(s.overview)
-                .font(.system(size: 14, weight: .regular))
-                .foregroundColor(.white.opacity(0.85))
-                .lineSpacing(4)
+            OverviewParagraph(text: s.overview, isRTL: rtl, size: 14, opacity: 0.85, lineSpacing: 4)
         }
         .padding(16)
         .background(Color(hex: "14142B"))
@@ -203,22 +218,19 @@ struct MeetingOverviewView: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
-    private func topicRow(_ topic: TopicItem) -> some View {
-        HStack(spacing: 8) {
+    private func topicRow(_ topic: TopicItem, rtl: Bool) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
             Circle()
                 .fill(Color(hex: "5B6CF7").opacity(0.5))
                 .frame(width: 5, height: 5)
-            Text(topic.text)
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.8))
-            Spacer()
+            OverviewParagraph(text: topic.text, isRTL: rtl, size: 13, opacity: 0.8)
             Text(formatTimestamp(topic.timestampSeconds))
                 .font(.system(size: 11).monospacedDigit())
                 .foregroundColor(.white.opacity(0.3))
         }
     }
 
-    private func decisionRow(_ decision: DecisionItem) -> some View {
+    private func decisionRow(_ decision: DecisionItem, rtl: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(decision.label)
@@ -229,30 +241,24 @@ struct MeetingOverviewView: View {
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundColor(.white.opacity(0.3))
             }
-            Text(decision.text)
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.75))
-                .lineSpacing(2)
+            OverviewParagraph(text: decision.text, isRTL: rtl, size: 13, opacity: 0.75, lineSpacing: 2)
         }
         .padding(.vertical, 4)
     }
 
-    private func questionRow(_ q: QuestionItem) -> some View {
-        HStack(spacing: 8) {
+    private func questionRow(_ q: QuestionItem, rtl: Bool) -> some View {
+        HStack(alignment: .top, spacing: 8) {
             Image(systemName: "questionmark")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(Color(hex: "F59E0B"))
                 .frame(width: 18, height: 18)
                 .background(Color(hex: "F59E0B").opacity(0.12))
                 .clipShape(Circle())
-            Text(q.text)
-                .font(.system(size: 13))
-                .foregroundColor(.white.opacity(0.8))
-            Spacer()
+            OverviewParagraph(text: q.text, isRTL: rtl, size: 13, opacity: 0.8)
         }
     }
 
-    private func nextMeetingCard(_ text: String) -> some View {
+    private func nextMeetingCard(_ text: String, rtl: Bool) -> some View {
         HStack(spacing: 10) {
             Image(systemName: "calendar")
                 .font(.system(size: 14))
@@ -262,11 +268,8 @@ struct MeetingOverviewView: View {
                     .font(.system(size: 10, weight: .bold))
                     .tracking(0.8)
                     .foregroundColor(Color(hex: "5B6CF7").opacity(0.7))
-                Text(text)
-                    .font(.system(size: 13))
-                    .foregroundColor(.white.opacity(0.8))
+                OverviewParagraph(text: text, isRTL: rtl, size: 13, opacity: 0.8)
             }
-            Spacer()
         }
         .padding(14)
         .background(Color(hex: "5B6CF7").opacity(0.08))
@@ -275,7 +278,7 @@ struct MeetingOverviewView: View {
 
     // MARK: - Action items
 
-    private func actionItemsCard(_ items: [MeetingActionItem]) -> some View {
+    private func actionItemsCard(_ items: [MeetingActionItem], rtl: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "checklist")
@@ -289,7 +292,7 @@ struct MeetingOverviewView: View {
 
             if let meetingID = meeting?.id {
                 ForEach(items) { item in
-                    ActionItemRow(item: item, meetingID: meetingID)
+                    ActionItemRow(item: item, meetingID: meetingID, isRTL: rtl)
                 }
             }
         }
@@ -532,6 +535,7 @@ struct MeetingOverviewView: View {
 struct ActionItemRow: View {
     @State var item: MeetingActionItem
     let meetingID: UUID
+    var isRTL = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -546,10 +550,8 @@ struct ActionItemRow: View {
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(item.text)
-                    .font(.system(size: 13))
-                    .foregroundColor(item.isDone ? .white.opacity(0.4) : .white.opacity(0.85))
-                    .strikethrough(item.isDone, color: .white.opacity(0.3))
+                OverviewParagraph(text: item.text, isRTL: isRTL, size: 13,
+                                  opacity: item.isDone ? 0.4 : 0.85, strikethrough: item.isDone)
                 HStack(spacing: 8) {
                     if !item.ownerName.isEmpty {
                         Label(item.ownerName, systemImage: "person")
@@ -566,5 +568,37 @@ struct ActionItemRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+    }
+}
+
+/// One paragraph of the overview. Right to left it is an `NSTextField` with an RTL base writing
+/// direction — SwiftUI's `Text` has no paragraph direction, so a Hebrew line that ends in an
+/// English term or a period had them on the wrong side (see CLAUDE.md, "RTL text in SwiftUI").
+/// Fills the width so it wraps instead of truncating beside a timestamp.
+struct OverviewParagraph: View {
+    let text: String
+    let isRTL: Bool
+    var size: CGFloat = 13
+    var opacity: Double = 0.8
+    var lineSpacing: CGFloat = 2
+    var strikethrough = false
+
+    var body: some View {
+        Group {
+            if isRTL {
+                MeetingSegmentTextView(text: text, highlightQuery: "", isRTL: true, fontSize: size,
+                                       color: NSColor.white.withAlphaComponent(opacity),
+                                       lineSpacing: lineSpacing, strikethrough: strikethrough)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(text)
+                    .font(.system(size: size))
+                    .foregroundColor(.white.opacity(opacity))
+                    .lineSpacing(lineSpacing)
+                    .strikethrough(strikethrough, color: .white.opacity(0.3))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

@@ -281,3 +281,9 @@ it across launches would have to be per-display anyway. Drag/resize still holds 
 - In-process accessibility (`AXUIElementCreateApplication(getpid())` from the main thread)
   deadlocks: the AX request waits on the main run loop it is blocking. SwiftUI's own
   `accessibilityChildren()` is empty until an assistive client asks.
+
+## RTL meeting overview (2026-11-09)
+- The overview's sections mirror for a Hebrew/Arabic meeting: `.environment(\.layoutDirection, .rightToLeft)` on the sections (the provenance bar is app chrome and stays LTR), paragraphs through `OverviewParagraph` → `MeetingSegmentTextView` (NSTextField, RTL base direction; now takes font size, weight, colour, line spacing, strikethrough).
+- Direction comes from the overview's own text by majority (`MeetingTranscriptText.isRightToLeft(text:fallback:)`), the meeting language only as a fallback.
+- Ask AI starter chips use the topic's script for the prefix ("ספר לי על …", "Расскажи о …") — an English prefix on a Hebrew topic was a mixed-direction chip.
+- `MeetingOverviewRTLTests` renders both directions in a real window; TEST_RUNNER_OVERVIEW_SNAPSHOT=<dir> writes PNGs.

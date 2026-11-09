@@ -256,6 +256,11 @@ struct MeetingSegmentTextView: NSViewRepresentable {
     let text: String
     let highlightQuery: String
     let isRTL: Bool
+    var fontSize: CGFloat = 14
+    var weight: NSFont.Weight = .regular
+    var color: NSColor = NSColor.white.withAlphaComponent(0.85)
+    var lineSpacing: CGFloat = 3
+    var strikethrough = false
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -273,22 +278,29 @@ struct MeetingSegmentTextView: NSViewRepresentable {
 
     func updateNSView(_ field: NSTextField, context: Context) {
         let c = context.coordinator
-        guard text != c.lastText || highlightQuery != c.lastQuery || isRTL != c.lastIsRTL else { return }
+        let styleKey = "\(fontSize)|\(weight.rawValue)|\(color)|\(lineSpacing)|\(strikethrough)"
+        guard text != c.lastText || highlightQuery != c.lastQuery || isRTL != c.lastIsRTL
+                || styleKey != c.lastStyle else { return }
         c.lastText = text
         c.lastQuery = highlightQuery
         c.lastIsRTL = isRTL
+        c.lastStyle = styleKey
 
         let style = NSMutableParagraphStyle()
-        style.lineSpacing = 3
+        style.lineSpacing = lineSpacing
         style.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
         style.alignment = isRTL ? .right : .left
 
-        let font = NSFont.systemFont(ofSize: 14, weight: .regular)
-        let baseAttrs: [NSAttributedString.Key: Any] = [
+        let font = NSFont.systemFont(ofSize: fontSize, weight: weight)
+        var baseAttrs: [NSAttributedString.Key: Any] = [
             .font: font,
-            .foregroundColor: NSColor.white.withAlphaComponent(0.85),
+            .foregroundColor: color,
             .paragraphStyle: style
         ]
+        if strikethrough {
+            baseAttrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+            baseAttrs[.strikethroughColor] = NSColor.white.withAlphaComponent(0.3)
+        }
 
         let attributed = NSMutableAttributedString(string: text, attributes: baseAttrs)
 
@@ -320,5 +332,6 @@ struct MeetingSegmentTextView: NSViewRepresentable {
         var lastText: String = ""
         var lastQuery: String = ""
         var lastIsRTL: Bool = false
+        var lastStyle: String = ""
     }
 }

@@ -177,6 +177,7 @@ struct AskAIPane: View {
                             .font(.system(size: 12))
                             .foregroundColor(.white.opacity(0.6))
                             .multilineTextAlignment(.center)
+                            .environment(\.layoutDirection, Self.detectRTL(q) ? .rightToLeft : .leftToRight)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
                             .background(Color.white.opacity(0.06))
@@ -193,7 +194,7 @@ struct AskAIPane: View {
     private var starterQuestions: [String] {
         // Prefer topic-derived suggestions from the AI summary
         if let topics = meeting?.aiSummary?.keyTopics, !topics.isEmpty {
-            return Array(topics.prefix(3).map { "Tell me about \($0.text)" })
+            return Array(topics.prefix(3).map { Self.tellMeAbout($0.text) })
         }
         return [
             "What were the main decisions?",
@@ -235,6 +236,26 @@ struct AskAIPane: View {
     /// Detects RTL script (Hebrew, Arabic) from the first 50 characters of text.
     /// Per CLAUDE.md, SwiftUI Text cannot set paragraph base writing direction reliably —
     /// RTL text requires NSTextField via NSViewRepresentable.
+    /// "Tell me about …" in the topic's own script. An English prefix on a Hebrew topic made a
+    /// mixed-direction chip ("Tell me about ‎…תיאום") and asked the model in English (2026-11-09).
+    static func tellMeAbout(_ topic: String) -> String {
+        var hebrew = 0, cyrillic = 0, arabic = 0, latin = 0
+        for scalar in topic.unicodeScalars {
+            switch scalar.value {
+            case 0x0590...0x05FF: hebrew += 1
+            case 0x0600...0x06FF: arabic += 1
+            case 0x0400...0x04FF: cyrillic += 1
+            case 0x41...0x5A, 0x61...0x7A: latin += 1
+            default: break
+            }
+        }
+        let top = max(hebrew, arabic, cyrillic)
+        guard top > latin / 2, top > 0 else { return "Tell me about \(topic)" }
+        if top == hebrew { return "ספר לי על \(topic)" }
+        if top == arabic { return "أخبرني عن \(topic)" }
+        return "Расскажи о \(topic)"
+    }
+
     private static func detectRTL(_ text: String) -> Bool {
         for scalar in text.prefix(50).unicodeScalars {
             let v = scalar.value

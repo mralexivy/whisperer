@@ -106,6 +106,15 @@ enum MeetingTranscriptText {
         return false
     }
 
+    /// The same majority over free text — an AI overview, a topic, a question.
+    static func isRightToLeft(text: String, fallback: TranscriptionLanguage? = nil) -> Bool {
+        var tally = ScriptTally()
+        tally.count(text, limit: directionSampleLetters)
+        if let verdict = tally.isRightToLeft { return verdict }
+        if let fallback, fallback != .auto { return fallback.isRTL }
+        return false
+    }
+
     /// Letters to look at in total. Enough to be representative, small enough that a view can
     /// recompute it on every render.
     private static let directionSampleLetters = 2_000
