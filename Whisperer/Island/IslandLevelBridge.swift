@@ -48,8 +48,11 @@ final class IslandLevelBridge: ObservableObject {
     }
 
     /// Start or resume the 60 Hz display timer. Call when the row is visible (compact/expanded).
+    /// 60 Hz for a dictation; 20 Hz for a meeting, which keeps the Island's waveform redrawing
+    /// for an hour — each frame is a WindowServer composite (2026-11-09). The bars scroll slower,
+    /// which a long recording does not mind.
     func startTimer() {
-        waveform.startDisplayLink()
+        waveform.startDisplayLink(fps: AppState.shared.isMeetingMode ? 20 : 60)
     }
 
     /// Stop the timer. `freezeAtCurrent` holds the last bars in place (pause); otherwise

@@ -9,3 +9,4 @@
 - `HealthManager` checks the main thread every 1 s while recording, every 5 s idle.
 - `StreamingTranscriber.scanAndProcessChunks` returns before copying the ring when the live engine writes the meeting (it copied up to 35 s of audio twice a second for nothing).
 - Apple language ID checks the session's language first; ≥ 0.65 confirms it in one pass (the highest wrong-locale confidence in the benchmark was 0.54). he→en replay: same ~3 s switch, language-ID time 15.2 s → 9.0 s over 205 s.
+- The Island's waveform redraws at 20 Hz during a meeting (60 Hz for dictation): an hour of 60 Hz composites for a glyph nobody watches closely.

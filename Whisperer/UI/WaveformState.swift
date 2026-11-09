@@ -62,9 +62,10 @@ final class WaveformState: ObservableObject {
 
     /// Start 60Hz updates directly. Used by IslandLevelBridge for its own WaveformState instance
     /// (separate from the renderer-counted AppState.waveformState path).
-    func startDisplayLink() {
-        guard displayTimer == nil else { return }
-        let t = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
+    func startDisplayLink(fps: Double = 60) {
+        if let current = displayTimer, abs(current.timeInterval - 1.0 / fps) < 0.0001 { return }
+        displayTimer?.invalidate()
+        let t = Timer.scheduledTimer(withTimeInterval: 1.0 / fps, repeats: true) { [weak self] _ in
             // Fires on the main run loop (added below); the closure type is just nonisolated.
             MainActor.assumeIsolated { self?.tick() }
         }
