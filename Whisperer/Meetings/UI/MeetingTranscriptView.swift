@@ -487,10 +487,8 @@ struct MeetingTranscriptView: View {
                     .padding(isRTL ? .leading : .trailing, outerMargin + timestampCol + innerHPad)
             }
 
-            Text(combinedSegmentText)
-                .font(.system(size: 14, weight: .regular))
-                .lineSpacing(5)
-                .multilineTextAlignment(isRTL ? .trailing : .leading)
+            // Paced like dictation, words never re-typed — shared with the live window.
+            MeetingLiveTailText(text: combinedSegmentText, isRTL: isRTL)
                 .frame(maxWidth: .infinity, alignment: isRTL ? .trailing : .leading)
                 .padding(.horizontal, innerHPad)
                 .padding(.vertical, cardVPad)
@@ -534,13 +532,11 @@ struct MeetingTranscriptView: View {
     /// revisable while it sits in `MeetingSpeakerCoordinator`'s pending queue. That is an
     /// internal distinction: both halves are words the user already spoke, so drawing the tail
     /// dimmed read as a rendering fault rather than as "this may still change".
-    private var combinedSegmentText: AttributedString {
+    private var combinedSegmentText: String {
         var parts: [String] = []
         if !session.currentSegmentText.isEmpty { parts.append(session.currentSegmentText) }
         if !session.livePreviewText.isEmpty { parts.append(session.livePreviewText) }
-        var result = AttributedString(parts.joined(separator: " "))
-        result.foregroundColor = .white.opacity(0.88)
-        return result
+        return parts.joined(separator: " ")
     }
 
     // MARK: - Empty state

@@ -227,27 +227,9 @@ struct MeetingLiveTranscriptView: View {
                     seconds: session.currentSegmentStartTimestamp
                 )
             }
-            if isRTL {
-                HStack(alignment: .bottom, spacing: 4) {
-                    transcriptText(combinedSegmentText)
-                    BlinkingCaret()
-                }
-            } else {
-                // Same renderer as the dictation HUD: words surface one at a time, paced to the
-                // speech that produced them, behind a caret that glides to meet each one. A flat
-                // `Text` here printed a whole ASR batch at once and left a static bar blinking
-                // beside it — the dump-then-dead-air artefact the pour exists to remove.
-                //
-                // Keyed on the open card's start: the updater's projection is append-only, so a
-                // committed segment (which *shrinks* `combinedSegmentText` back to the tail) would
-                // otherwise be ignored and the bubble would keep showing text that has already
-                // moved into a card above it. Identity is the reset.
-                LivePourText(text: combinedSegmentText,
-                             fontSize: 14,
-                             fontDesign: .default,
-                             placeholder: nil)
-                    .id(session.currentSegmentStartTimestamp)
-            }
+            // Same renderer as Workspace and, for English, the dictation HUD: paced words that never
+            // re-type themselves when the paragraph above is committed (see `MeetingLiveTailText`).
+            MeetingLiveTailText(text: combinedSegmentText, isRTL: isRTL)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 9)

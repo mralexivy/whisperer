@@ -58,6 +58,12 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     nonisolated static let midProbeSeconds = 2.0
     nonisolated static let lateProbeSeconds = 3.0
     nonisolated static let confidentProbability: Float = 0.8
+    /// An early checkpoint must be this sure to *leave* the language the session started in.
+    /// Staying needs only `confidentProbability`. A switch costs an analyzer restart and a replay,
+    /// and the start language (the last one spoken) is usually right: on 2026-11-09 a 1.0 s V3
+    /// probe read Hebrew as `en 0.81`, flipped a correct Hebrew start to English, and the 3.0 s
+    /// probe (`he 1.00`) flipped it back seven seconds later — the "back and forth" at the start.
+    nonisolated static let earlySwitchProbability: Float = 0.95
     /// Audio kept for replay into a restarted analyzer. Past it, a restart carries text over.
     nonisolated static let replayLimitSamples = 16_000 * 30
     /// After the start-of-session decision, the language is re-checked on the most recent
@@ -452,7 +458,10 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         }
         let scores = result.probabilities.sorted { $0.value > $1.value }
             .map { "\($0.key.rawValue)=\(String(format: "%.2f", $0.value))" }.joined(separator: " ")
-        if (stage == .waitingEarly || stage == .waitingMid) && result.probability < Self.confidentProbability {
+        let leavesStart = result.language != sessionLanguage
+        let early = stage == .waitingEarly || stage == .waitingMid
+        if early && (result.probability < Self.confidentProbability
+                     || (leavesStart && result.probability < Self.earlySwitchProbability)) {
             // From a 2 s first checkpoint there is no mid one left; go to the late one.
             let next: ProbeStage = stage == .waitingEarly && probeEarlySeconds < Self.midProbeSeconds ? .waitingMid : .waitingLate
             let nextSeconds = next == .waitingMid ? Self.midProbeSeconds : Self.lateProbeSeconds

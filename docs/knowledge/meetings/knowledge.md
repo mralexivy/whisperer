@@ -403,3 +403,9 @@ generic, but honest, and it needs no guess about anyone's title format.
   `MeetingTranscriptHandoffTests` with the loop gone, passes 3/3 after.
 - `MeetingTranscriptScrollPerformanceTests` measures a re-render, a transcript scroll step and a
   full-screen scroll step in a real window; profile with `sample <pid>` on a long scroll loop.
+
+## Live meeting text renders like dictation (2026-11-09)
+- Both live surfaces (floating window, Workspace) use `MeetingLiveTailText`: one `SmoothTextUpdater` per bubble with `setSlidingTarget`. When the front of the open paragraph is committed into a card, the shown words are dropped from the front — the rest is not re-poured. Resetting the view with `.id(segmentStart)` was what made the text "jump back and retype".
+- RTL is paced word by word in meetings (`pacesRTL`); the HUD keeps its immediate RTL path.
+- Early language probe: a 1 s V3 probe gave `en 0.81` for Hebrew and flipped Apple dictation to en-US for 7 s. An early probe that would leave the starting language now needs p ≥ 0.95.
+- `MeetingTranscriptScrollPerformanceTests` full-screen scroll is load-sensitive: 12 ms mean while Xcode's build service ran, 3 ms on a quiet machine. Check `uptime` before calling it a regression.

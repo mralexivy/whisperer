@@ -502,6 +502,11 @@ class SmoothTextUpdater: ObservableObject {
     /// paces whisper.cpp's VAD chunks (irregular, typically 1–2s) and the 500ms preview pass.
     private var arrivalPeriod: TimeInterval = 1.12
     private var lastArrivalAt: Date?
+    /// Pour right-to-left text word by word too, instead of showing each batch at once. Off for
+    /// the dictation HUD (see the RTL note in `setTarget`); on for the meeting live bubble, where a
+    /// whole Apple batch landing at once read as stuttering (2026-11-09). Appending at the end of
+    /// a right-to-left run keeps the insertion edge where the reader expects it.
+    var pacesRTL = false
     /// Interval for the batch currently draining. Held for the whole batch rather than recomputed
     /// per word: recomputing makes the interval grow as the queue shrinks, so a phrase would
     /// visibly decelerate into its own tail and overrun the next arrival.
@@ -573,7 +578,7 @@ class SmoothTextUpdater: ObservableObject {
 
         // RTL should remain immediate because animating logical word order can move the
         // insertion edge unpredictably, but it follows the same append-only contract.
-        if rtl {
+        if rtl && !pacesRTL {
             animationTimer?.invalidate()
             animationTimer = nil
             pendingWords.removeAll()
@@ -586,6 +591,52 @@ class SmoothTextUpdater: ObservableObject {
         pendingWords.append(contentsOf: appendedWords)
         repaceCurrentBatch()
         startAnimation()
+    }
+
+    /// For live text whose **leading** words leave as it grows — the meeting bubble, whose open
+    /// paragraph is committed into a card while the speaker keeps talking. `setTarget` is
+    /// append-only, so the bubble used to be rebuilt per card and re-poured every remaining word:
+    /// text that visibly jumped back and typed itself again. Here the words that left are dropped
+    /// from the front and everything already on screen stays put; only new words are poured.
+    func setSlidingTarget(_ text: String, rtl: Bool) {
+        let incoming = text.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        let current = committedText.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        if incoming.isEmpty || current.isEmpty || Self.extends(current, with: incoming) {
+            setTarget(text, rtl: rtl)
+            return
+        }
+        // The front left: find where the remaining words begin in what is already planned.
+        let probe = min(4, incoming.count)
+        for k in 1..<current.count where current.count - k >= 1 {
+            let span = min(probe, current.count - k)
+            if Array(current[k..<k + span]) == Array(incoming[0..<span]) {
+                dropLeadingWords(k)
+                setTarget(text, rtl: rtl)
+                return
+            }
+        }
+        // Not a slide: a revision of words already shown. Shorter means the shown words are now
+        // wrong (they moved into a card under different text) — start over rather than duplicate.
+        if incoming.count < current.count {
+            setTarget("", rtl: rtl)
+        }
+        setTarget(text, rtl: rtl)
+    }
+
+    private static func extends(_ current: [String], with incoming: [String]) -> Bool {
+        guard incoming.count >= current.count else { return false }
+        let checked = min(current.count, 4)
+        return Array(current.prefix(checked)) == Array(incoming.prefix(checked))
+    }
+
+    /// Removes `count` words from the front of what is shown and planned, without re-pouring.
+    private func dropLeadingWords(_ count: Int) {
+        let fromShown = min(count, words.count)
+        words.removeFirst(fromShown)
+        let fromPending = min(count - fromShown, pendingWords.count)
+        pendingWords.removeFirst(fromPending)
+        displayedText = words.joined(separator: " ")
+        committedText = (words + pendingWords).joined(separator: " ")
     }
 
     // MARK: - Pacing
