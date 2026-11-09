@@ -171,7 +171,7 @@ final class HealthManager {
         Logger.info("HealthManager started", subsystem: .app)
 
         let t = DispatchSource.makeTimerSource(queue: monitorQueue)
-        t.schedule(deadline: .now() + 1.0, repeating: 1.0)
+        t.schedule(deadline: .now() + 1.0, repeating: 1.0, leeway: .milliseconds(100))
         t.setEventHandler { [weak self] in self?.poll() }
         t.resume()
         timer = t
@@ -193,6 +193,15 @@ final class HealthManager {
         }
 
         timelineStart = .now
+    }
+
+    /// Once a second while something records, every 5 s otherwise. The check wakes the main
+    /// thread each time; idle in the menu bar there is nothing whose stall needs catching within
+    /// a second, and a hang is still caught, a few seconds later (2026-11-09).
+    func setActiveCadence(_ active: Bool) {
+        let interval: Double = active ? 1.0 : 5.0
+        timer?.schedule(deadline: .now() + interval, repeating: interval,
+                        leeway: .milliseconds(active ? 100 : 1_000))
     }
 
     func stopMonitoring() {

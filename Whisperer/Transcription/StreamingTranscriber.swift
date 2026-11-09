@@ -1694,6 +1694,10 @@ class StreamingTranscriber {
 
     /// Scan new audio with VAD, emit chunks, transcribe them
     private func scanAndProcessChunks() {
+        // Nothing here has work while the live engine writes the meeting: no chunks, no eager
+        // pass, no language detection. Skipping before the snapshot saves copying up to 35 s of
+        // audio twice a second for the meeting's whole length.
+        if whisperIdleForMeeting { return }
         // Snapshot ring content + base for index mapping
         var ringContent: [Float] = []
         var ringBase: Int = 0

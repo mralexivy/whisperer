@@ -38,6 +38,11 @@ nonisolated enum AppleLanguageID {
         return out
     }
 
+    /// Confidence in the language a session is already in at or above which it is confirmed
+    /// without trying the others. The highest any wrong locale scored in the benchmark was 0.54;
+    /// the right one reached 0.65 on 22 of 33 windows, so most re-checks cost one pass, not three.
+    static let confirmCurrentConfidence = 0.65
+
     /// The probability the probe reports for the most confident language: its lead over the
     /// runner-up, offset so the existing thresholds (0.85 confident, 0.95 sure) keep their meaning.
     static func probabilities(from confidences: [TranscriptionLanguage: Double]) -> [TranscriptionLanguage: Float] {

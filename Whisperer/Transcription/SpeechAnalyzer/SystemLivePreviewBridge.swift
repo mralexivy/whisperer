@@ -319,8 +319,10 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         let window = Array(recentAudio.suffix(Self.turnProbeWindowSamples))
         let candidates = probeCandidates
         let id = sessionID
+        // A second look checks the challenger first; a turn probe checks the session's language.
+        let current = confirming ? turnChallenger : sessionLanguage
         Task { [weak self] in
-            let result = await probe.identify(samples: window, allowed: candidates)
+            let result = await probe.identify(samples: window, allowed: candidates, likely: current)
             await self?.turnProbeFinished(result, confirming: confirming, session: id)
         }
     }
@@ -450,8 +452,9 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         probeInFlight = true
         let candidates = probeCandidates
         let id = sessionID
+        let current = sessionLanguage
         Task { [weak self] in
-            let result = await probe.identify(samples: window, allowed: candidates)
+            let result = await probe.identify(samples: window, allowed: candidates, likely: current)
             await self?.reprobeFinished(result, session: id)
         }
     }

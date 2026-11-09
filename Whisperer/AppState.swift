@@ -57,6 +57,11 @@ class AppState: ObservableObject {
 
     @Published var state: RecordingState = .idle {
         didSet {
+            if (oldValue == .idle) != (state == .idle) {
+                // Fast polls only while something records (energy, 2026-11-09).
+                DockPresenceMonitor.shared.setFastPolling(state != .idle)
+                HealthManager.shared.setActiveCadence(state != .idle)
+            }
             // Notify observers when state changes
             NotificationCenter.default.post(name: NSNotification.Name("AppStateChanged"), object: nil)
             if state == .idle, dictationPendingAfterMeetingStop, !isMeetingMode {

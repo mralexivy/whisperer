@@ -194,16 +194,31 @@ actor LanguageProbe {
 
     /// The most likely of `allowed` for `samples` (16 kHz mono), with probabilities renormalized
     /// over `allowed`. Nil when fewer than two languages are allowed or no main engine is loaded.
+    /// `likely`: the language the session is in now. On Apple's models it is checked first, and
+    /// a confident answer confirms it without paying for the other locales.
     func identify(
         samples: [Float],
-        allowed: [TranscriptionLanguage]
+        allowed: [TranscriptionLanguage],
+        likely: TranscriptionLanguage? = nil
     ) async -> (language: TranscriptionLanguage, probability: Float, probabilities: [TranscriptionLanguage: Float])? {
         let candidates = allowed.filter { $0 != .auto }
         guard candidates.count > 1, !samples.isEmpty, let source = await resolve() else { return nil }
         let codes = candidates.map(\.rawValue)
         if case .apple = source {
             let started = ContinuousClock.now
-            let confidences = await AppleLanguageID.confidences(samples: samples, languages: candidates)
+            var confidences: [TranscriptionLanguage: Double] = [:]
+            if let likely, candidates.contains(likely) {
+                confidences = await AppleLanguageID.confidences(samples: samples, languages: [likely])
+                if let c = confidences[likely], c >= AppleLanguageID.confirmCurrentConfidence {
+                    ComputeLedger.add(.languageID, seconds: started.duration(to: .now).seconds)
+                    let others = candidates.filter { $0 != likely }
+                    var all: [TranscriptionLanguage: Float] = [likely: 0.9]
+                    for o in others { all[o] = 0.1 / Float(max(others.count, 1)) }
+                    return (likely, 0.9, all)
+                }
+            }
+            let rest = candidates.filter { confidences[$0] == nil }
+            confidences.merge(await AppleLanguageID.confidences(samples: samples, languages: rest)) { a, _ in a }
             ComputeLedger.add(.languageID, seconds: started.duration(to: .now).seconds)
             let all = AppleLanguageID.probabilities(from: confidences)
             guard let best = all.max(by: { $0.value < $1.value }) else { return nil }

@@ -28,8 +28,15 @@ final class DockPresenceMonitor {
 
     static let shared = DockPresenceMonitor()
 
-    /// Poll interval. 60 Hz so the Island tracks the Space-switch animation rather than lagging it.
+    /// Poll interval while recording. 60 Hz so the Island tracks the Space-switch animation
+    /// rather than lagging it.
     private static let interval: DispatchTimeInterval = .milliseconds(16)
+    /// Poll interval otherwise. The 60 Hz poll ran from launch for the life of the process —
+    /// sixty main-thread wakeups a second while Whisperer sat idle in the menu bar (2026-11-09).
+    /// Idle, the Island has nothing live to keep in place; a reframe up to half a second late
+    /// is not seen, and `activeSpaceDidChangeNotification` remains the backstop.
+    private static let idleInterval: DispatchTimeInterval = .milliseconds(500)
+    private var isFast = false
 
     /// Whether the Dock is currently drawn on the active Space.
     private(set) var isDockOnScreen: Bool
@@ -51,7 +58,8 @@ final class DockPresenceMonitor {
     func start() {
         guard timer == nil else { return }
         let t = DispatchSource.makeTimerSource(queue: .main)
-        t.schedule(deadline: .now(), repeating: Self.interval, leeway: .milliseconds(2))
+        t.schedule(deadline: .now(), repeating: isFast ? Self.interval : Self.idleInterval,
+                   leeway: isFast ? .milliseconds(2) : .milliseconds(100))
         t.setEventHandler { [weak self] in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -63,6 +71,14 @@ final class DockPresenceMonitor {
     func stop() {
         timer?.cancel()
         timer = nil
+    }
+
+    /// 60 Hz while something is recording, 2 Hz otherwise.
+    func setFastPolling(_ fast: Bool) {
+        guard fast != isFast else { return }
+        isFast = fast
+        timer?.schedule(deadline: .now(), repeating: fast ? Self.interval : Self.idleInterval,
+                        leeway: fast ? .milliseconds(2) : .milliseconds(100))
     }
 
     deinit {
