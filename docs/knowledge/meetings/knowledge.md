@@ -427,3 +427,7 @@ generic, but honest, and it needs no guess about anyone's title format.
 
 ## Calendar conflicts (2026-11-09)
 - Overlapping invites resolve by the user's answer: accepted (organizer included) > tentative > no answer. The winner is the "Meeting now / Next meeting" card, the only one that reminds, and the one that names a detected call; the calendar page does not list a meeting an accepted one overlaps. Declined invites are dropped at classification. Equal answers keep start order; back-to-back is not a conflict. (`Array<ScheduledMeeting>.outranking`, `.preferredFirst`)
+
+## A meeting's recording is never orphaned (2026-11-09)
+- The session file lived in `Sessions/` and the meeting row got its filename only at a normal stop. A crash, a force quit or an abandoned meeting left the row without audio, and `SessionStorage.deleteOrphanedSessions` deleted the file after 7 days.
+- Now the row is given the filename as soon as the recorder starts, `resolvedAudioURL` looks in `Meetings/` then `Sessions/` (`MeetingManager.audioURL(forFileName:)`), and abandon and crash recovery move the file into `Meetings/` (`adoptSessionAudio`). The writer flushes every 5 s, so a crash costs at most that.

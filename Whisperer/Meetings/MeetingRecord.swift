@@ -60,9 +60,7 @@ struct MeetingRecord: Identifiable, Equatable {
     }
 
     var resolvedAudioURL: URL? {
-        guard let rel = audioFileURL else { return nil }
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return appSupport.appendingPathComponent("Whisperer/Meetings/\(rel)")
+        audioFileURL.map(MeetingManager.audioURL(forFileName:))
     }
 
     var displayDuration: String {

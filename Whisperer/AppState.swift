@@ -4048,6 +4048,12 @@ class AppState: ObservableObject {
                 // cost the 2026-09-14 meeting.
                 let audioURL = try await audioRecorder?.startRecording(route: route, recovery: .longForm)
                 currentAudioURL = audioURL
+                // The meeting names its recording from the first second, not at stop: a crash,
+                // a force quit or an abandoned meeting then still has its audio.
+                if let meetingID = activeMeetingSession?.meetingID,
+                   let name = audioRecorder?.sessionAudioURL?.lastPathComponent {
+                    Task { _ = await MeetingManager.shared.updateAudioFileName(meetingID: meetingID, fileName: name) }
+                }
                 captureFailure = nil
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
                 HealthManager.shared.recordingStarted()

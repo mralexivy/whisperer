@@ -524,6 +524,36 @@ class MeetingManager: ObservableObject {
         await updateAISummary(meetingID: meetingID, summary: summary)
     }
 
+    // MARK: - Audio file location
+
+    /// Where a meeting's recording is: `Meetings/` once the meeting has ended, `Sessions/` while it
+    /// records — the row names its file from the first second, so a crash, a force quit or an
+    /// abandoned meeting still finds it. Defaults to `Meetings/` when neither exists yet.
+    nonisolated static func audioURL(forFileName name: String) -> URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let finished = appSupport.appendingPathComponent("Whisperer/Meetings/\(name)")
+        let recording = appSupport.appendingPathComponent("Whisperer/Sessions/\(name)")
+        if !FileManager.default.fileExists(atPath: finished.path),
+           FileManager.default.fileExists(atPath: recording.path) { return recording }
+        return finished
+    }
+
+    /// Moves a recording from `Sessions/` into `Meetings/`, where it is kept. `Sessions/` is swept
+    /// after 7 days: a meeting whose file stayed there lost its audio for good.
+    @discardableResult
+    nonisolated static func adoptSessionAudio(fileName name: String) -> Bool {
+        let fm = FileManager.default
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let source = appSupport.appendingPathComponent("Whisperer/Sessions/\(name)")
+        let meetingsDir = appSupport.appendingPathComponent("Whisperer/Meetings")
+        let dest = meetingsDir.appendingPathComponent(name)
+        if fm.fileExists(atPath: source.path), !fm.fileExists(atPath: dest.path) {
+            try? fm.createDirectory(at: meetingsDir, withIntermediateDirectories: true)
+            try? fm.moveItem(at: source, to: dest)
+        }
+        return fm.fileExists(atPath: dest.path)
+    }
+
     // MARK: - Crash recovery
 
     func loadInProgressSessions() async -> [MeetingRecord] {
@@ -555,6 +585,7 @@ class MeetingManager: ObservableObject {
                 MeetingPendingStore.clear(meetingID: record.id)
             }
 
+            if let name = record.audioFileURL { Self.adoptSessionAudio(fileName: name) }
             await finalizeSession(
                 meetingID: record.id,
                 duration: record.duration,

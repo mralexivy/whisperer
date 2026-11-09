@@ -667,10 +667,14 @@ class MeetingSession: ObservableObject {
         MeetingManager.shared.setProcessing(nil, for: id)
 
         if hadContent {
+            // The recording is kept with the meeting whatever ended it.
+            let audioName = AppState.shared.meetingAudioFileURL
+                ?? AppState.shared.audioRecorder?.sessionAudioURL?.lastPathComponent
+            if let audioName { MeetingManager.adoptSessionAudio(fileName: audioName) }
             await MeetingManager.shared.finalizeSession(
                 meetingID: id,
                 duration: elapsedSeconds,
-                audioFileURL: nil
+                audioFileURL: audioName
             )
         } else {
             meetingID = nil
