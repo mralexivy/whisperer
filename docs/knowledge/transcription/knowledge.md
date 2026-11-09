@@ -1071,3 +1071,10 @@ Supersedes the 2026-10-07 "Qwen3-ASR as the default engine" decision and the 202
   loop, fixed in aa5bc572) backed it up to the 3 s cap and audio was shed: 358 "preview feed backlog
   … shedding" lines in a day on the work Mac. The chain is now `Task.detached` with lock-guarded
   counters; `NemotronFeedChainTests` proves buffers arrive while the main thread is blocked.
+
+## Language ID on Apple's own models (2026-11-09)
+- `AppleLanguageID`: transcribe the window once per candidate locale with `DictationTranscriber` + `.transcriptionConfidence`; the most confident locale wins, p = 0.5 + lead over the runner-up (best ≥ 0.4). On 3 s windows: Apple 33/33 on clips with speech vs Whisper V3 28/33 (29 with peak normalization); 0.67 s per 3-locale probe, CPU in Apple's speech service, no GPU. Both Apple mistakes were near-silent clips (best ≤ 0.30, lead ≤ 0.18).
+- `NLLanguageRecognizer` on the live text is useless as a detector: a recognizer in the wrong locale writes plausible text in its own language (7/46).
+- V3's mistakes were mostly its silence prior ("en" p≈0.6) on quiet windows; 13 of the FLEURS clips used were near-silent (peak < -35 dB) — filter test sets by level.
+- `languageProbeSource` prefers `.apple` when ≥ 2 of the user's languages have Apple assets ready; V3/Qwen3 otherwise. Replay he→en: switch ~3 s, GPU 0.0 s over 205 s.
+- Benchmarks: `LanguageIDBenchmarkTests` (V3, TEST_RUNNER_LID_LIST) and the scratch Apple tool (3 locales per window). A `ps` pipe read after `waitUntilExit` deadlocks once its output passes the pipe buffer — read first.

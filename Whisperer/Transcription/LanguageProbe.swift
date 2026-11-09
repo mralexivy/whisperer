@@ -104,6 +104,11 @@ nonisolated struct SpeechTurnDetector: Equatable {
     }
 }
 
+/// Identity for the Apple source, which has no bridge object of its own.
+nonisolated final class AppleLanguageIDToken: Sendable {
+    static let shared = AppleLanguageIDToken()
+}
+
 actor LanguageProbe {
 
     /// The engine the probe runs on, resolved per call: the main engine can load, unload or be
@@ -111,11 +116,14 @@ actor LanguageProbe {
     enum Source: Sendable {
         case qwen3(Qwen3ASRBridge)
         case whisper(WhisperBridge)
+        /// Apple's dictation models, one pass per candidate locale (`AppleLanguageID`).
+        case apple
 
         var name: String {
             switch self {
             case .qwen3: return "Qwen3"
             case .whisper: return "V3"
+            case .apple: return "Apple"
             }
         }
 
@@ -124,6 +132,7 @@ actor LanguageProbe {
             switch self {
             case .qwen3: return 1.0
             case .whisper: return 0.5
+            case .apple: return 0
             }
         }
 
@@ -135,6 +144,8 @@ actor LanguageProbe {
             switch self {
             case .qwen3: return 2.0
             case .whisper: return 1.0
+            // Apple's word confidences need a few words; at 1 s there are often none.
+            case .apple: return 2.0
             }
         }
 
@@ -142,6 +153,7 @@ actor LanguageProbe {
             switch self {
             case .qwen3(let bridge): return ObjectIdentifier(bridge)
             case .whisper(let bridge): return ObjectIdentifier(bridge)
+            case .apple: return ObjectIdentifier(AppleLanguageIDToken.shared)
             }
         }
     }
@@ -169,6 +181,7 @@ actor LanguageProbe {
     func prepare(for languages: [TranscriptionLanguage]) async {
         let codes = languages.filter { $0 != .auto }.map(\.rawValue)
         guard codes.count > 1, let source = await resolve() else { return }
+        if case .apple = source { return }
         _ = await calibrate(source, codes: codes)
         // MLX compiles per input length: the first 2 s probe of a session cost 835–1029 ms cold
         // against ~150 ms warm. Run each checkpoint length once here instead.
@@ -188,6 +201,14 @@ actor LanguageProbe {
         let candidates = allowed.filter { $0 != .auto }
         guard candidates.count > 1, !samples.isEmpty, let source = await resolve() else { return nil }
         let codes = candidates.map(\.rawValue)
+        if case .apple = source {
+            let started = ContinuousClock.now
+            let confidences = await AppleLanguageID.confidences(samples: samples, languages: candidates)
+            ComputeLedger.add(.languageID, seconds: started.duration(to: .now).seconds)
+            let all = AppleLanguageID.probabilities(from: confidences)
+            guard let best = all.max(by: { $0.value < $1.value }) else { return nil }
+            return (best.key, best.value, all)
+        }
         guard await calibrate(source, codes: codes),
               let scores = await Self.logScores(source, samples: samples, codes: codes) else { return nil }
 
@@ -230,6 +251,8 @@ actor LanguageProbe {
             var result: [String: Float] = [:]
             for code in codes { result[code] = logf(max(probabilities[code] ?? 0, 1e-9)) }
             return result
+        case .apple:
+            return nil   // `identify` handles Apple itself; it has no log-scores to calibrate
         }
     }
 }

@@ -2334,6 +2334,13 @@ class AppState: ObservableObject {
     /// whichever multilingual one is resident. Nil right after launch, before any engine loads —
     /// sessions then start in the last language and follow the engine's own pin.
     var languageProbeSource: LanguageProbe.Source? {
+        // Apple's own dictation models first: more accurate than V3 on the same 3 s windows
+        // (33/33 against 28/33) and no GPU — see `AppleLanguageID`. Needs at least two of the
+        // user's languages installed to have anything to compare.
+        if #available(macOS 26.0, *),
+           builtinEngineLanguages.filter({ systemLanguageStatuses[$0] == .ready }).count >= 2 {
+            return .apple
+        }
         let qwen3 = qwen3asrBridgeInstance.flatMap { $0.isContextHealthy() ? $0 : nil }
         var whisper: WhisperBridge?
         if let profile = modelPool?.fallbackProfile, profile.model.isMultilingual {

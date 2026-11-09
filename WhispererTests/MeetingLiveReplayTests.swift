@@ -83,7 +83,8 @@ final class MeetingLiveReplayTests: XCTestCase {
         UserDefaults.standard.set(start.rawValue, forKey: key)
 
         let apple = SystemLivePreviewBridge(preferredLanguages: languages)
-        let probe = LanguageProbe { .whisper(whisper) }
+        let useApple = env["MEETING_REPLAY_LID"] == "apple"
+        let probe = LanguageProbe { useApple ? .apple : .whisper(whisper) }
         await apple.setLanguageProbe(probe)
         await apple.prepare()
         let box = Box()
