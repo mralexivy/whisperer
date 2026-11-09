@@ -631,6 +631,14 @@ class MeetingSession: ObservableObject {
     /// is, it returns on the next launch as "crash recovery: finalizing 1 interrupted session".
     /// So it is discarded when it holds nothing at all — the failed-start case, where no audio
     /// was ever captured — and otherwise finalized. Never deleted with content in it.
+    /// Something was said: cards, an open paragraph or live text. A meeting like this is never
+    /// abandoned — whatever stops it ends it through `stopRecording()`.
+    var hasCapturedContent: Bool {
+        !segments.isEmpty
+            || !currentSegmentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !livePreviewText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     func abandonRecording() async {
         guard isRecording || meetingID != nil else { return }
 

@@ -812,6 +812,7 @@ class AppState: ObservableObject {
 
     private var dictionaryRebuildObserver: Any?
     private var appActivationObserver: Any?
+    private var systemSleepObserver: Any?
     private var clipboardNotificationObserver: Any?
 
     // Pre-loaded Silero VAD for voice activity detection
@@ -1279,6 +1280,22 @@ class AppState: ObservableObject {
             }
         }
         #endif
+
+        // The Mac is going to sleep (lid closed): a meeting cannot record through it. Ended the
+        // normal way now, while the microphone and the file are still live, it is saved, its
+        // audio moved and its processing queued. Left running, the input vanished under it, the
+        // recovery on wake found no audio and the meeting was abandoned without its overview,
+        // its duration counting the time asleep (2026-11-09).
+        systemSleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let session = self.activeMeetingSession, session.isRecording,
+                      !self.isMeetingStopInFlight else { return }
+                Logger.info("System sleep — ending the meeting so it is saved and processed", subsystem: .app)
+                await session.stopRecording()
+            }
+        }
 
         // Show clipboard toast when text is copied
         clipboardNotificationObserver = NotificationCenter.default.addObserver(
@@ -4604,6 +4621,20 @@ class AppState: ObservableObject {
         StuckStateDumper.dump(reason: "Audio recovery exhausted (\(diagnosis.logCode)) — engine rebuilt \(audioRecorder?.debugRecoveryAttemptCount ?? 0) times, all produced silent/no audio")
         #endif
         Logger.error("Audio flow timeout — \(diagnosis.logCode); tearing down capture", subsystem: .audio)
+
+        // A meeting that already captured something ends the normal way. Abandoning it kept the
+        // cards but skipped everything after: no refine, no polish, no overview, and the audio
+        // never moved to the meeting (2026-11-09: a 65-minute interview, lid closed at the end,
+        // the microphone did not come back and the meeting was "abandoned"). The recorder has
+        // already closed the file; the stop flushes the tail and queues the meeting's processing.
+        if isMeetingMode, !isMeetingStopInFlight, case .recording = state,
+           let session = activeMeetingSession, session.isRecording, session.hasCapturedContent {
+            Logger.warning("Audio flow timeout in a meeting with \(session.segments.count) card(s) — ending it normally so it is saved and processed",
+                           subsystem: .app)
+            reportCaptureFailure(diagnosis)
+            Task { await session.stopRecording() }
+            return
+        }
 
         let wasMeeting = isMeetingMode
         let wasInApp = isInAppMode

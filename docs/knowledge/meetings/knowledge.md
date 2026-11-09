@@ -419,3 +419,8 @@ generic, but honest, and it needs no guess about anyone's title format.
 ## Meeting player showed the wrong meeting's audio (2026-11-09)
 - `MeetingStudioView` loaded audio only when `audioPlayer.duration == 0`, and `SeekableAudioPlayer.stop()` keeps the file — so the next meeting opened kept the previous one's recording. A 54:12 meeting showed 1:28 (the 8:04 meeting's length); its file was whole (refine scanned 0–3252 s).
 - Selection change now `unload()`s and the screen calls `show(url:)`, which loads unless that URL is already loaded or loading; a load that finishes after a newer request is dropped.
+
+## Lid closed mid-meeting / capture failure (2026-11-09)
+- A 65-minute interview: audio stopped at the end (lid closed), wake-time recovery found no first buffer, and `handleAudioFlowTimeout` → `abandonMeetingMode` → `abandonRecording()` kept the cards and the audio but never queued the job: no refine, polish or overview. Its 1:05:21 duration is wall clock.
+- Now a meeting with captured content (`MeetingSession.hasCapturedContent`) ends through `stopRecording()` on capture failure, and `NSWorkspace.willSleepNotification` ends a running meeting the same way before the input disappears.
+- The 23:46 the player showed was the stale-player bug (the app had run since 12:05, before `9057a50b`): the log has no file-write failure and the tap appended 65 min.
