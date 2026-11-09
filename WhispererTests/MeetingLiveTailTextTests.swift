@@ -32,8 +32,21 @@ final class MeetingLiveTailTextTests: XCTestCase {
         u.setSlidingTarget("שלום לכולם היום נדבר על התקציב", rtl: true)
         XCTAssertEqual(u.displayedText, "שלום לכולם היום נדבר על התקציב")
         // "שלום לכולם" became a card; the rest stays and one new word arrives.
+        let firstID = u.firstWordID
         u.setSlidingTarget("היום נדבר על התקציב של", rtl: true)
+        XCTAssertEqual(u.displayedText, "היום נדבר על התקציב", "the drop is drawn on its own first")
+        XCTAssertEqual(u.firstWordID, firstID + 2, "the words that stayed keep their identity")
+        pump(0.05)
         XCTAssertEqual(u.displayedText, "היום נדבר על התקציב של")
+    }
+
+    /// A reset never reuses identities, so a word view from the old text is never handed a new word.
+    func testResetIssuesFreshIdentities() {
+        let u = immediate()
+        u.setSlidingTarget("one two three four five", rtl: true)
+        let before = u.firstWordID + u.words.count
+        u.setSlidingTarget("alpha beta", rtl: true)
+        XCTAssertGreaterThanOrEqual(u.firstWordID, before)
     }
 
     func testGrowingTextOnlyAppends() {

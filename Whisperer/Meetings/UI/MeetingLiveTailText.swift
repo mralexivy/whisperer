@@ -28,7 +28,7 @@ struct MeetingLiveTailText: View {
             if isRTL {
                 MeetingSegmentTextView(text: updater.displayedText, highlightQuery: "", isRTL: true)
             } else {
-                DictationStreamView(words: updater.words, isStreaming: updater.isActive, scale: 1,
+                DictationStreamView(words: updater.words, firstIndex: updater.firstWordID, isStreaming: updater.isActive, scale: 1,
                                     fontSize: fontSize, fontDesign: .default, placeholder: nil)
             }
         }

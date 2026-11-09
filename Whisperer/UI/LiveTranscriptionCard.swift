@@ -209,6 +209,7 @@ struct LiveTranscriptionCard: View {
                             } else {
                                 DictationStreamView(
                                     words: textUpdater.words,
+                                    firstIndex: textUpdater.firstWordID,
                                     isStreaming: textUpdater.isActive,
                                     scale: scale
                                 )
@@ -486,6 +487,13 @@ class SmoothTextUpdater: ObservableObject {
     /// derived in the view: splitting a growing string on every published change is O(n) per word.
     @Published private(set) var words: [String] = []
 
+    /// Identity of `words[0]`; `words[i]` is word `firstWordID + i` for the life of the updater.
+    /// Advances when leading words leave and on a reset, never reused. `DictationStreamView` keys
+    /// its word views on it: keyed by position, dropping the front made every position hold a
+    /// different word, and SwiftUI slid and cross-faded all of them at once — words drawn over
+    /// each other ("feplconfident") and a ghost copy of the paragraph (2026-11-09).
+    @Published private(set) var firstWordID = 0
+
     /// True when words are being animated or text was recently updated
     @Published var isActive: Bool = false
 
@@ -550,6 +558,7 @@ class SmoothTextUpdater: ObservableObject {
             idleTimer = nil
             pendingWords.removeAll()
             displayedText = ""
+            firstWordID += words.count
             words = []
             committedText = ""
             isActive = false
@@ -611,7 +620,9 @@ class SmoothTextUpdater: ObservableObject {
             let span = min(probe, current.count - k)
             if Array(current[k..<k + span]) == Array(incoming[0..<span]) {
                 dropLeadingWords(k)
-                setTarget(text, rtl: rtl)
+                // The new words land on the next turn of the run loop, so the reflow from the
+                // drop is drawn on its own, unanimated, and only the arrival animates.
+                DispatchQueue.main.async { [weak self] in self?.setTarget(text, rtl: rtl) }
                 return
             }
         }
@@ -633,6 +644,7 @@ class SmoothTextUpdater: ObservableObject {
     private func dropLeadingWords(_ count: Int) {
         let fromShown = min(count, words.count)
         words.removeFirst(fromShown)
+        firstWordID += fromShown
         let fromPending = min(count - fromShown, pendingWords.count)
         pendingWords.removeFirst(fromPending)
         displayedText = words.joined(separator: " ")

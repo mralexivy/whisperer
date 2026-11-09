@@ -287,3 +287,8 @@ it across launches would have to be per-display anyway. Drag/resize still holds 
 - Direction comes from the overview's own text by majority (`MeetingTranscriptText.isRightToLeft(text:fallback:)`), the meeting language only as a fallback.
 - Ask AI starter chips use the topic's script for the prefix ("ספר לי על …", "Расскажи о …") — an English prefix on a Hebrew topic was a mixed-direction chip.
 - `MeetingOverviewRTLTests` renders both directions in a real window; TEST_RUNNER_OVERVIEW_SNAPSHOT=<dir> writes PNGs.
+
+## Live word pour: identity must survive a front drop (2026-11-09)
+- `DictationStreamView` keyed words by position. Dropping the front of the meeting bubble (a card committed) gave every position a different word; the layout animation slid them all while removed words faded where they stood: words drawn over each other and a ghost paragraph.
+- Now `SmoothTextUpdater.firstWordID` gives each word a lasting identity, the layout animation is keyed on the last word's identity (arrivals glide, a drop reflows in place), removed words use `.transition(.identity)`, and after a drop the new words land on the next run-loop turn.
+- `MeetingLiveTailSnapshotTests` (TEST_RUNNER_LIVE_TAIL_SNAPSHOT=<dir>) writes frames at 30 ms and 80 ms into a drop.

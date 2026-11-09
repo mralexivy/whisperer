@@ -19,6 +19,9 @@ import SwiftUI
 /// needs that glyph to be a view with a frame.
 struct DictationStreamView: View {
     let words: [String]
+    /// Identity of `words[0]` (`SmoothTextUpdater.firstWordID`), so a word keeps its view when
+    /// words before it leave.
+    var firstIndex: Int = 0
     /// True while words are still arriving. Drives both the settling tail and the caret's mode.
     let isStreaming: Bool
     let scale: CGFloat
@@ -74,12 +77,12 @@ struct DictationStreamView: View {
     /// every time the oldest word was dropped.
     private var visibleWords: [(index: Int, word: String)] {
         let start = max(0, words.count - Self.renderWindow)
-        return (start..<words.count).map { (index: $0, word: words[$0]) }
+        return (start..<words.count).map { (index: firstIndex + $0, word: words[$0]) }
     }
 
     private func opacity(forIndex index: Int) -> Double {
         guard isStreaming else { return Self.inkOpacity }
-        let distance = words.count - 1 - index
+        let distance = firstIndex + words.count - 1 - index
         guard distance < Self.tailWindow else { return Self.inkOpacity }
         let progress = Double(distance) / Double(Self.tailWindow)
         return Self.tailFloor + (Self.inkOpacity - Self.tailFloor) * progress
@@ -104,6 +107,9 @@ struct DictationStreamView: View {
                         fontSize: fontSize,
                         fontDesign: fontDesign
                     )
+                    // A word that leaves goes at once. Fading out where it stood while the
+                    // layout moves the rest drew the old text over the new.
+                    .transition(.identity)
                 }
             }
 
@@ -111,7 +117,9 @@ struct DictationStreamView: View {
         }
         // Animating the layout — not the words — is what makes the caret glide to its new x
         // instead of teleporting, so a word appears to pour out from behind it.
-        .animation(.timingCurve(0.25, 1, 0.5, 1, duration: 0.14), value: words.count)
+        // Keyed on the last word's identity: an arrival changes it, a front drop does not, so
+        // only arrivals glide — a reflow after words leave is drawn in place.
+        .animation(.timingCurve(0.25, 1, 0.5, 1, duration: 0.14), value: firstIndex + words.count)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -223,6 +231,7 @@ struct LivePourText: View {
     var body: some View {
         DictationStreamView(
             words: updater.words,
+            firstIndex: updater.firstWordID,
             isStreaming: updater.isActive,
             scale: 1,
             fontSize: fontSize,
