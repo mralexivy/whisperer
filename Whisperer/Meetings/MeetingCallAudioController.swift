@@ -39,6 +39,7 @@ final class MeetingCallAudioController {
     private var timer: Timer?
     private var startedAt: Date?
     private var reportedSilence = false
+    private var reportedSoundAfterSilence = false
     private let processMonitor = AudioProcessMonitor()
 
     var isCapturing: Bool { capture != nil }
@@ -81,6 +82,7 @@ final class MeetingCallAudioController {
         session.sourceActivity = { mixer.sourceActivity }
         startedAt = Date()
         reportedSilence = false
+        reportedSoundAfterSilence = false
         recorder.systemAudioMixer = mixer
         Logger.info("Meeting call audio: capturing \(target.logLabel)", subsystem: .audio)
 
@@ -152,6 +154,15 @@ final class MeetingCallAudioController {
     /// microphone is live, so say so once in the log (the UI stays quiet: a muted call or a
     /// call that has not started produces the same zeros, and a false alarm would be worse).
     private func checkForDigitalSilence() {
+        // The warning fires on a call that simply had not started yet, and read as "permission
+        // off" on a Mac where it was on (2026-11-09: warned at 60 s, the tap peaked 0.122 later).
+        // Say when sound does arrive, so the log answers which it was.
+        if reportedSilence, !reportedSoundAfterSilence, let startedAt, let mixer, mixer.stats.peak > 0 {
+            reportedSoundAfterSilence = true
+            Logger.info(String(format: "Meeting call audio: sound arrived by %.0fs — the tap works; the silence was the call",
+                               Date().timeIntervalSince(startedAt)), subsystem: .audio)
+            return
+        }
         guard !reportedSilence, let startedAt, let mixer,
               Date().timeIntervalSince(startedAt) > 60 else { return }
         let stats = mixer.stats
