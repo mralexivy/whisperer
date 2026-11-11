@@ -1480,8 +1480,18 @@ class StreamingTranscriber {
             // front, so a route decision gives it nothing. Waiting for one cost up to the full
             // 5 s — and at minimum one 100 ms sleep, since the loop sleeps before its first
             // check — of dead live preview at the start of every dictation.
-            let needsRouteDecision = self?.usesEagerStream != true
-                && !(self?.previewBridge is Qwen3ASRBridge)
+            //
+            // WhisperKit is in the same position too: its streaming passes detect `.auto` per pass
+            // and pin through their own ratchet (`WhisperKitRuntime.observeStreamingLanguage`: two
+            // agreeing windows of 1.5 s+, early short guesses ignored). It waited here for a gate
+            // that only the removed tiny preview model needed — the first live word came at 6.1 s
+            // with auto language against 1.7 s pinned, same model (LivePreviewEngineBenchmarkTests,
+            // 2026-11-11).
+            var selfDetectingPreview = self?.previewBridge is Qwen3ASRBridge
+            #if canImport(WhisperKit)
+            selfDetectingPreview = selfDetectingPreview || self?.previewBridge is WhisperKitBridge
+            #endif
+            let needsRouteDecision = self?.usesEagerStream != true && !selfDetectingPreview
             if needsRouteDecision {
                 // Wait for language detection or 5s timeout
                 for _ in 0..<50 {
