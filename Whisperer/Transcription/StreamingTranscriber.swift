@@ -1199,6 +1199,13 @@ class StreamingTranscriber {
     /// See `EagerStreamEngine.Config.suppressesRepetitionLoops`. Must be set before `start()`,
     /// which is where the engine is built.
     var eagerSuppressesRepetitionLoops: Bool = true
+    /// Replaces the eager engine's whole configuration, for the live-speed sweep in
+    /// `LivePreviewEngineBenchmarkTests`. Nil — always, outside that sweep — keeps `.default`.
+    var eagerConfigOverride: EagerStreamEngine.Config?
+    /// Option-4 arm B/C: decode each whisper.cpp eager pass without the previous committed text
+    /// as its prompt. Conditioning on preceding text is a known cause of skipped and repeated
+    /// words; true (today) keeps the 100-character prompt.
+    var eagerUsesPreviousTextPrompt = true
 
     /// Words per second above which an eager pass is not physically possible and is discarded.
     ///
@@ -1355,7 +1362,7 @@ class StreamingTranscriber {
         // Eager engine: used by both WhisperKit (always) and whisper.cpp (when flag on)
         let needsEagerEngine = whisper.streamingPolicy.requiresEagerEngine || usesEagerStream
         eagerEngine = needsEagerEngine
-            ? EagerStreamEngine(config: EagerStreamEngine.Config.default
+            ? EagerStreamEngine(config: eagerConfigOverride ?? EagerStreamEngine.Config.default
                 .with(skipsAnchorCheckAfterBoundaryMove: eagerSkipsAnchorCheckAfterBoundaryMove,
               suppressesRepetitionLoops: eagerSuppressesRepetitionLoops))
             : nil
@@ -2798,7 +2805,7 @@ class StreamingTranscriber {
                     + "\(String(format: "%.2f", leading.confidence)))", subsystem: .transcription)
             }
         }
-        let prompt = completedChunkTexts.last.map { String($0.suffix(100)) }
+        let prompt = eagerUsesPreviousTextPrompt ? completedChunkTexts.last.map { String($0.suffix(100)) } : nil
         let normalizedSamples = normalizeSamples(samples)
         let base = audioBaseIndex
         let endIdx = candidateEndIndex

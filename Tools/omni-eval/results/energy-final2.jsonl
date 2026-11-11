@@ -1,0 +1,6 @@
+{"tag":"final2","joules":63.750749947000003,"engine":"cpp-v3-pin","gpu_s":104.70858683199999,"speechd_cpu_s":0.0099999999999980105,"wall":211.14563703536987}
+{"wall":215.20609092712402,"engine":"cpp-v3-auto","tag":"final2","speechd_cpu_s":0.010000000000005116,"gpu_s":109.28109474999999,"joules":30.191848501999999}
+{"gpu_s":1.033724791,"engine":"wkapp-v3turbo-pin","wall":217.17986798286438,"speechd_cpu_s":0.020000000000003126,"tag":"final2","joules":89.403263210000006}
+{"speechd_cpu_s":0,"joules":76.653157450999998,"gpu_s":0.52023320900000003,"engine":"wkapp-v3turbo-auto","tag":"final2","wall":212.04967999458313}
+{"wall":220.68150591850281,"joules":76.028742953000005,"gpu_s":0.73235899999999998,"speechd_cpu_s":0.0099999999999980105,"engine":"wkapp547-pin","tag":"final2"}
+{"gpu_s":0.424512583,"joules":71.858305540000003,"tag":"final2","engine":"wkapp547-auto","wall":217.88588607311249,"speechd_cpu_s":0}

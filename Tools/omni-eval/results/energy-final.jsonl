@@ -1,0 +1,7 @@
+{"gpu_s":0.021612165999999999,"engine":"apple-pin","joules":28.484984042000001,"speechd_cpu_s":19.239999999999995,"tag":"final","wall":202.08032202720642}
+{"tag":"final","gpu_s":0,"joules":5.3455896159999998,"engine":"apple-auto","speechd_cpu_s":45.140000000000001,"wall":202.24176299571991}
+{"joules":40.870993765999998,"tag":"final","engine":"cpp-v3-pin","wall":217.14947104454041,"gpu_s":107.160779416,"speechd_cpu_s":0.0099999999999909051}
+{"tag":"final","speechd_cpu_s":0,"engine":"cpp-v3-auto","wall":211.20089399814606,"joules":29.327534948,"gpu_s":107.300934959}
+{"tag":"final","wall":217.50284004211426,"gpu_s":0.040999750000000001,"joules":23.241996540999999,"engine":"wkapp-v3turbo-pin","speechd_cpu_s":0.010000000000005116}
+{"wall":215.96649396419525,"tag":"final","gpu_s":0.040248916000000003,"engine":"wkapp-v3turbo-auto","speechd_cpu_s":0,"joules":21.008983145999998}
+{"engine":"wk-v3turbo-pin","joules":96.270461675999996,"tag":"final","wall":236.19206893444061,"gpu_s":0,"speechd_cpu_s":0}

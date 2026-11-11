@@ -131,6 +131,17 @@ struct EagerStreamEngine {
         /// accounts for. See `advanceAgreement(to:)` — this is the margin that keeps a word whose
         /// offset was reported late from being cut out of every subsequent window.
         let boundaryTrailSamples: Int
+        /// Option-4 experiment switches (`LivePreviewEngineBenchmarkTests` arms B and C). Defaults
+        /// are today's behaviour.
+        /// - `holdsWholePass`: a failed anchor or retraction check throws the whole pass away. Off:
+        ///   the pass still displays and may confirm by time; only two-pass agreement is skipped.
+        var holdsWholePass: Bool = true
+        /// - `confirmsWithoutLanguageLock`: confirm even before the session language is locked.
+        var confirmsWithoutLanguageLock: Bool = false
+        /// - `timeGuardSeconds` (AlignAtt-lite): confirm a word after a single pass once it ends at
+        ///   least this far before the decoded window's end (and has p ≥ 0.6) — the audio the
+        ///   decoder no longer needs to look past. nil: off.
+        var timeGuardSeconds: Double? = nil
 
         static let `default` = Config(
             boundaryWordCount: 2,
@@ -414,6 +425,7 @@ struct EagerStreamEngine {
         // ── Anchor / retraction guard ──────────────────────────────────────────────
         // A genuine correction aligns with the previous window on at least requiredAnchor
         // words. A transient decoder collapse does not — hold it for one more window.
+        var unstablePass = false
         if !previousHypothesis.isEmpty {
             let commonCount = commonPrefixCount(previousHypothesis, hyp)
             let requiredAnchor = min(config.requiredAnchor, min(previousHypothesis.count, hyp.count))
@@ -435,7 +447,11 @@ struct EagerStreamEngine {
             let anchorApplies = !(boundaryMoved && config.skipsAnchorCheckAfterBoundaryMove)
             let isUnanchored = anchorApplies && commonCount < requiredAnchor
             let isLargeRetraction = lostWordCount > config.maxRetraction
-            if isUnanchored || isLargeRetraction {
+            if (isUnanchored || isLargeRetraction) && !config.holdsWholePass {
+                // Arm B/C: keep the pass. Agreement is skipped below (the two hypotheses do not
+                // line up); time-based confirmation and the display still run.
+                unstablePass = true
+            } else if isUnanchored || isLargeRetraction {
                 // Hold — update previousHypothesis so the next window sees the new baseline.
                 previousHypothesis = hyp
                 let reason: EagerHoldReason = isUnanchored
@@ -448,7 +464,8 @@ struct EagerStreamEngine {
         }
 
         // ── LocalAgreement-2 confirmation ─────────────────────────────────────────
-        if languageIsLocked {
+        let languageIsLocked = languageIsLocked || config.confirmsWithoutLanguageLock
+        if languageIsLocked, !unstablePass {
             let commonCount = commonPrefixCount(previousHypothesis, hyp)
             let boundary = config.boundaryWordCount
 
@@ -491,6 +508,20 @@ struct EagerStreamEngine {
             }
         }
 
+        if languageIsLocked, let guardSeconds = config.timeGuardSeconds, hyp.count > config.boundaryWordCount {
+            let limit = windowEndIndex - Int(guardSeconds * 16_000)
+            var settled = 0
+            for word in hyp.prefix(hyp.count - config.boundaryWordCount) {
+                guard word.endIndex <= limit, word.probability >= 0.6 else { break }
+                settled += 1
+            }
+            if settled > 0 {
+                confirm(Array(hyp.prefix(settled)))
+                let strict = advanceAgreement(to: hyp[settled].startIndex)
+                prefixTokens = Array(hyp.prefix(settled)).suffix(2).flatMap(\.tokens)
+                hyp = hyp.filter { $0.startIndex >= strict }
+            }
+        }
         // Must be AFTER the entropy gate — setting it before would cause stale prevHypothesis
         // words to mismatch on the next clip, cascading into anchor=0 every pass.
         previousHypothesis = hyp

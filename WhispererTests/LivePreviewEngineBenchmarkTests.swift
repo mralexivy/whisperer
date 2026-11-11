@@ -103,6 +103,15 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
     private func spec(_ name: String) -> EngineSpec {
         let pinned = name.hasSuffix("-pin")
         if name.hasPrefix("apple") { return EngineSpec(name: name, family: "apple", variant: nil, pinned: pinned) }
+        // whisper.cpp large-v3 turbo q5_0 on Metal — the app's own main model, streaming through the
+        // app's own eager word stream (StreamingTranscriber), not a reimplementation.
+        if name.hasPrefix("cpp") { return EngineSpec(name: name, family: "cpp", variant: nil, pinned: pinned) }
+        // The app's own WhisperKit path: WhisperKitBridge (large-v3 turbo, the app's variant) through
+        // StreamingTranscriber's eager stream — what Whisperer runs when WhisperKit is the engine.
+        // "wkapp547": the same path on openai_whisper-large-v3-v20240930_547MB, the WhisperKit build
+        // closest in size to whisper.cpp's q5_0 (550 vs 574 MB, ~5.4 vs ~5.7 bits per weight).
+        if name.hasPrefix("wkapp547") { return EngineSpec(name: name, family: "wkapp", variant: "openai_whisper-large-v3-v20240930_547MB", pinned: pinned) }
+        if name.hasPrefix("wkapp") { return EngineSpec(name: name, family: "wkapp", variant: nil, pinned: pinned) }
         let size = name.split(separator: "-")[1]
         // "v3turbo": the large-v3 turbo build the app ships as its WhisperKit main engine.
         let variant = size == "v3turbo" ? WhisperKitBridge.modelVariant : "openai_whisper-\(size)"
@@ -110,6 +119,53 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
     }
 
     private static var loadedKits: [String: WhisperKit] = [:]
+
+    /// One WhisperKit instance, one call at a time — what the app's `WhisperKitRuntime` actor does.
+    /// The meeting preview and a dictation's final decode queue behind each other on it.
+    actor SharedKit {
+        let kit: WhisperKit
+        init(_ kit: WhisperKit) { self.kit = kit }
+        func transcribe(_ audio: [Float], _ options: DecodingOptions) async -> [TranscriptionResult] {
+            (try? await kit.transcribe(audioArray: audio, decodeOptions: options)) ?? []
+        }
+    }
+    private static var shared: [String: SharedKit] = [:]
+    private func sharedKit(_ variant: String) async throws -> SharedKit {
+        if let s = Self.shared[variant] { return s }
+        let s = SharedKit(try await whisperKit(variant).0)
+        Self.shared[variant] = s
+        return s
+    }
+    private static var cppBridge: WhisperBridge?
+    private static var wkBridges: [String: WhisperKitBridge] = [:]
+    /// The variant the current engine runs; nil for the app's own (`WhisperKitBridge.modelVariant`).
+    private var wkAppVariant: String?
+
+    private func whisperKitApp() async throws -> WhisperKitBridge {
+        let variant = wkAppVariant ?? WhisperKitBridge.modelVariant
+        if let bridge = Self.wkBridges[variant] { return bridge }
+        // Downloaded like every other benchmark model; a no-op once on disk.
+        let folder = try await WhisperKit.download(variant: variant, downloadBase: Self.modelBase)
+        let key = "whisperKitModelFolder"
+        let saved = UserDefaults.standard.string(forKey: key)
+        UserDefaults.standard.set(folder.path, forKey: key)
+        defer { UserDefaults.standard.set(saved, forKey: key) }
+        let bridge = try await WhisperKitBridge.loadFromCache()
+        _ = await bridge.transcribeDirectAsync(samples: [Float](repeating: 0.01, count: 32_000), initialPrompt: nil, language: .english)
+        Self.wkBridges[variant] = bridge
+        Self.keepAlive.append(bridge)
+        print("[PreviewBench] app WhisperKit path on \(variant)")
+        return bridge
+    }
+
+    private func whisperCpp() throws -> WhisperBridge {
+        if let bridge = Self.cppBridge { return bridge }
+        let bridge = try loadWhisperBridge()   // largeTurboQ5 first
+        _ = bridge.transcribe(samples: [Float](repeating: 0.01, count: 16_000), language: .english)
+        Self.cppBridge = bridge
+        Self.keepAlive.append(bridge)
+        return bridge
+    }
 
     private func whisperKit(_ variant: String) async throws -> (WhisperKit, Double) {
         if let kit = Self.loadedKits[variant] { return (kit, 0) }
@@ -161,12 +217,15 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
 
     private func accuracy(engine name: String) async throws {
         let s = spec(name)
+        wkAppVariant = s.family == "wkapp" ? s.variant : nil
         let sets = (env["PREVIEW_SETS"] ?? "he,ru,en").split(separator: ",").map(String.init)
         // TEST_RUNNER_PREVIEW_SUFFIX writes to hyp/<engine><suffix>.jsonl, so a rerun of one set
         // does not erase the engine's other results.
         let out = "hyp/\(name)\(env["PREVIEW_SUFFIX"] ?? "").jsonl"
         reset(out)
         if let variant = s.variant { _ = try await whisperKit(variant) }   // load outside the timing
+        if s.family == "cpp" { _ = try whisperCpp() }
+        if s.family == "wkapp" { _ = try await whisperKitApp() }
         for set in sets {
             var clips = manifest(set)
             // 90 of 270: every third sentence, in all three noise conditions (the manifest lists
@@ -179,10 +238,25 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
                 let started = Date()
                 var text = ""
                 var detected: String?
-                if s.family == "wk", let variant = s.variant {
+                if s.family == "wkapp" {
+                    let bridge = try await whisperKitApp()
+                    let pinnedLang = s.pinned && clip.lang != "cs"
+                    bridge.beginSession()
+                    text = Self.clean(await bridge.transcribeDirectAsync(
+                        samples: samples, initialPrompt: nil,
+                        language: pinnedLang ? (TranscriptionLanguage(rawValue: clip.lang) ?? .english) : .auto))
+                } else if s.family == "cpp" {
+                    let bridge = try whisperCpp()
+                    let pinnedLang = s.pinned && clip.lang != "cs"
+                    let language = pinnedLang ? (TranscriptionLanguage(rawValue: clip.lang) ?? .english) : .auto
+                    text = Self.clean(await Task.detached { bridge.transcribe(samples: samples, language: language) }.value)
+                } else if s.family == "wk", let variant = s.variant {
                     let (kit, _) = try await whisperKit(variant)
                     let options = wkOptions(lang: clip.lang == "cs" ? "he" : clip.lang, pinned: s.pinned && clip.lang != "cs")
-                    let results = (try? await kit.transcribe(audioArray: samples, decodeOptions: options)) ?? []
+                    // As the app decodes since 2026-11-11: one second of trailing silence, so WhisperKit's
+                    // 1 s end-of-clip guard does not swallow short speech.
+                    let results = (try? await kit.transcribe(audioArray: samples + [Float](repeating: 0, count: 16_000),
+                                                             decodeOptions: options)) ?? []
                     text = Self.clean(results.map(\.text).joined(separator: " "))
                     detected = results.first?.language
                 } else {
@@ -194,6 +268,10 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
                         await bridge.feed(samples: Array(samples[offset..<end]))
                         offset = end
                     }
+                    // Fed faster than real time, the clip ended before the language probe had
+                    // answered, so every auto session stayed in its start language. Give the
+                    // probe (and its replay) the time it has in a live session.
+                    if !(s.pinned && clip.lang != "cs") { try? await Task.sleep(nanoseconds: 3_000_000_000) }
                     detected = await bridge.streamingLanguage()?.rawValue
                     text = await bridge.endSession()
                 }
@@ -246,18 +324,67 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
     private func stream(_ s: EngineSpec, samples: [Float], lang: String) async throws -> ([[String: Any]], String, Double) {
         let feed = Feed()
         let events = Events()
+        if s.family == "cpp" || s.family == "wkapp" {
+            let bridge: TranscriptionBackend
+            let backendType: BackendType
+            if s.family == "wkapp" {
+                let wk = try await whisperKitApp()
+                wk.beginSession()   // as AppState does, before the transcriber exists
+                bridge = wk
+                backendType = .whisperKit
+            } else {
+                bridge = try whisperCpp()
+                backendType = .whisperCpp
+            }
+            // Exactly as AppState builds it (LanguageRoutingConfig): one language → no routers, the
+            // transcriber simply starts in that language; several → LanguageRouter plus a ModelRouter
+            // whose fallback profile is whisper.cpp at `.auto` (`buildFallbackProfile`), for every
+            // backend. A one-language router here dropped words and invented "Продолжение следует".
+            _ = backendType
+            let language = s.pinned ? (TranscriptionLanguage(rawValue: lang) ?? .english) : .auto
+            let profile = ModelProfile(model: .largeTurboQ5, backend: .whisperCpp, language: .auto, isSpecialized: false)
+            let pool = ModelPool()
+            try? pool.loadFallback(profile: profile, backend: bridge)
+            let transcriber = StreamingTranscriber(
+                backend: bridge, vad: loadVAD(), language: language, initialPrompt: nil,
+                fillerWordRemovalEnabled: false, modelPool: pool,
+                languageRouter: s.pinned ? nil : LanguageRouter(allowed: [.english, .russian, .hebrew], primary: nil),
+                modelRouter: s.pinned ? nil : ModelRouter(languageModelMap: [:], fallbackProfile: profile),
+                // AppState.livePreviewBridge(for:): WhisperKit is its own preview bridge — without it
+                // StreamingTranscriber never schedules a live pass (only the stop decode ran);
+                // whisper.cpp needs none, its eager stream is the preview.
+                previewBridge: s.family == "wkapp" ? bridge : nil)
+            Self.keepAlive += [pool, transcriber]
+            applyEagerSweep(to: transcriber)
+            let fed = Feed()
+            let began = Date()
+            transcriber.start { text in
+                let covered = Double(fed.snapshot().0.count) / 16_000
+                events.add(["wall": Date().timeIntervalSince(began), "covered": covered,
+                            "text": Self.clean(text), "compute": 0.0])
+            }
+            await Self.play(samples, into: feed, began: began) { chunk in
+                fed.add(chunk)
+                transcriber.addSamples(chunk)
+            }
+            let final = await transcriber.stopAsync()
+            return (events.all, Self.clean(final), Date().timeIntervalSince(began))
+        }
         if s.family == "wk", let variant = s.variant {
-            let (kit, _) = try await whisperKit(variant)
+            let shared = try await sharedKit(variant)
             let began = Date()
             let player = Task.detached(priority: .userInitiated) { await Self.play(samples, into: feed, began: began) }
             var lastSize = 0
             var confirmedEnd: Float = 0
             var confirmed: [String] = []
             var unconfirmed = ""
-            func pass(_ buffer: [Float]) async {
+            func pass(_ buffer: [Float], final: Bool) async {
                 let t0 = Date()
                 let options = wkOptions(lang: lang, pinned: s.pinned, clip: confirmedEnd)
-                let results = (try? await kit.transcribe(audioArray: buffer, decodeOptions: options)) ?? []
+                // The final pass gets the app's trailing second of silence (see WhisperKitBridge
+                // .padForWindowClip); live passes keep WhisperKit's guard against the growing edge.
+                let audio = final ? buffer + [Float](repeating: 0, count: 16_000) : buffer
+                let results = await shared.transcribe(audio, options)
                 let segments = results.flatMap(\.segments)
                 if segments.count > 2 {
                     let confirm = segments.prefix(segments.count - 2)
@@ -278,7 +405,7 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
                 let (buffer, done) = feed.snapshot()
                 if buffer.count - lastSize >= 16_000 || (done && buffer.count > lastSize) {
                     lastSize = buffer.count
-                    await pass(buffer)
+                    await pass(buffer, final: done)
                     if done { break }
                 } else if done {
                     break
@@ -309,12 +436,15 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
 
     private func realTime(engine name: String, tag: String) async throws {
         let s = spec(name)
+        wkAppVariant = s.family == "wkapp" ? s.variant : nil
         let all = manifest("he") + manifest("ru") + manifest("en")
         let clips = Self.rtClips.compactMap { id in all.first { $0.id == id } }
         reset("results/rt-\(name)-\(tag).jsonl")
         reset("results/load-\(name)-\(tag).jsonl")
-        let load = env["PREVIEW_LOAD"] == "v3" ? try startMainEngineLoad(tag: "\(name)-\(tag)") : nil
+        let load = env["PREVIEW_LOAD"] == "v3" ? try startMainEngineLoad(tag: "\(name)-\(tag)")
+            : (env["PREVIEW_LOAD"] == "same" ? try await startSameEngineDictations(spec: s, tag: "\(name)-\(tag)") : nil)
         let energyBefore = EnergyMonitor.readTask()
+        let speechBefore = Self.speechServiceCPUSeconds()
         let wallBefore = Date()
         for clip in clips {
             let samples = try loadAudioSamples(from: URL(fileURLWithPath: clip.audio))
@@ -329,9 +459,37 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
         if let a = energyBefore, let b = EnergyMonitor.readTask() {
             let wall = Date().timeIntervalSince(wallBefore)
             append(["engine": name, "tag": tag, "wall": wall, "joules": Double(b.energy - a.energy) / 1e9,
-                    "gpu_s": Double(b.gpu - a.gpu) / 1e9, "speechd_cpu_s": Self.speechServiceCPUSeconds()],
+                    "gpu_s": Double(b.gpu - a.gpu) / 1e9, "speechd_cpu_s": Self.speechServiceCPUSeconds() - speechBefore],
                    to: "results/energy-\(tag).jsonl")
         }
+    }
+
+    /// TEST_RUNNER_PREVIEW_EAGER="single=0.85,commit=3,window=8,boundary=1,anchor=2": one point
+    /// of the live-speed sweep; unspecified keys keep `EagerStreamEngine.Config.default`.
+    private func applyEagerSweep(to transcriber: StreamingTranscriber) {
+        guard let spec = env["PREVIEW_EAGER"], !spec.isEmpty else { return }
+        var values: [String: Double] = [:]
+        for part in spec.split(separator: ",") {
+            let kv = part.split(separator: "=")
+            if kv.count == 2, let v = Double(kv[1]) { values[String(kv[0])] = v }
+        }
+        let d = EagerStreamEngine.Config.default
+        var config = EagerStreamEngine.Config(
+            boundaryWordCount: values["boundary"].map(Int.init) ?? d.boundaryWordCount,
+            singlePassThreshold: values["single"].map(Float.init) ?? d.singlePassThreshold,
+            softCommitSamples: values["commit"].map { Int($0 * 16_000) } ?? d.softCommitSamples,
+            requiredAnchor: values["anchor"].map(Int.init) ?? d.requiredAnchor,
+            maxRetraction: d.maxRetraction,
+            skipsAnchorCheckAfterBoundaryMove: d.skipsAnchorCheckAfterBoundaryMove,
+            suppressesRepetitionLoops: d.suppressesRepetitionLoops,
+            boundaryTrailSamples: d.boundaryTrailSamples)
+        if values["hold"] == 0 { config.holdsWholePass = false }
+        if values["nolock"] == 1 { config.confirmsWithoutLanguageLock = true }
+        if let guardSeconds = values["guard"] { config.timeGuardSeconds = guardSeconds }
+        transcriber.eagerConfigOverride = config
+        if values["prompt"] == 0 { transcriber.eagerUsesPreviousTextPrompt = false }
+        if let window = values["window"] { transcriber.eagerMaxWindowSeconds = window }
+        print("[PreviewBench] eager sweep point: \(spec)")
     }
 
     // MARK: - Main engine under load
@@ -369,6 +527,50 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
         return load
     }
 
+    /// Dictation-sized final decodes (a 6 s utterance, as at key release) on the **same** WhisperKit
+    /// instance the preview streams on, every 4 s — the single-engine case: one model serving both
+    /// the meeting's live text and a dictation made during it.
+    private func startSameEngineDictations(spec: EngineSpec, tag: String) async throws -> MainLoad {
+        // The very instance the preview streams on: whisper.cpp's WhisperBridge (SafeLock
+        // serializes), the app's WhisperKitBridge (its runtime actor serializes), or the raw kit.
+        var shared: SharedKit?
+        if spec.family == "wk", let variant = spec.variant { shared = try await sharedKit(variant) }
+        let bridge = spec.family == "cpp" ? try whisperCpp() : nil
+        let wkApp = spec.family == "wkapp" ? try await whisperKitApp() : nil
+        let clip = manifest("en").first { $0.id == "en-1761" }!
+        let utterance = Array(try loadAudioSamples(from: URL(fileURLWithPath: clip.audio)).prefix(16_000 * 6))
+            + [Float](repeating: 0, count: 16_000)
+        let options = wkOptions(lang: "en", pinned: true)
+        let load = MainLoad()
+        let file = Self.evalDir.appendingPathComponent("results/load-\(tag).jsonl")
+        try? FileManager.default.removeItem(at: file)
+        load.task = Task.detached(priority: .userInitiated) {
+            while !load.isStopped {
+                let t0 = Date()
+                if let shared { _ = await shared.transcribe(utterance, options) }
+                else if let wkApp { _ = await wkApp.transcribeDirectAsync(samples: utterance, initialPrompt: nil, language: .english) }
+                else if let bridge { _ = await Task.detached { bridge.transcribe(samples: utterance, language: .english) }.value }
+                let row = "{\"decode_s\": \(Date().timeIntervalSince(t0)), \"audio_s\": 6}\n"
+                if let h = try? FileHandle(forWritingTo: file) { h.seekToEndOfFile(); h.write(Data(row.utf8)); try? h.close() }
+                else { try? row.write(to: file, atomically: true, encoding: .utf8) }
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+            }
+        }
+        return load
+    }
+
+    /// The same dictation decode with nothing else on the instance — the baseline for the above.
+    func testSameEngineDictationAlone() async throws {
+        guard env["PREVIEW_BENCH"] == "same-alone", let engine = env["PREVIEW_VARIANT"] else {
+            throw XCTSkip("set TEST_RUNNER_PREVIEW_BENCH=same-alone and TEST_RUNNER_PREVIEW_VARIANT=cpp|<WhisperKit variant>")
+        }
+        wkAppVariant = spec(engine).family == "wkapp" ? spec(engine).variant : nil
+        let load = try await startSameEngineDictations(spec: spec(engine), tag: "same-alone-\(engine)")
+        try await Task.sleep(nanoseconds: 90_000_000_000)
+        load.stop()
+        await load.task.value
+    }
+
     /// Main-engine decode times with nothing else running, for the contention baseline.
     func testMainEngineAlone() async throws {
         guard env["PREVIEW_BENCH"] == "alone" else { throw XCTSkip("set TEST_RUNNER_PREVIEW_BENCH=alone") }
@@ -404,6 +606,7 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
 
     private func edgeCases(engine name: String) async throws {
         let s = spec(name)
+        wkAppVariant = s.family == "wkapp" ? s.variant : nil
         reset("results/edge-\(name).jsonl")
         var cases: [(id: String, kind: String, lang: String, samples: [Float], ref: String)] = []
         let testData = URL(fileURLWithPath: "/Users/alexivy/ai/whisperer/WhispererTests/TestData")
