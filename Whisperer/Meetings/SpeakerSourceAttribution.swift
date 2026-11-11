@@ -28,9 +28,11 @@ nonisolated enum SpeakerSource: Equatable, Sendable {
 
 nonisolated enum SpeakerSourceAttribution {
     static let sampleRate = 16_000.0
-    /// Call RMS above which the call counts as talking in a buffer. Speech on the tap sits around
-    /// 0.02–0.2; the tap's silence is digital zero.
-    static let callActiveRMS: Float = 0.008
+    /// Call RMS above which the call counts as talking in a buffer. The tap's silence is digital
+    /// zero, so the line can sit low: a call played quietly (whole meetings peaking at 0.12 on
+    /// 2026-11-10) speaks around 0.005–0.02, under the 0.008 this used to be. Same line as the
+    /// mixer's own `callTalkingRMS`.
+    static let callActiveRMS: Float = SystemAudioMixer.callTalkingRMS
     /// A speaker needs this much speech before it is classified.
     static let minSpeechSeconds = 4.0
     /// Below this much call activity in the whole meeting the tap has not shown it can hear the

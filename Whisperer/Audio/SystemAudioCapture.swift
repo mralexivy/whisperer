@@ -69,6 +69,8 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
     private var lastCallbackHost: UInt64 = 0
     private var measuredFrames = 0
     private var measuredSeconds: Double = 0
+    /// The previous window's measured rate; a correction needs two windows that agree.
+    private var lastMeasuredRate: Double?
     private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000,
                                              channels: 1, interleaved: false)!
 
@@ -147,6 +149,12 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
             status = AudioHardwareCreateAggregateDevice(composition as CFDictionary, &newAggregate)
             guard status == noErr, newAggregate != kAudioObjectUnknown else { throw CaptureError.aggregate(status) }
             aggregateID = newAggregate
+            // The tap's own format can be wrong: on AirPods in the headset profile it reports
+            // 48 kHz and delivers 24 kHz. The aggregate clocks the tap, so its rate is the truth.
+            if let clock = Self.nominalSampleRate(aggregateID), clock > 0, clock != inputRate {
+                Logger.info("Meeting call audio: device runs at \(Int(clock)) Hz, tap reported \(Int(inputRate)) — using the device's", subsystem: .audio)
+                setInputRate(clock)
+            }
 
             var procID: AudioDeviceIOProcID?
             status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) { [weak self] _, inInputData, inInputTime, _, _ in
@@ -219,6 +227,7 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
         inputRate = rate
         measuredFrames = 0
         measuredSeconds = 0
+        lastMeasuredRate = nil
         if rate != outputFormat.sampleRate,
            let mono = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false) {
             monoInputFormat = mono
@@ -237,13 +246,18 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
         var address = Self.address(kAudioTapPropertyFormat)
         guard AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &asbd) == noErr,
               asbd.mSampleRate > 0, asbd.mChannelsPerFrame > 0 else { return }
-        guard asbd.mSampleRate != inputRate || Int(asbd.mChannelsPerFrame) != channelCount else { return }
-        Logger.info("Meeting call audio: \(reason) — \(Int(inputRate)) → \(Int(asbd.mSampleRate)) Hz × \(asbd.mChannelsPerFrame)", subsystem: .audio)
-        configure(asbd)
+        // The device clocking the tap knows its rate; the tap's own report can be stale.
+        var fresh = asbd
+        if aggregateID != kAudioObjectUnknown, let clock = Self.nominalSampleRate(aggregateID), clock > 0 {
+            fresh.mSampleRate = clock
+        }
+        guard fresh.mSampleRate != inputRate || Int(fresh.mChannelsPerFrame) != channelCount else { return }
+        Logger.info("Meeting call audio: \(reason) — \(Int(inputRate)) → \(Int(fresh.mSampleRate)) Hz × \(fresh.mChannelsPerFrame)", subsystem: .audio)
+        configure(fresh)
     }
 
     /// The rate the samples really arrive at, from host time across consecutive callbacks. When it
-    /// is off from the rate being converted by more than 15% for 1.5 s, the format is re-read, and
+    /// is off from the rate being converted by more than 15% in two 0.6 s windows that agree, the format is re-read, and
     /// if the tap still reports the old rate the measured one (snapped to a standard rate) is used.
     private func checkRate(frames: Int, at time: AudioTimeStamp) {
         guard time.mFlags.contains(.hostTimeValid), inputRate > 0 else { return }
@@ -254,11 +268,14 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
         guard gap < 0.25 else { return }               // a pause or a device switch, not a rate
         measuredFrames += frames
         measuredSeconds += gap
-        guard measuredSeconds >= 1.5 else { return }
+        guard measuredSeconds >= 0.6 else { return }
         let measured = Double(measuredFrames) / measuredSeconds
         measuredFrames = 0
         measuredSeconds = 0
+        defer { lastMeasuredRate = measured }
         guard abs(measured / inputRate - 1) > 0.15 else { return }
+        // One window can straddle a device starting up or switching profile; act on two that agree.
+        guard let previous = lastMeasuredRate, abs(measured / previous - 1) < 0.05 else { return }
         reloadFormat(reason: "measured \(Int(measured)) Hz")
         guard abs(measured / inputRate - 1) > 0.15 else { return }
         let snapped = Self.nearestStandardRate(measured)
@@ -329,6 +346,13 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
     static func address(_ selector: AudioObjectPropertySelector,
                         scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+    }
+
+    static func nominalSampleRate(_ device: AudioObjectID) -> Double? {
+        var address = address(kAudioDevicePropertyNominalSampleRate)
+        var rate: Float64 = 0
+        var size = UInt32(MemoryLayout<Float64>.size)
+        return AudioObjectGetPropertyData(device, &address, 0, nil, &size, &rate) == noErr ? rate : nil
     }
 
     static func defaultOutputDeviceID() -> AudioDeviceID? {

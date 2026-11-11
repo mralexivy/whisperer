@@ -135,6 +135,7 @@ final class MeetingCallAudioController {
     private func tick() {
         guard capture != nil else { return }
         rebindIfOutputChanged()
+        narrowToCallApp()
         applyRoute()
         refreshProcesses()
         checkForDigitalSilence()
@@ -171,22 +172,49 @@ final class MeetingCallAudioController {
     /// clock, levels and counters carry on; at most the switch's own fraction of a second is lost.
     /// If the rebuild fails the old capture is kept, so a switch never ends the call audio.
     private func rebindIfOutputChanged() {
-        guard let capture, let mixer, let target,
-              let current = SystemAudioCapture.defaultOutputDeviceID(), current != outputDeviceID else { return }
+        guard let target, let current = SystemAudioCapture.defaultOutputDeviceID(), current != outputDeviceID else { return }
+        outputDeviceID = current
+        let (_, name) = SystemAudioCapture.currentOutputRoute()
+        if restartCapture(target: target) {
+            Logger.info("Meeting call audio: output switched to \(name) — call capture moved with it", subsystem: .audio)
+        }
+    }
+
+    /// A meeting started from a calendar reminder begins before the call app plays anything, so
+    /// it gets the whole-system tap — which delivered digital silence for 75–987 s and then almost
+    /// nothing in every such meeting on 2026-11-10, while a per-app tap on the same Mac heard the
+    /// call at full level. Once one other app is using the microphone (the call has started), the
+    /// capture moves to that app's own tap.
+    private func narrowToCallApp() {
+        guard case .allExcept? = target else { return }
+        let ownBundleID = Bundle.main.bundleIdentifier ?? "com.ivy.whisperer"
+        let others = processMonitor.capturingBundleIDs().subtracting([ownBundleID])
+        let candidate = session?.sourceBundleID.flatMap { others.contains($0) ? $0 : nil }
+            ?? (others.count == 1 ? others.first : nil)
+        guard let bundleID = candidate else { return }
+        let processes = processMonitor.processObjects(ownedBy: bundleID)
+        guard !processes.isEmpty else { return }
+        if restartCapture(target: .app(bundleID: bundleID, processes: processes)) {
+            Logger.info("Meeting call audio: the call started in \(bundleID) — capturing it directly", subsystem: .audio)
+        }
+    }
+
+    /// Replaces the tap, feeding the same mixer. Keeps the old one when the new one won't start.
+    @discardableResult
+    private func restartCapture(target newTarget: CallAudioTapTarget) -> Bool {
+        guard let capture, let mixer, let target else { return false }
         let replacement = SystemAudioCapture(mixer: mixer)
         capture.stop()
         do {
-            try replacement.start(target: target)
+            try replacement.start(target: newTarget)
         } catch {
-            Logger.warning("Meeting call audio: output changed but the tap could not move (\(error)) — keeping the old one", subsystem: .audio)
+            Logger.warning("Meeting call audio: could not move the tap (\(error)) — keeping the old one", subsystem: .audio)
             try? capture.start(target: target)
-            outputDeviceID = current
-            return
+            return false
         }
         self.capture = replacement
-        outputDeviceID = current
-        let (_, name) = SystemAudioCapture.currentOutputRoute()
-        Logger.info("Meeting call audio: output switched to \(name) — call capture moved with it", subsystem: .audio)
+        self.target = newTarget
+        return true
     }
 
     /// Chrome can start a new audio helper mid-call; a per-app tap would not hear it.
