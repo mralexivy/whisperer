@@ -6,6 +6,7 @@
 //  Follows HistoryManager patterns exactly.
 //
 
+import AVFoundation
 import Foundation
 import CoreData
 import Combine
@@ -552,6 +553,50 @@ class MeetingManager: ObservableObject {
             try? fm.moveItem(at: source, to: dest)
         }
         return fm.fileExists(atPath: dest.path)
+    }
+
+    // MARK: - Orphaned recordings
+
+    /// Gives meetings without audio back their recording, when it is still in `Sessions/`.
+    ///
+    /// Builds before 2026-11-09 attached a meeting's file only at a normal stop, so a meeting
+    /// abandoned when the mic failed (a 65-minute interview, lid closed at the end) kept its
+    /// transcript but showed a 0:00 player, while its recording sat in `Sessions/` until the
+    /// 7-day sweep. A file is matched when it was created within two minutes of the meeting's
+    /// start and is at least half the meeting's length (dictation scraps are seconds long).
+    /// Runs at launch, after crash recovery and before the sweep.
+    func reattachOrphanedRecordings(now: Date = Date()) async {
+        let ctx = database.newBackgroundContext()
+        let orphans: [(id: UUID, createdAt: Date, duration: Double)] = await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "(audioFileURL == nil OR audioFileURL == '') AND isInProgress == NO AND createdAt > %@",
+                                        now.addingTimeInterval(-8 * 86_400) as NSDate)
+            return ((try? ctx.fetch(req)) ?? []).map { ($0.id, $0.createdAt, $0.duration) }
+        }
+        guard !orphans.isEmpty else { return }
+        let fm = FileManager.default
+        let sessions = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Whisperer/Sessions")
+        let files = ((try? fm.contentsOfDirectory(at: sessions, includingPropertiesForKeys: [.creationDateKey])) ?? [])
+            .filter { AudioArchiveFormat.isRecognizedAudio($0) }
+            .compactMap { url -> (url: URL, created: Date)? in
+                (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate).map { (url, $0) }
+            }
+        var used = Set<URL>()
+        for meeting in orphans {
+            let candidates = files.filter { !used.contains($0.url) && abs($0.created.timeIntervalSince(meeting.createdAt)) <= 120 }
+                .sorted { abs($0.created.timeIntervalSince(meeting.createdAt)) < abs($1.created.timeIntervalSince(meeting.createdAt)) }
+            guard let match = candidates.first(where: { file in
+                guard let audio = try? AVAudioFile(forReading: file.url) else { return false }
+                let seconds = Double(audio.length) / audio.processingFormat.sampleRate
+                return seconds >= 60 && seconds >= meeting.duration * 0.5
+            }) else { continue }
+            used.insert(match.url)
+            let name = match.url.lastPathComponent
+            guard Self.adoptSessionAudio(fileName: name),
+                  await updateAudioFileName(meetingID: meeting.id, fileName: name) else { continue }
+            Logger.info("Meetings: recording reattached to \(meeting.id) (\(name))", subsystem: .app)
+        }
     }
 
     // MARK: - Crash recovery

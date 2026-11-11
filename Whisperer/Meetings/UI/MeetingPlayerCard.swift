@@ -30,6 +30,10 @@ struct MeetingPlayerCard: View {
     private let seekThrottleInterval: TimeInterval = 0.1
 
     private var audioURL: URL? { meeting?.resolvedAudioURL }
+    private var hasRecording: Bool {
+        guard let url = audioURL else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -46,21 +50,38 @@ struct MeetingPlayerCard: View {
             .padding(.top, 18)
             .padding(.bottom, 14)
 
-            // Player — matches AudioPlayerView layout exactly
-            VStack(spacing: 16) {
-                waveformView
-                    .frame(height: 56)
-                    .padding(.horizontal, 8)
+            if hasRecording {
+                // Player — matches AudioPlayerView layout exactly
+                VStack(spacing: 16) {
+                    waveformView
+                        .frame(height: 56)
+                        .padding(.horizontal, 8)
 
-                HStack(spacing: 12) {
-                    playButton
-                    timeDisplay
-                    Spacer(minLength: 8)
-                    speedControl
+                    HStack(spacing: 12) {
+                        playButton
+                        timeDisplay
+                        Spacer(minLength: 8)
+                        speedControl
+                    }
                 }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            } else {
+                // Said, not shown as an empty 0:00 / 0:00 player that looks broken.
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform.slash")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.35))
+                    Text(session.isRecording && session.meetingID == meeting?.id
+                         ? "The recording is saved when the meeting ends."
+                         : "No recording was saved for this meeting.")
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.white.opacity(0.5))
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
         }
         .background(
             RoundedRectangle(cornerRadius: 14)

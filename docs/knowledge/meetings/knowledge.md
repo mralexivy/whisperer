@@ -455,3 +455,7 @@ generic, but honest, and it needs no guess about anyone's title format.
 ## A new meeting no longer cancels the previous one's processing; quit keeps the live text (2026-11-09)
 - `MeetingJobQueue.suspendForRecording` cancelled the running job: a calendar-started meeting threw away a finished 146 s Codex polish, and the overview waited for the next meeting to end. Now the running job keeps going — local model work waits on the `ModelWorkQueue` meeting gate, connected-AI work finishes — and only new jobs wait.
 - Quit mid-meeting: `MeetingSession.preserveForQuit` writes the open paragraph and the live tail to `MeetingPendingStore` (before, only the open paragraph was saved), the recorder closes the file, and the next launch's `recoverCrashedSessions` finalizes, adopts the audio and queues the job.
+
+## Recordings left behind by older builds are reattached (2026-11-10)
+- `MeetingManager.reattachOrphanedRecordings` (launch, after crash recovery, before the sweep): a meeting from the last 8 days with no audio gets the `Sessions/` file created within 2 min of its start that is ≥ 60 s and ≥ half its duration. Recovers meetings abandoned by builds before 2026-11-09 (the 65-min interview showed 0:00 / 0:00).
+- The player says "No recording was saved for this meeting." instead of an empty 0:00 / 0:00.
