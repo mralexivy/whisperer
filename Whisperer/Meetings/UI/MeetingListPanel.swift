@@ -15,6 +15,10 @@ struct MeetingListPanel: View {
     @State private var collapsedDays: Set<Date> = []
     /// The meeting waiting for the user to confirm its deletion. Nothing is deleted before they do.
     @State private var pendingDelete: MeetingListItem?
+    /// "All" (by day) or "Series" (recurring meetings grouped, see `MeetingSeries`).
+    @AppStorage("meetingListGroupsSeries") private var groupsSeries = false
+    @State private var expandedSeries: Set<String> = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var filtered: [MeetingListItem] {
         if searchText.isEmpty { return manager.meetings }
@@ -46,14 +50,22 @@ struct MeetingListPanel: View {
         VStack(spacing: 0) {
             header
             searchBar
+            modePicker
             if session.isRecording {
                 liveCard
             } else {
                 MeetingListCalendarStrip()
             }
-            libraryList
+            if groupsSeries { seriesList } else { libraryList }
         }
         .background(Color(hex: "0A0A18"))
+        .task(id: groupsSeries) {
+            // Series span the whole history, not the pages loaded so far. List items carry no
+            // transcript, so loading all of them is cheap.
+            guard groupsSeries else { return }
+            while manager.hasMorePages { await manager.loadNextPage() }
+            expandSelectedSeries()
+        }
         .confirmationDialog(
             pendingDelete.map { "Delete “\($0.title)”?" } ?? "Delete meeting?",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -122,6 +134,194 @@ struct MeetingListPanel: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+    }
+
+    // MARK: - Mode
+
+    private var modePicker: some View {
+        HStack(spacing: 6) {
+            modeTab("All", icon: "list.bullet", selected: !groupsSeries, id: "notes.mode.all") { groupsSeries = false }
+            modeTab("Series", icon: "square.stack.3d.up", selected: groupsSeries, id: "notes.mode.series") { groupsSeries = true }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+    }
+
+    private func modeTab(_ title: String, icon: String, selected: Bool, id: String, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86)) { action() }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 10, weight: .semibold))
+                Text(title).font(.system(size: 11.5, weight: selected ? .semibold : .medium))
+            }
+            .foregroundColor(selected ? .white : .white.opacity(0.55))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(selected ? Color(hex: "5B6CF7") : Color.clear))
+            .overlay(Capsule().stroke(selected ? Color.clear : Color.white.opacity(0.12), lineWidth: 1))
+            .shadow(color: selected ? Color(hex: "5B6CF7").opacity(0.25) : .clear, radius: 4, y: 1)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .uiTestFrame(id)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    // MARK: - Series
+
+    private var seriesGroups: (series: [MeetingSeries.Series], oneOffs: [MeetingListItem]) {
+        MeetingSeries.group(filtered)
+    }
+
+    private func expandSelectedSeries() {
+        guard let id = selectedMeetingID,
+              let series = seriesGroups.series.first(where: { $0.meetings.contains { $0.id == id } }) else { return }
+        expandedSeries.insert(series.id)
+    }
+
+    private var seriesList: some View {
+        let groups = seriesGroups
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 2) {
+                if groups.series.isEmpty && !manager.isLoadingPage {
+                    Text(searchText.isEmpty ? "No recurring meetings yet. Meetings with the same name — a weekly 1:1, a daily stand-up — are grouped here."
+                                            : "No recurring meetings match.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.4))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                }
+                ForEach(groups.series) { series in
+                    seriesRow(series)
+                    if expandedSeries.contains(series.id) {
+                        ForEach(series.meetings) { meeting in
+                            occurrenceRow(meeting)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                }
+                if !groups.oneOffs.isEmpty {
+                    HStack {
+                        Text("OTHER MEETINGS")
+                            .font(.system(size: 10, weight: .bold))
+                            .tracking(0.8)
+                            .foregroundColor(.white.opacity(0.3))
+                        Spacer()
+                        Text("\(groups.oneOffs.count)")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.2))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    .padding(.bottom, 6)
+                    ForEach(groups.oneOffs) { meeting in
+                        MeetingLibraryRow(meeting: meeting,
+                                          isSelected: selectedMeetingID == meeting.id,
+                                          isLive: session.isRecording && session.meetingID == meeting.id,
+                                          processing: manager.processingPhase(for: meeting.id))
+                            .onTapGesture { selectedMeetingID = meeting.id }
+                            .contextMenu { deleteMenu(meeting) }
+                    }
+                }
+            }
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func seriesRow(_ series: MeetingSeries.Series) -> some View {
+        let expanded = expandedSeries.contains(series.id)
+        let containsSelection = series.meetings.contains { $0.id == selectedMeetingID }
+        return Button {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.86)) {
+                if expanded { expandedSeries.remove(series.id) } else { expandedSeries.insert(series.id) }
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7).fill(Color(hex: "8B5CF6").opacity(0.16))
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(hex: "A78BFA"))
+                }
+                .frame(width: 26, height: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(series.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.white.opacity(containsSelection ? 1 : 0.88))
+                        .lineLimit(1)
+                    Text("\(series.cadence.label()) · \(series.meetings.count) meetings")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.42))
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Text(Self.shortDate(series.latest))
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundColor(.white.opacity(0.35))
+                    .fixedSize()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(.white.opacity(0.3))
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(expanded ? 0.04 : 0)))
+            .padding(.horizontal, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .uiTestFrame("notes.series.\(series.id)")
+        .accessibilityLabel("\(series.title), \(series.cadence.label()), \(series.meetings.count) meetings")
+    }
+
+    private func occurrenceRow(_ meeting: MeetingListItem) -> some View {
+        let selected = selectedMeetingID == meeting.id
+        return HStack(spacing: 8) {
+            Circle()
+                .fill(selected ? Color(hex: "5B6CF7") : Color.white.opacity(0.18))
+                .frame(width: 5, height: 5)
+            Text(Self.occurrenceDate(meeting.createdAt))
+                .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                .foregroundColor(.white.opacity(selected ? 1 : 0.75))
+            if meeting.duration > 0 {
+                Text(meeting.displayDuration)
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundColor(.white.opacity(0.38))
+            }
+            Spacer(minLength: 4)
+            if session.isRecording && session.meetingID == meeting.id {
+                Text("LIVE").font(.system(size: 9, weight: .bold)).foregroundColor(.red)
+            }
+        }
+        .padding(.leading, 46)
+        .padding(.trailing, 12)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 7).fill(selected ? Color(hex: "5B6CF7").opacity(0.12) : Color.clear))
+        .padding(.horizontal, 8)
+        .contentShape(Rectangle())
+        .onTapGesture { selectedMeetingID = meeting.id }
+        .contextMenu { deleteMenu(meeting) }
+        .uiTestFrame("notes.occurrence.\(meeting.id.uuidString)")
+    }
+
+    @ViewBuilder
+    private func deleteMenu(_ meeting: MeetingListItem) -> some View {
+        Button("Delete…", role: .destructive) { pendingDelete = meeting }
+            .disabled(session.isRecording && session.meetingID == meeting.id)
+    }
+
+    private static func shortDate(_ date: Date) -> String {
+        Calendar.current.isDateInToday(date) ? "today"
+            : Calendar.current.isDateInYesterday(date) ? "yesterday"
+            : date.formatted(.dateTime.month(.abbreviated).day())
+    }
+
+    private static func occurrenceDate(_ date: Date) -> String {
+        date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()) + " · "
+            + date.formatted(date: .omitted, time: .shortened)
     }
 
     // MARK: - Live card
@@ -235,10 +435,7 @@ struct MeetingListPanel: View {
                                 processing: manager.processingPhase(for: meeting.id)
                             )
                             .onTapGesture { selectedMeetingID = meeting.id }
-                            .contextMenu {
-                                Button("Delete…", role: .destructive) { pendingDelete = meeting }
-                                    .disabled(session.isRecording && session.meetingID == meeting.id)
-                            }
+                            .contextMenu { deleteMenu(meeting) }
                         }
                     }
                 }

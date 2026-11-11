@@ -83,11 +83,12 @@ struct MeetingListItem: Identifiable, Equatable {
     // MARK: - Init for new session (before CoreData write)
 
     init(id: UUID, title: String, language: String,
-         sourceBundleID: String? = nil, sourceAppName: String? = nil) {
+         sourceBundleID: String? = nil, sourceAppName: String? = nil,
+         createdAt: Date = Date(), duration: Double = 0) {
         self.id = id
         self.title = title
-        self.createdAt = Date()
-        self.duration = 0
+        self.createdAt = createdAt
+        self.duration = duration
         self.wordCount = 0
         self.audioFileURL = nil
         self.language = language
