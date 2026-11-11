@@ -403,7 +403,13 @@ nonisolated final class WhisperKitBridge: TranscriptionBackend, @unchecked Senda
         var options = DecodingOptions()
         options.task = .transcribe
         options.temperature = 0.0
-        options.temperatureFallbackCount = 0
+        // Whisper's retry at a higher temperature for a window that fails its compression or
+        // log-probability check. Without it such a window is dropped, not re-decoded: the final
+        // transcript came back empty on 2 of 100 Hebrew, 1 of 100 English and 5 of 40
+        // mixed-language FLEURS clips (CER 62.8 vs 47.5 on mixed speech), where WhisperKit's
+        // default of 3 lost none (LivePreviewEngineBenchmarkTests, 2026-11-11). A retry runs only
+        // on a failed window, so ordinary speech costs nothing extra.
+        options.temperatureFallbackCount = 3
         options.suppressBlank = true
         options.skipSpecialTokens = true
         options.withoutTimestamps = true
