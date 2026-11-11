@@ -307,6 +307,14 @@ final class MeetingSessionCoordinator: ObservableObject {
         }
         tracked = Tracked(session: session, origin: origin, bundleID: bundleID, signals: signals,
                           startedAt: Date(), occurrenceID: occurrence?.id)
+        // A calendar event's name is the meeting's name: lock it, so the overview's AI title
+        // never replaces it — whatever the event is called (even "Meeting with Keren", which
+        // the auto-title check alone would take for a placeholder).
+        let fromCalendar = occurrence != nil
+            || CalendarMeetingsStore.shared.upcoming.contains { $0.title == title }
+        if fromCalendar, let meetingID = session.meetingID {
+            await MeetingManager.shared.updateTitle(meetingID: meetingID, title: title, userEdited: true)
+        }
         session.participants = occurrence?.participants ?? []
         if let occurrence, !occurrence.participants.isEmpty, let meetingID = session.meetingID {
             await MeetingManager.shared.updateParticipants(meetingID: meetingID, participants: occurrence.participants)
