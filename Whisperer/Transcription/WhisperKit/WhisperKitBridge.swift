@@ -440,7 +440,7 @@ nonisolated final class WhisperKitBridge: TranscriptionBackend, @unchecked Senda
 
         do {
             let results = try await runtime.transcribe(
-                audioArray: samples, options: options, callback: callback
+                audioArray: Self.padForWindowClip(samples), options: options, callback: callback
             )
             if let detected = results.first?.language {
                 await runtime.setDetectedLanguage(detected)
@@ -454,6 +454,17 @@ nonisolated final class WhisperKitBridge: TranscriptionBackend, @unchecked Senda
             Logger.error("[WhisperKitBridge] Transcription error: \(error)", subsystem: .transcription)
             return ""
         }
+    }
+
+    /// WhisperKit never starts a decode window in the last `windowClipTime` (1 s by default) of
+    /// the audio — an end-of-clip hallucination guard. On a complete recording that guard eats real
+    /// speech: anything under a second ("Yes", "כן", "Да") was never decoded and came back empty,
+    /// and a 30.7 s recording lost its last 0.7 s. One second of trailing silence puts all the
+    /// speech before the guard, which then clips only the silence. Measured 2026-11-11: every
+    /// clip under 1.0 s empty, every clip from 1.0 s decoded (`LivePreviewEngineBenchmarkTests`).
+    nonisolated static func padForWindowClip(_ samples: [Float], clipSeconds: Float = 1.0) -> [Float] {
+        guard !samples.isEmpty else { return samples }
+        return samples + [Float](repeating: 0, count: Int(clipSeconds * Float(WhisperKit.sampleRate)))
     }
 
     @concurrent
