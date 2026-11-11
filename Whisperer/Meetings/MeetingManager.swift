@@ -531,12 +531,39 @@ class MeetingManager: ObservableObject {
     /// records — the row names its file from the first second, so a crash, a force quit or an
     /// abandoned meeting still finds it. Defaults to `Meetings/` when neither exists yet.
     nonisolated static func audioURL(forFileName name: String) -> URL {
+        locateAudio(storedName: name) ?? audioCandidates(storedName: name)[0]
+    }
+
+    /// Every place a meeting's recording has lived, in the order builds have used them. Rows keep
+    /// whatever their build wrote — a bare name in `Meetings/` (the normal case), a name still in
+    /// `Sessions/` (a meeting that never reached a normal stop), an absolute path or `file://` URL,
+    /// and pre-Opus `.caf` / `.wav` / `.m4a` files the optional compaction never rewrote. Nothing
+    /// is moved or renamed to make an old row fit; the lookup comes to the file.
+    nonisolated static func audioCandidates(storedName raw: String) -> [URL] {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let finished = appSupport.appendingPathComponent("Whisperer/Meetings/\(name)")
-        let recording = appSupport.appendingPathComponent("Whisperer/Sessions/\(name)")
-        if !FileManager.default.fileExists(atPath: finished.path),
-           FileManager.default.fileExists(atPath: recording.path) { return recording }
-        return finished
+            .appendingPathComponent("Whisperer")
+        let stored = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        var urls: [URL] = []
+        if stored.hasPrefix("file://"), let url = URL(string: stored) {
+            urls.append(url)
+        } else if stored.hasPrefix("/") {
+            urls.append(URL(fileURLWithPath: stored))
+        }
+        let name = urls.first?.lastPathComponent ?? (stored as NSString).lastPathComponent
+        let folders = ["Meetings", "Sessions", "Recordings"].map { appSupport.appendingPathComponent($0) }
+        for folder in folders { urls.append(folder.appendingPathComponent(name)) }
+        let base = (name as NSString).deletingPathExtension
+        for ext in ["opus", "caf", "wav", "m4a"] where ext != (name as NSString).pathExtension.lowercased() {
+            for folder in folders { urls.append(folder.appendingPathComponent("\(base).\(ext)")) }
+        }
+        if urls.isEmpty || name.isEmpty { urls.insert(folders[0].appendingPathComponent(stored), at: 0) }
+        return urls
+    }
+
+    /// The first candidate that exists, or nil when the recording is on none of them.
+    nonisolated static func locateAudio(storedName name: String) -> URL? {
+        guard !name.isEmpty else { return nil }
+        return audioCandidates(storedName: name).first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     /// Moves a recording from `Sessions/` into `Meetings/`, where it is kept. `Sessions/` is swept
@@ -557,45 +584,65 @@ class MeetingManager: ObservableObject {
 
     // MARK: - Orphaned recordings
 
-    /// Gives meetings without audio back their recording, when it is still in `Sessions/`.
+    /// Gives meetings without audio back their recording, when it is still on disk.
     ///
     /// Builds before 2026-11-09 attached a meeting's file only at a normal stop, so a meeting
     /// abandoned when the mic failed (a 65-minute interview, lid closed at the end) kept its
-    /// transcript but showed a 0:00 player, while its recording sat in `Sessions/` until the
-    /// 7-day sweep. A file is matched when it was created within two minutes of the meeting's
-    /// start and is at least half the meeting's length (dictation scraps are seconds long).
-    /// Runs at launch, after crash recovery and before the sweep.
-    func reattachOrphanedRecordings(now: Date = Date()) async {
+    /// transcript but showed a 0:00 player, while its recording sat in `Sessions/`. A meeting is a
+    /// candidate when its row names no file or names one `locateAudio` cannot find; a file is a
+    /// candidate when no row refers to it. They are matched when the file was created within three
+    /// minutes of the meeting's start and is at least a third of the meeting's length (dictation
+    /// scraps are seconds long). Every meeting still without audio is logged with the name its
+    /// row holds, so a report of a missing player can be traced. Runs at launch, after crash
+    /// recovery and before the sweep.
+    func reattachOrphanedRecordings() async {
         let ctx = database.newBackgroundContext()
-        let orphans: [(id: UUID, createdAt: Date, duration: Double)] = await ctx.perform {
+        let rows: [(id: UUID, createdAt: Date, duration: Double, name: String?)] = await ctx.perform {
             let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "(audioFileURL == nil OR audioFileURL == '') AND isInProgress == NO AND createdAt > %@",
-                                        now.addingTimeInterval(-8 * 86_400) as NSDate)
-            return ((try? ctx.fetch(req)) ?? []).map { ($0.id, $0.createdAt, $0.duration) }
+            req.predicate = NSPredicate(format: "isInProgress == NO")
+            return ((try? ctx.fetch(req)) ?? []).map { ($0.id, $0.createdAt, $0.duration, $0.audioFileURL) }
         }
+        let orphans = await Task.detached(priority: .utility) {
+            rows.filter { row in row.name.map { Self.locateAudio(storedName: $0) == nil } ?? true }
+        }.value
         guard !orphans.isEmpty else { return }
+
+        let referenced = Set(rows.compactMap { $0.name.flatMap { Self.locateAudio(storedName: $0)?.standardizedFileURL } })
         let fm = FileManager.default
-        let sessions = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Whisperer/Sessions")
-        let files = ((try? fm.contentsOfDirectory(at: sessions, includingPropertiesForKeys: [.creationDateKey])) ?? [])
-            .filter { AudioArchiveFormat.isRecognizedAudio($0) }
-            .compactMap { url -> (url: URL, created: Date)? in
-                (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate).map { (url, $0) }
-            }
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Whisperer")
+        let files = ["Sessions", "Meetings"].flatMap { folder -> [(url: URL, created: Date)] in
+            let dir = appSupport.appendingPathComponent(folder)
+            return ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey])) ?? [])
+                .filter { AudioArchiveFormat.isRecognizedAudio($0) && !referenced.contains($0.standardizedFileURL) }
+                .compactMap { url in (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate).map { (url, $0) } }
+        }
         var used = Set<URL>()
+        var stillMissing: [String] = []
         for meeting in orphans {
-            let candidates = files.filter { !used.contains($0.url) && abs($0.created.timeIntervalSince(meeting.createdAt)) <= 120 }
+            let candidates = files.filter { !used.contains($0.url) && abs($0.created.timeIntervalSince(meeting.createdAt)) <= 180 }
                 .sorted { abs($0.created.timeIntervalSince(meeting.createdAt)) < abs($1.created.timeIntervalSince(meeting.createdAt)) }
-            guard let match = candidates.first(where: { file in
+            let match = candidates.first { file in
                 guard let audio = try? AVAudioFile(forReading: file.url) else { return false }
                 let seconds = Double(audio.length) / audio.processingFormat.sampleRate
-                return seconds >= 60 && seconds >= meeting.duration * 0.5
-            }) else { continue }
+                return seconds >= 20 && seconds >= meeting.duration / 3
+            }
+            guard let match else {
+                if meeting.duration >= 20 {
+                    stillMissing.append("\(meeting.id.uuidString.prefix(8)) \(Int(meeting.duration))s file=\(meeting.name ?? "none")")
+                }
+                continue
+            }
             used.insert(match.url)
             let name = match.url.lastPathComponent
-            guard Self.adoptSessionAudio(fileName: name),
-                  await updateAudioFileName(meetingID: meeting.id, fileName: name) else { continue }
+            if match.url.deletingLastPathComponent().lastPathComponent == "Sessions" {
+                guard Self.adoptSessionAudio(fileName: name) else { continue }
+            }
+            guard await updateAudioFileName(meetingID: meeting.id, fileName: name) else { continue }
             Logger.info("Meetings: recording reattached to \(meeting.id) (\(name))", subsystem: .app)
+        }
+        if !stillMissing.isEmpty {
+            Logger.warning("Meetings: \(stillMissing.count) meeting(s) with no recording on disk: "
+                           + stillMissing.prefix(20).joined(separator: "; "), subsystem: .app)
         }
     }
 

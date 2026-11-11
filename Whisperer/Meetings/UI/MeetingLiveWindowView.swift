@@ -343,6 +343,7 @@ struct MeetingLiveWindowView: View {
         HStack(spacing: 10) {
             if session.isRecording {
                 stopButton
+                MeetingCaptureControls(size: 28)
             } else {
                 openInWorkspaceButton
             }

@@ -21,156 +21,126 @@ struct MeetingRightPanel: View {
     }
 
     var body: some View {
-        ZStack {
+        VStack(spacing: 0) {
+            // The meeting being recorded: a compact recording strip, then Ask AI over what has
+            // been said so far. Any other meeting: its player, then Ask AI — a recording running
+            // elsewhere never takes its place.
             if isShowingTheRecording {
-                RecordingInProgressView(session: session)
+                RecordingStrip(session: session)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
                     .transition(.opacity)
             } else {
-                VStack(spacing: 0) {
-                    MeetingPlayerCard(meeting: meeting, session: session, player: player)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
-
-                    Rectangle()
-                        .fill(Color.white.opacity(0.06))
-                        .frame(height: 1)
-
-                    MeetingAssistantPanel(meeting: meeting,
-                                         session: session,
-                                         onSpeakerRenamed: onSpeakerRenamed)
-                }
-                .transition(.opacity)
+                MeetingPlayerCard(meeting: meeting, session: session, player: player)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .transition(.opacity)
             }
+
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 1)
+
+            MeetingAssistantPanel(meeting: meeting,
+                                 session: session,
+                                 onSpeakerRenamed: onSpeakerRenamed)
         }
         .background(Color(hex: "0A0A18"))
-        .animation(.easeInOut(duration: 0.45), value: isShowingTheRecording)
+        .animation(.easeInOut(duration: 0.3), value: isShowingTheRecording)
     }
 }
 
-// MARK: - Recording in-progress state
+// MARK: - Recording strip
 
-private struct RecordingInProgressView: View {
+/// The recording, small: state, elapsed time, pause and mute. Sits where the player will be
+/// once the meeting ends.
+private struct RecordingStrip: View {
     @ObservedObject var session: MeetingSession
     @ObservedObject private var appState = AppState.shared
-    @State private var pulse = false
-    @State private var dotBright = false
 
-    var body: some View {
-        VStack(spacing: 40) {
-            Spacer()
-
-            sonarIcon
-
-            VStack(spacing: 16) {
-                liveBadge
-
-                Text(session.elapsedDisplay)
-                    .font(.system(size: 52, weight: .light, design: .rounded).monospacedDigit())
-                    .foregroundColor(.white)
-                    .contentTransition(.numericText())
-
-                Text("Player and AI ready when recording ends")
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundColor(.white.opacity(0.25))
-                    .multilineTextAlignment(.center)
-
-                if let note = session.callAudioNote {
-                    Label(note, systemImage: "speaker.wave.2")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundColor(.white.opacity(0.45))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 24)
-                        .accessibilityIdentifier("meetingCallAudioNote")
-                }
-            }
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(hex: "0A0A18"))
-        .onAppear {
-            pulse = true
-            // Bounded, not forever: a perpetual pulse keeps WindowServer compositing the
-            // window for the whole meeting (see `KineticCaret`).
-            withAnimation(.easeInOut(duration: 0.7).repeatCount(6, autoreverses: true)) {
-                dotBright = true
-            }
-        }
-    }
-
-    // MARK: - Sonar icon
-
-    private var sonarIcon: some View {
-        ZStack {
-            // Three expanding sonar rings
-            ForEach(0..<3, id: \.self) { i in
-                Circle()
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                Color(hex: "5B6CF7").opacity(0.55),
-                                Color(hex: "8B5CF6").opacity(0.25)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.5
-                    )
-                    .frame(width: 86, height: 86)
-                    .scaleEffect(pulse ? 3.0 : 1.0)
-                    .opacity(pulse ? 0 : 0.75)
-                    .animation(
-                        .easeOut(duration: 2.5)
-                            .repeatCount(3, autoreverses: false)
-                            .delay(Double(i) * 0.82),
-                        value: pulse
-                    )
-            }
-
-            // Center gradient circle
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "5B6CF7"), Color(hex: "8B5CF6")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 74, height: 74)
-                    .shadow(color: Color(hex: "5B6CF7").opacity(0.55), radius: 24, y: 6)
-
-                Image(systemName: "waveform.and.mic")
-                    .font(.system(size: 26, weight: .medium))
-                    .foregroundColor(.white)
-            }
-        }
-        .frame(width: 230, height: 230)
-    }
-
-    // MARK: - Live badge
-
-    /// Paused (by the user, or while they dictate on top of the meeting) reads amber, not red.
     private var isPausedCapture: Bool { session.isPausedForDictation || appState.isPaused }
     private var badgeColor: Color { isPausedCapture ? Color(red: 0.961, green: 0.620, blue: 0.043) : .red }
 
-    private var liveBadge: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(badgeColor)
-                .frame(width: 6, height: 6)
-                .opacity(isPausedCapture || dotBright ? 1.0 : 0.2)
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Circle().fill(badgeColor).frame(width: 6, height: 6)
+                    Text(session.isPausedForDictation ? "PAUSED \u{00B7} DICTATING"
+                         : appState.isPaused ? "PAUSED" : "RECORDING")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundColor(badgeColor.opacity(0.9))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(badgeColor.opacity(0.08)))
+                .overlay(Capsule().stroke(badgeColor.opacity(0.22), lineWidth: 1))
 
-            Text(session.isPausedForDictation ? "PAUSED \u{00B7} YOU'RE DICTATING"
-                 : appState.isPaused ? "PAUSED \u{00B7} RESUME FROM THE HEADER" : "RECORDING LIVE")
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.9)
-                .foregroundColor(badgeColor.opacity(0.9))
+                Text(session.elapsedDisplay)
+                    .font(.system(size: 20, weight: .light, design: .rounded).monospacedDigit())
+                    .foregroundColor(.white)
+                    .contentTransition(.numericText())
+
+                Spacer(minLength: 4)
+
+                MeetingCaptureControls(size: 28)
+            }
+
+            Text(appState.isMicMuted ? "Your microphone is muted. The call is still recorded."
+                 : "Ask about what has been said so far. The player appears when the meeting ends.")
+                .font(.system(size: 11.5))
+                .foregroundColor(.white.opacity(0.4))
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let note = session.callAudioNote {
+                Label(note, systemImage: "speaker.wave.2")
+                    .font(.system(size: 11))
+                    .foregroundColor(.white.opacity(0.45))
+                    .accessibilityIdentifier("meetingCallAudioNote")
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 7)
-        .background(badgeColor.opacity(0.08))
-        .overlay(Capsule().stroke(badgeColor.opacity(0.22), lineWidth: 1))
-        .clipShape(Capsule())
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 14).fill(WhispererColors.cardBackground(.dark)))
+    }
+}
+
+/// Pause / resume and microphone mute for the meeting being recorded. Usable from the first
+/// second — e.g. muted while waiting for the others to join. Shared by the workspace and the
+/// floating live window.
+struct MeetingCaptureControls: View {
+    var size: CGFloat = 26
+    @ObservedObject private var appState = AppState.shared
+
+    var body: some View {
+        HStack(spacing: 6) {
+            control(systemName: appState.isMicMuted ? "mic.slash.fill" : "mic.fill",
+                    active: appState.isMicMuted,
+                    tint: Color(red: 0.937, green: 0.267, blue: 0.267),
+                    help: appState.isMicMuted ? "Unmute microphone" : "Mute microphone",
+                    id: "meetingMuteButton") { appState.toggleMicMute() }
+            control(systemName: appState.isPaused ? "play.fill" : "pause.fill",
+                    active: appState.isPaused,
+                    tint: Color(red: 0.961, green: 0.620, blue: 0.043),
+                    help: appState.isPaused ? "Resume recording" : "Pause recording",
+                    id: "meetingPauseButton") { appState.togglePause() }
+        }
+    }
+
+    private func control(systemName: String, active: Bool, tint: Color, help: String,
+                         id: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: size * 0.42, weight: .semibold))
+                .foregroundColor(active ? tint : .white.opacity(0.7))
+                .frame(width: size, height: size)
+                .background(Circle().fill(active ? tint.opacity(0.16) : Color.white.opacity(0.07)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+        .accessibilityIdentifier(id)
     }
 }

@@ -519,7 +519,10 @@ class AppState: ObservableObject {
     /// Keeps the session file skipping exactly what the transcriber skips — see
     /// `AudioRecorder.isArchivePaused`. Mute counts: a muted mic must not keep recording to disk.
     private func syncArchivePause() {
-        audioRecorder?.isArchivePaused = isPaused || isMicMuted || meetingInterlude == .listening
+        // In a meeting, mute silences only the microphone: the call goes on being recorded.
+        let meetingMute = isMicMuted && isMeetingMode
+        audioRecorder?.isMicSilenced = meetingMute
+        audioRecorder?.isArchivePaused = isPaused || (isMicMuted && !meetingMute) || meetingInterlude == .listening
     }
 
     // MARK: Dictation during a meeting (state)
@@ -4058,7 +4061,8 @@ class AppState: ObservableObject {
                     // The dictation's final decode is running: hold the meeting's audio until it
                     // returns rather than decode both on one bridge at once.
                     if self.bufferMeetingSamplesIfInterludeFinishing(samples) { return }
-                    guard !self.isMicMuted, !self.isPaused else { return }
+                    // Muted, the mic arrives as silence with the call mixed in — keep it.
+                    guard !self.isPaused else { return }
                     self.streamingTranscriber?.addSamples(samples)
                     // Feed the silence watcher (no-op once speech latches).
                     self.meetingSilenceWatcher.feed(samples)
@@ -5631,7 +5635,8 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Toggle microphone mute during recording (samples are discarded when muted).
+    /// Toggle microphone mute during recording. Dictation drops the samples; a meeting replaces
+    /// the microphone with silence and keeps recording the call (`syncArchivePause`).
     func toggleMicMute() {
         guard state.isRecording else { return }
         isMicMuted.toggle()
@@ -6249,7 +6254,7 @@ extension AppState {
     /// back to live feeding. Same samples the file got, so the clocks stay identical.
     func flushInterludeMeetingBacklog() {
         let backlog = interludeBacklog.release()
-        guard !backlog.isEmpty, !isMicMuted, !isPaused else { return }
+        guard !backlog.isEmpty, !isPaused else { return }
         streamingTranscriber?.addSamples(backlog)
         meetingSilenceWatcher.feed(backlog)
         feedMeetingDiarizer(backlog)

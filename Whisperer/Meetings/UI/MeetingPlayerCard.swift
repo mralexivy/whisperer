@@ -66,15 +66,16 @@ struct MeetingPlayerCard: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
-            } else {
-                // Said, not shown as an empty 0:00 / 0:00 player that looks broken.
+            } else if meeting != nil {
+                // Said, not shown as an empty 0:00 / 0:00 player that looks broken. Only once the
+                // meeting has loaded: while it loads there is no row to look the file up from.
                 HStack(spacing: 8) {
                     Image(systemName: "waveform.slash")
                         .font(.system(size: 13))
                         .foregroundColor(.white.opacity(0.35))
                     Text(session.isRecording && session.meetingID == meeting?.id
                          ? "The recording is saved when the meeting ends."
-                         : "No recording was saved for this meeting.")
+                         : "This meeting's recording isn't on this Mac.")
                         .font(.system(size: 12.5))
                         .foregroundColor(.white.opacity(0.5))
                     Spacer()

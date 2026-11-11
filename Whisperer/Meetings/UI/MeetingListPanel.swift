@@ -113,7 +113,6 @@ struct MeetingListPanel: View {
                         Circle().stroke(Color.red.opacity(0.3), lineWidth: 4)
                             .scaleEffect(1.4)
                     )
-                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: session.isRecording)
                 MeetingSourceIcon(bundleID: session.sourceBundleID,
                                   appName: session.sourceAppName,
                                   size: 13)
@@ -129,18 +128,22 @@ struct MeetingListPanel: View {
             MiniWaveformView()
                 .frame(height: 20)
 
-            Button {
-                Task { await session.stopRecording() }
-            } label: {
-                Text("Stop Recording")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(Color.red.opacity(0.8))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            HStack(spacing: 8) {
+                Button {
+                    Task { await session.stopRecording() }
+                } label: {
+                    Text("Stop Recording")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.8))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+
+                MeetingCaptureControls(size: 26)
             }
-            .buttonStyle(.plain)
         }
         .padding(12)
         .background(Color(hex: "14142B"))

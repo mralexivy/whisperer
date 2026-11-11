@@ -486,6 +486,10 @@ struct AskAIPane: View {
         let q = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty, let meeting else { return }
         question = ""
+        // The meeting being recorded is asked about its live cards; its row lags behind them.
+        let live = AppState.shared.activeMeetingSession
+        let askSegments = live.flatMap { $0.isRecording && $0.meetingID == meeting.id ? $0.segments : nil }
+            ?? meeting.segments
 
         let userMsg = MeetingChatMessage(role: "user", text: q)
         messages.append(userMsg)
@@ -514,7 +518,7 @@ struct AskAIPane: View {
             let answer = await MeetingAIService.shared.ask(
                 question: q,
                 meetingID: meeting.id,
-                segments: meeting.segments,
+                segments: askSegments,
                 history: history,
                 onPartial: { partial in
                     Task { @MainActor in streamingText = MeetingAIService.stripCitations(partial) }

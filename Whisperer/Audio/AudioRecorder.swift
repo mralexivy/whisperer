@@ -81,6 +81,15 @@ class AudioRecorder: NSObject {
         set { isRecordingLock.lock(); _isArchivePaused = newValue; isRecordingLock.unlock() }
     }
 
+    /// The meeting's mute: the microphone is replaced by silence before the call's audio is mixed
+    /// in, so the other side keeps being heard, transcribed and saved. Dictation mutes by dropping
+    /// buffers instead (`AppState.isMicMuted`), as there is nothing else to hear.
+    private var _isMicSilenced = false
+    var isMicSilenced: Bool {
+        get { isRecordingLock.lock(); defer { isRecordingLock.unlock() }; return _isMicSilenced }
+        set { isRecordingLock.lock(); _isMicSilenced = newValue; isRecordingLock.unlock() }
+    }
+
     /// A meeting's far-end audio (the call app's output), summed into every buffer this recorder
     /// delivers and archives. Set by `MeetingCallAudioController` for the length of a meeting;
     /// `nil` for dictation. The microphone remains the clock — the mixer hands over exactly as
@@ -438,6 +447,7 @@ class AudioRecorder: NSObject {
         recoveryAttemptCount = 0
         recoveryPolicy = recovery
         isArchivePaused = false
+        isMicSilenced = false
         hasEverReceivedNonSilentAudio = false
         hasReportedSilenceEpisode = false
 
@@ -841,6 +851,7 @@ class AudioRecorder: NSObject {
         // only the user, and the meeting skips the span anyway.
         var samples = samples
         let archivePaused = isArchivePaused
+        if isMicSilenced { samples = [Float](repeating: 0, count: samples.count) }
         if let mixer = systemAudioMixer {
             if archivePaused {
                 mixer.discardPending()
