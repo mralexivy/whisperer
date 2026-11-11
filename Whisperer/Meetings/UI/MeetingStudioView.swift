@@ -75,10 +75,9 @@ struct MeetingStudioView: View {
             Task { await detailVM.refreshDetail() }
         }
         .onChange(of: manager.meetings) { _, meetings in
-            if session.isRecording, let id = session.meetingID {
-                selectedMeetingID = id
-                return
-            }
+            // The list changes all through a recording (each card persists). It used to put the
+            // selection back on the recording every time, so a past meeting could not be read
+            // while a call ran. A recording selects itself once, when it starts.
             if selectedMeetingID == nil {
                 selectedMeetingID = meetings.first?.id
             } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {
@@ -127,10 +126,6 @@ struct MeetingStudioView: View {
                 Task { await detailVM.refreshDetail() }
             }
             .onChange(of: manager.meetings) { _, meetings in
-                if session.isRecording, let id = session.meetingID {
-                    selectedMeetingID = id
-                    return
-                }
                 if selectedMeetingID == nil {
                     selectedMeetingID = meetings.first?.id
                 } else if let id = selectedMeetingID, !meetings.contains(where: { $0.id == id }) {

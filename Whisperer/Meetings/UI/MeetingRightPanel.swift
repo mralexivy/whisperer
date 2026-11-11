@@ -14,9 +14,15 @@ struct MeetingRightPanel: View {
     @ObservedObject var player: SeekableAudioPlayer
     var onSpeakerRenamed: ((Int, String) -> Void)?
 
+    /// The recording state belongs to the meeting being recorded. Shown for whatever meeting
+    /// was open, it hid the player and Ask AI of every past meeting for the length of a call.
+    private var isShowingTheRecording: Bool {
+        session.isRecording && session.meetingID != nil && session.meetingID == meeting?.id
+    }
+
     var body: some View {
         ZStack {
-            if session.isRecording {
+            if isShowingTheRecording {
                 RecordingInProgressView(session: session)
                     .transition(.opacity)
             } else {
@@ -37,7 +43,7 @@ struct MeetingRightPanel: View {
             }
         }
         .background(Color(hex: "0A0A18"))
-        .animation(.easeInOut(duration: 0.45), value: session.isRecording)
+        .animation(.easeInOut(duration: 0.45), value: isShowingTheRecording)
     }
 }
 
