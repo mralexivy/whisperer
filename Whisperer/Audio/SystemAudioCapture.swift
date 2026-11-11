@@ -58,6 +58,17 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
     private var monoInputFormat: AVAudioFormat?
     private var channelCount = 2
     private var isInterleaved = true
+    /// The rate the tap's samples are converted from. It changes under a running meeting: AirPods
+    /// playing a call at 48 kHz drop to the headset profile's 24 or 16 kHz the moment the meeting
+    /// opens their microphone. Converting at the old rate made the far end twice as fast and full
+    /// of gaps (2026-11-10, Zoom on AirPods Pro: 107 s of call audio in 207 s), so nothing in it
+    /// could be transcribed or told apart as another speaker.
+    private var inputRate: Double = 0
+    private var formatListener: AudioObjectPropertyListenerBlock?
+    // Measured rate, over consecutive callbacks only (a device switch leaves a gap).
+    private var lastCallbackHost: UInt64 = 0
+    private var measuredFrames = 0
+    private var measuredSeconds: Double = 0
     private let outputFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000,
                                              channels: 1, interleaved: false)!
 
@@ -104,13 +115,14 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
                   asbd.mSampleRate > 0, asbd.mChannelsPerFrame > 0 else {
                 throw CaptureError.unsupportedFormat
             }
-            channelCount = Int(asbd.mChannelsPerFrame)
-            isInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
-            if asbd.mSampleRate != outputFormat.sampleRate,
-               let mono = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: asbd.mSampleRate,
-                                        channels: 1, interleaved: false) {
-                monoInputFormat = mono
-                converter = AVAudioConverter(from: mono, to: outputFormat)
+            configure(asbd)
+            Logger.info("Meeting call audio: tap format \(Int(asbd.mSampleRate)) Hz × \(asbd.mChannelsPerFrame)", subsystem: .audio)
+
+            // The format changes when the output device does (AirPods into the headset profile).
+            var formatAddress = Self.address(kAudioTapPropertyFormat)
+            let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.reloadFormat(reason: "format changed") }
+            if AudioObjectAddPropertyListenerBlock(tapID, &formatAddress, queue, listener) == noErr {
+                formatListener = listener
             }
 
             guard let outputID = Self.defaultOutputDeviceID(),
@@ -137,8 +149,8 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
             aggregateID = newAggregate
 
             var procID: AudioDeviceIOProcID?
-            status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) { [weak self] _, inInputData, _, _, _ in
-                self?.handleInput(inInputData)
+            status = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregateID, queue) { [weak self] _, inInputData, inInputTime, _, _ in
+                self?.handleInput(inInputData, at: inInputTime.pointee)
             }
             guard status == noErr, let procID else { throw CaptureError.ioProc(status) }
             ioProcID = procID
@@ -169,6 +181,11 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
 
     /// Idempotent. Safe from any thread but `queue`.
     func stop(drain: Bool = true) {
+        if let listener = formatListener, tapID != kAudioObjectUnknown {
+            var address = Self.address(kAudioTapPropertyFormat)
+            AudioObjectRemovePropertyListenerBlock(tapID, &address, queue, listener)
+        }
+        formatListener = nil
         if aggregateID != kAudioObjectUnknown {
             if let procID = ioProcID {
                 AudioDeviceStop(aggregateID, procID)
@@ -189,7 +206,72 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
 
     // MARK: - IOProc (on `queue`)
 
-    private func handleInput(_ bufferList: UnsafePointer<AudioBufferList>) {
+    // MARK: - Format
+
+    /// Sets channel layout and the converter for `asbd`. On `queue` once started.
+    private func configure(_ asbd: AudioStreamBasicDescription) {
+        channelCount = Int(asbd.mChannelsPerFrame)
+        isInterleaved = asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
+        setInputRate(asbd.mSampleRate)
+    }
+
+    private func setInputRate(_ rate: Double) {
+        inputRate = rate
+        measuredFrames = 0
+        measuredSeconds = 0
+        if rate != outputFormat.sampleRate,
+           let mono = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false) {
+            monoInputFormat = mono
+            converter = AVAudioConverter(from: mono, to: outputFormat)
+        } else {
+            monoInputFormat = nil
+            converter = nil
+        }
+    }
+
+    /// Re-reads the tap's format and switches to it when it changed. On `queue`.
+    private func reloadFormat(reason: String) {
+        guard tapID != kAudioObjectUnknown else { return }
+        var asbd = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        var address = Self.address(kAudioTapPropertyFormat)
+        guard AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &asbd) == noErr,
+              asbd.mSampleRate > 0, asbd.mChannelsPerFrame > 0 else { return }
+        guard asbd.mSampleRate != inputRate || Int(asbd.mChannelsPerFrame) != channelCount else { return }
+        Logger.info("Meeting call audio: \(reason) — \(Int(inputRate)) → \(Int(asbd.mSampleRate)) Hz × \(asbd.mChannelsPerFrame)", subsystem: .audio)
+        configure(asbd)
+    }
+
+    /// The rate the samples really arrive at, from host time across consecutive callbacks. When it
+    /// is off from the rate being converted by more than 15% for 1.5 s, the format is re-read, and
+    /// if the tap still reports the old rate the measured one (snapped to a standard rate) is used.
+    private func checkRate(frames: Int, at time: AudioTimeStamp) {
+        guard time.mFlags.contains(.hostTimeValid), inputRate > 0 else { return }
+        let host = time.mHostTime
+        defer { lastCallbackHost = host }
+        guard lastCallbackHost != 0, host > lastCallbackHost else { return }
+        let gap = Double(AudioConvertHostTimeToNanos(host - lastCallbackHost)) / 1e9
+        guard gap < 0.25 else { return }               // a pause or a device switch, not a rate
+        measuredFrames += frames
+        measuredSeconds += gap
+        guard measuredSeconds >= 1.5 else { return }
+        let measured = Double(measuredFrames) / measuredSeconds
+        measuredFrames = 0
+        measuredSeconds = 0
+        guard abs(measured / inputRate - 1) > 0.15 else { return }
+        reloadFormat(reason: "measured \(Int(measured)) Hz")
+        guard abs(measured / inputRate - 1) > 0.15 else { return }
+        let snapped = Self.nearestStandardRate(measured)
+        Logger.warning("Meeting call audio: tap says \(Int(inputRate)) Hz but delivers \(Int(measured)) Hz — converting at \(Int(snapped))", subsystem: .audio)
+        setInputRate(snapped)
+    }
+
+    static func nearestStandardRate(_ rate: Double) -> Double {
+        [8_000, 11_025, 12_000, 16_000, 22_050, 24_000, 32_000, 44_100, 48_000, 88_200, 96_000]
+            .min { abs($0 - rate) < abs($1 - rate) }!
+    }
+
+    private func handleInput(_ bufferList: UnsafePointer<AudioBufferList>, at time: AudioTimeStamp) {
         let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: bufferList))
         var mono: [Float]
         if isInterleaved || buffers.count == 1 {
@@ -208,6 +290,9 @@ nonisolated final class SystemAudioCapture: @unchecked Sendable {
             mono = SystemAudioMixer.downmixPlanar(planes)
         }
         guard !mono.isEmpty else { return }
+        // The first callback's frames precede the window; the count belongs to the interval
+        // ending at this callback, which is what `checkRate` measures.
+        checkRate(frames: mono.count, at: time)
         if let converter, let inFormat = monoInputFormat {
             mono = resample(mono, converter: converter, inFormat: inFormat)
         }

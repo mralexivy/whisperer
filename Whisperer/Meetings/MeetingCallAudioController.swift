@@ -14,6 +14,7 @@
 //  the tap cannot be built.
 //
 
+import CoreAudio
 import Foundation
 
 @MainActor
@@ -41,6 +42,11 @@ final class MeetingCallAudioController {
     private var reportedSilence = false
     private var reportedSoundAfterSilence = false
     private let processMonitor = AudioProcessMonitor()
+    /// The output device the tap's aggregate is clocked by. Switching to AirPods mid-call (Zoom
+    /// has to be told by hand; Meet and Teams follow the system) leaves the old aggregate on a
+    /// device the call no longer plays through, so the capture is rebuilt on the new one.
+    private var outputDeviceID: AudioDeviceID?
+    private var outputListener: AudioObjectPropertyListenerBlock?
 
     var isCapturing: Bool { capture != nil }
 
@@ -77,6 +83,8 @@ final class MeetingCallAudioController {
         self.capture = capture
         self.mixer = mixer
         self.target = target
+        outputDeviceID = SystemAudioCapture.defaultOutputDeviceID()
+        watchOutputDevice()
         // Mic and call levels for automatic speaker names; the closure keeps the mixer alive
         // past `stop()` so the final naming at the end of the meeting can still read them.
         session.sourceActivity = { mixer.sourceActivity }
@@ -98,6 +106,12 @@ final class MeetingCallAudioController {
     func stop() {
         timer?.invalidate()
         timer = nil
+        if let outputListener {
+            var address = SystemAudioCapture.address(kAudioHardwarePropertyDefaultOutputDevice)
+            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main, outputListener)
+        }
+        outputListener = nil
+        outputDeviceID = nil
         recorder?.systemAudioMixer = nil
         if let capture {
             capture.stop()
@@ -120,6 +134,7 @@ final class MeetingCallAudioController {
 
     private func tick() {
         guard capture != nil else { return }
+        rebindIfOutputChanged()
         applyRoute()
         refreshProcesses()
         checkForDigitalSilence()
@@ -136,6 +151,42 @@ final class MeetingCallAudioController {
                     (newRoute.farEndMode == .add ? "mixing the call into the recording"
                                                  : "mixing the call in, microphone ducked while it talks"),
                     subsystem: .audio)
+    }
+
+    private func watchOutputDevice() {
+        var address = SystemAudioCapture.address(kAudioHardwarePropertyDefaultOutputDevice)
+        let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.rebindIfOutputChanged()
+                self.applyRoute()
+            }
+        }
+        if AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main, listener) == noErr {
+            outputListener = listener
+        }
+    }
+
+    /// Rebuilds the tap on the current output device, feeding the same mixer — the recording's
+    /// clock, levels and counters carry on; at most the switch's own fraction of a second is lost.
+    /// If the rebuild fails the old capture is kept, so a switch never ends the call audio.
+    private func rebindIfOutputChanged() {
+        guard let capture, let mixer, let target,
+              let current = SystemAudioCapture.defaultOutputDeviceID(), current != outputDeviceID else { return }
+        let replacement = SystemAudioCapture(mixer: mixer)
+        capture.stop()
+        do {
+            try replacement.start(target: target)
+        } catch {
+            Logger.warning("Meeting call audio: output changed but the tap could not move (\(error)) — keeping the old one", subsystem: .audio)
+            try? capture.start(target: target)
+            outputDeviceID = current
+            return
+        }
+        self.capture = replacement
+        outputDeviceID = current
+        let (_, name) = SystemAudioCapture.currentOutputRoute()
+        Logger.info("Meeting call audio: output switched to \(name) — call capture moved with it", subsystem: .audio)
     }
 
     /// Chrome can start a new audio helper mid-call; a per-app tap would not hear it.
