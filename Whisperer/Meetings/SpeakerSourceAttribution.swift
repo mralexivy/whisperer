@@ -62,9 +62,10 @@ nonisolated enum SpeakerSourceAttribution {
         let end: Double
     }
 
-    /// Classifies each speaker with enough speech. At most one speaker is `.local`: if two voices
-    /// look local (the diarizer split the user, or someone sits beside them) only the one with the
-    /// most speech is kept, so a guest in the room is never given the user's name.
+    /// Classifies each speaker with enough speech. Every voice heard only at this Mac's microphone
+    /// is `.local`: the diarizer splitting the user into two or three voices is common (seven
+    /// speakers in a two-person call on 2026-11-10), a guest sitting beside the user is rare, and
+    /// the user's own name must always appear. A rename still corrects the rare guest.
     static func classify(_ spans: [Span], activity: [SystemAudioMixer.SourceFrame]) -> [Int: SpeakerSource] {
         classify(evidence(spans, activity: activity), callActiveSeconds: callActiveSeconds(activity))
     }
@@ -72,15 +73,13 @@ nonisolated enum SpeakerSourceAttribution {
     static func classify(_ evidence: [Int: Evidence], callActiveSeconds: Double) -> [Int: SpeakerSource] {
         guard callActiveSeconds >= minCallActiveSeconds else { return [:] }
         var result: [Int: SpeakerSource] = [:]
-        var bestLocal: (index: Int, seconds: Double)?
         for (index, e) in evidence where e.activeSeconds >= minSpeechSeconds {
             if e.callShare >= remoteMinCallShare {
                 result[index] = .remote
-            } else if e.callShare <= localMaxCallShare, e.activeSeconds > (bestLocal?.seconds ?? 0) {
-                bestLocal = (index, e.activeSeconds)
+            } else if e.callShare <= localMaxCallShare {
+                result[index] = .local
             }
         }
-        if let bestLocal { result[bestLocal.index] = .local }
         return result
     }
 

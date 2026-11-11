@@ -200,7 +200,8 @@ struct MeetingStudioView: View {
                                   player: audioPlayer,
                                   onSpeakerRenamed: { speakerIndex, name in
                                       Task { await handleSpeakerRename(speakerIndex: speakerIndex, newName: name) }
-                                  })
+                                  },
+                                  selectedMeetingID: selectedMeetingID)
                     .frame(width: layout.right)
                     .id(selectedMeetingID)
             }

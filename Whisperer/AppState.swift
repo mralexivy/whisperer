@@ -4085,8 +4085,10 @@ class AppState: ObservableObject {
                     #endif
                 }
 
-                // Resolve input route fresh at recording time
-                let route = audioDeviceManager.resolveInputRouteForRecording()
+                // Resolve input route fresh at recording time. A meeting follows the call's
+                // microphone rather than switching a headset into its call profile on its own.
+                let route = MeetingMicrophonePolicy.route(for: audioDeviceManager.resolveInputRouteForRecording(),
+                                                          processMonitor: AudioProcessMonitor())
                 Logger.info("In-app recording with route: \(route)", subsystem: .audio)
 
                 HealthManager.shared.suppressForStartup(seconds: 3)

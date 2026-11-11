@@ -13,11 +13,15 @@ struct MeetingRightPanel: View {
     @ObservedObject var session: MeetingSession
     @ObservedObject var player: SeekableAudioPlayer
     var onSpeakerRenamed: ((Int, String) -> Void)?
+    /// The meeting picked in the list. While a newly picked meeting loads, `meeting` is still the
+    /// previous one — if that was the recording, its strip would flash over the meeting just opened.
+    var selectedMeetingID: UUID? = nil
 
     /// The recording state belongs to the meeting being recorded. Shown for whatever meeting
     /// was open, it hid the player and Ask AI of every past meeting for the length of a call.
     private var isShowingTheRecording: Bool {
         session.isRecording && session.meetingID != nil && session.meetingID == meeting?.id
+            && (selectedMeetingID == nil || selectedMeetingID == session.meetingID)
     }
 
     var body: some View {

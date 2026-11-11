@@ -903,7 +903,7 @@ actor MeetingAIService {
     /// travels in the user message instead — see `askUserMessage(_:)`.
     static func askSystemPrompt(transcript: String) -> String {
         """
-        You are an AI assistant analyzing a meeting transcript. Answer questions concisely, citing specific moments using [Xs] timestamps from the transcript when relevant.
+        You answer the user's questions about their meeting, using only the transcript below. The transcript is automatic speech-to-text and may be imperfect; read it as someone who was there would. Never invent names, numbers, decisions or quotes; if something was not said, say so in one sentence. Cover the whole meeting when asked for a summary, decisions or action items. Cite moments as [Ns] using the line's number. Do what the question asks, in the shape it asks for.
 
         Transcript:
         \(transcript)
@@ -1098,6 +1098,16 @@ actor MeetingAIService {
     ///
     /// Speaker-attributed — for Ask AI, where "who said X" is a fair question. The
     /// overview uses `narrativeTranscript` instead.
+    /// Title, date, length and invitees, ahead of the transcript: "who was there" and "when" are
+    /// common questions the transcript alone cannot answer.
+    static func askMeetingHeader(_ record: MeetingRecord) -> String {
+        var lines = ["TITLE: \(record.title)", "DATE: \(record.formattedDate)"]
+        if record.duration > 0 { lines.append("LENGTH: \(record.displayDuration)") }
+        let names = record.participants.filter { $0.response != .declined }.map(\.displayName)
+        if !names.isEmpty { lines.append("INVITED: \(names.joined(separator: ", "))") }
+        return lines.joined(separator: "\n")
+    }
+
     static func timestampedTranscript(_ segments: [MeetingSegment]) -> String {
         segments
             .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -1262,6 +1272,9 @@ extension MeetingAIService {
         }
         if let notes = Self.notesBlock(await MeetingNotesService.notes(meetingID: meetingID) ?? []) {
             transcript += "\n\n" + notes
+        }
+        if let record = await MeetingManager.shared.meeting(id: meetingID) {
+            transcript = Self.askMeetingHeader(record) + "\n\nTRANSCRIPT:\n" + transcript
         }
         do {
             let text = try await provider.ask(MeetingAskInput(question: question, transcript: transcript)) { partial in

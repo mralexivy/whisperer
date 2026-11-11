@@ -78,15 +78,15 @@ final class SpeakerSourceAttributionTests: XCTestCase {
         XCTAssertEqual(names(spans, frames, [me, keren, declined])[1], "Keren Cohen")
     }
 
-    /// Two voices at the microphone (a guest beside the user, or the user split in two): only the
-    /// one with the most speech is the user; the other is left alone.
-    func testOnlyOneLocalVoiceTakesTheUsersName() {
+    /// Two voices at the microphone — almost always the diarizer splitting the user — both take
+    /// the user's name; the user's name must always appear.
+    func testEveryLocalVoiceTakesTheUsersName() {
         let frames = activity(seconds: 70, callTalking: [50...70])
         let spans = [Span(speakerIndex: 0, start: 0, end: 30), Span(speakerIndex: 2, start: 30, end: 40),
                      Span(speakerIndex: 1, start: 50, end: 70)]
         let result = names(spans, frames, [me, keren])
         XCTAssertEqual(result[0], "Alex Ivy")
-        XCTAssertNil(result[2], "a second local voice must not be named as the user")
+        XCTAssertEqual(result[2], "Alex Ivy", "the user split in two is still the user")
         XCTAssertEqual(result[1], "Keren Cohen")
     }
 

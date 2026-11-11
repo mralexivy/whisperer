@@ -13,6 +13,8 @@ struct MeetingListPanel: View {
     @ObservedObject private var manager = MeetingManager.shared
     @State private var searchText = ""
     @State private var collapsedDays: Set<Date> = []
+    /// The meeting waiting for the user to confirm its deletion. Nothing is deleted before they do.
+    @State private var pendingDelete: MeetingListItem?
 
     private var filtered: [MeetingListItem] {
         if searchText.isEmpty { return manager.meetings }
@@ -52,6 +54,27 @@ struct MeetingListPanel: View {
             libraryList
         }
         .background(Color(hex: "0A0A18"))
+        .confirmationDialog(
+            pendingDelete.map { "Delete “\($0.title)”?" } ?? "Delete meeting?",
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingDelete
+        ) { meeting in
+            Button("Delete Meeting", role: .destructive) { delete(meeting) }
+            Button("Cancel", role: .cancel) { pendingDelete = nil }
+        } message: { _ in
+            Text("Its transcript, recording, notes and questions are deleted from this Mac. This can't be undone.")
+        }
+    }
+
+    private func delete(_ meeting: MeetingListItem) {
+        pendingDelete = nil
+        Task {
+            await MeetingManager.shared.deleteMeeting(meetingID: meeting.id)
+            if selectedMeetingID == meeting.id {
+                selectedMeetingID = manager.meetings.first?.id
+            }
+        }
     }
 
     // MARK: - Header
@@ -213,14 +236,8 @@ struct MeetingListPanel: View {
                             )
                             .onTapGesture { selectedMeetingID = meeting.id }
                             .contextMenu {
-                                Button("Delete", role: .destructive) {
-                                    Task {
-                                        await MeetingManager.shared.deleteMeeting(meetingID: meeting.id)
-                                        if selectedMeetingID == meeting.id {
-                                            selectedMeetingID = manager.meetings.first?.id
-                                        }
-                                    }
-                                }
+                                Button("Delete…", role: .destructive) { pendingDelete = meeting }
+                                    .disabled(session.isRecording && session.meetingID == meeting.id)
                             }
                         }
                     }

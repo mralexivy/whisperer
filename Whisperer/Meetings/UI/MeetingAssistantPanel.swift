@@ -311,47 +311,26 @@ struct AskAIPane: View {
                 if !isRTL { Spacer() }
             }
 
-            if let sources = msg.sources, !sources.isEmpty {
-                sourcesDisclosure(messageID: msg.id, sources: sources)
-            }
-
-            HStack(spacing: 12) {
+            // One quiet row under the answer: where it came from on the left, Copy in the
+            // right corner — the layout of the chat apps people already know.
+            HStack(spacing: 10) {
+                if let sources = msg.sources, !sources.isEmpty {
+                    sourcesToggle(messageID: msg.id, count: sources.count)
+                }
                 if let by = msg.answeredBy {
                     HStack(spacing: 4) {
                         ProviderMark(provider: AIProviderID.allCases.first { $0.displayName == by }, size: 11)
                         Text(AIProviderID.allCases.first { $0.displayName == by }?.badgeName ?? by)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 10.5, weight: .medium))
                             .foregroundColor(.white.opacity(0.4))
                     }
                 }
+                Spacer(minLength: 8)
                 CopyAnswerButton(text: text)
             }
-            .padding(.leading, isRTL ? 0 : 20)
-        }
-    }
+            .padding(.leading, 20)
 
-    @ViewBuilder
-    private func sourcesDisclosure(messageID: UUID, sources: [RAGChunk]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    expandedSourceID = (expandedSourceID == messageID) ? nil : messageID
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "paperclip")
-                        .font(.system(size: 10))
-                    Text("\(sources.count) source\(sources.count == 1 ? "" : "s")")
-                        .font(.system(size: 11, weight: .medium))
-                    Image(systemName: expandedSourceID == messageID ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 9))
-                }
-                .foregroundColor(Color(hex: "5B6CF7").opacity(0.7))
-                .padding(.leading, 20)
-            }
-            .buttonStyle(.plain)
-
-            if expandedSourceID == messageID {
+            if let sources = msg.sources, !sources.isEmpty, expandedSourceID == msg.id {
                 VStack(spacing: 5) {
                     ForEach(sources.indices, id: \.self) { i in
                         sourceChip(sources[i])
@@ -361,6 +340,30 @@ struct AskAIPane: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    private func sourcesToggle(messageID: UUID, count: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                expandedSourceID = (expandedSourceID == messageID) ? nil : messageID
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "text.quote")
+                    .font(.system(size: 9.5, weight: .semibold))
+                Text("\(count) source\(count == 1 ? "" : "s")")
+                    .font(.system(size: 10.5, weight: .medium))
+                Image(systemName: expandedSourceID == messageID ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundColor(Color(hex: "8B93F8"))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color(hex: "5B6CF7").opacity(0.12)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Show the moments this answer is based on")
     }
 
     @ViewBuilder
@@ -488,8 +491,7 @@ struct AskAIPane: View {
         question = ""
         // The meeting being recorded is asked about its live cards; its row lags behind them.
         let live = AppState.shared.activeMeetingSession
-        let askSegments = live.flatMap { $0.isRecording && $0.meetingID == meeting.id ? $0.segments : nil }
-            ?? meeting.segments
+        let liveSegments = live.flatMap { $0.isRecording && $0.meetingID == meeting.id ? $0.segments : nil }
 
         let userMsg = MeetingChatMessage(role: "user", text: q)
         messages.append(userMsg)
@@ -498,6 +500,10 @@ struct AskAIPane: View {
 
         Task {
             await MeetingChatStore.shared.append(userMsg, meetingID: meeting.id)
+            // The stored transcript as it is now — polish may have rewritten it since this pane
+            // loaded the meeting, and the question must be answered from the latest text.
+            let stored = liveSegments == nil ? await MeetingManager.shared.meeting(id: meeting.id)?.segments : nil
+            let askSegments = liveSegments ?? (stored?.isEmpty == false ? stored! : meeting.segments)
 
             // Switch phase label before LLM call
             await MainActor.run {
@@ -922,6 +928,7 @@ struct SuggestionFlow: Layout {
 private struct CopyAnswerButton: View {
     let text: String
     @State private var copied = false
+    @State private var hovering = false
 
     var body: some View {
         Button {
@@ -933,17 +940,18 @@ private struct CopyAnswerButton: View {
                 copied = false
             }
         } label: {
-            HStack(spacing: 4) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 10))
-                Text(copied ? "Copied" : "Copy")
-                    .font(.system(size: 10, weight: .medium))
-            }
-            .foregroundColor(copied ? Color(hex: "10B981") : .white.opacity(0.45))
-            .contentShape(Rectangle())
+            Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(copied ? Color(hex: "10B981") : .white.opacity(hovering ? 0.85 : 0.45))
+                .frame(width: 26, height: 26)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(hovering ? 0.08 : 0)))
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+                .animation(.easeOut(duration: 0.12), value: hovering)
         }
         .buttonStyle(.plain)
-        .help("Copy answer")
+        .onHover { hovering = $0 }
+        .help(copied ? "Copied" : "Copy answer")
+        .accessibilityLabel(copied ? "Copied" : "Copy answer")
     }
 }
 
