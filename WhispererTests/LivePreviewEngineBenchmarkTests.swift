@@ -104,7 +104,9 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
         let pinned = name.hasSuffix("-pin")
         if name.hasPrefix("apple") { return EngineSpec(name: name, family: "apple", variant: nil, pinned: pinned) }
         let size = name.split(separator: "-")[1]
-        return EngineSpec(name: name, family: "wk", variant: "openai_whisper-\(size)", pinned: pinned)
+        // "v3turbo": the large-v3 turbo build the app ships as its WhisperKit main engine.
+        let variant = size == "v3turbo" ? WhisperKitBridge.modelVariant : "openai_whisper-\(size)"
+        return EngineSpec(name: name, family: "wk", variant: variant, pinned: pinned)
     }
 
     private static var loadedKits: [String: WhisperKit] = [:]
@@ -160,11 +162,16 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
     private func accuracy(engine name: String) async throws {
         let s = spec(name)
         let sets = (env["PREVIEW_SETS"] ?? "he,ru,en").split(separator: ",").map(String.init)
-        reset("hyp/\(name).jsonl")
+        // TEST_RUNNER_PREVIEW_SUFFIX writes to hyp/<engine><suffix>.jsonl, so a rerun of one set
+        // does not erase the engine's other results.
+        let out = "hyp/\(name)\(env["PREVIEW_SUFFIX"] ?? "").jsonl"
+        reset(out)
         if let variant = s.variant { _ = try await whisperKit(variant) }   // load outside the timing
         for set in sets {
             var clips = manifest(set)
-            if set == "noisy" { clips = Array(clips.enumerated().filter { $0.offset % 3 == 0 }.map(\.element)) }  // 90 of 270
+            // 90 of 270: every third sentence, in all three noise conditions (the manifest lists
+            // each sentence's conditions together, so every third *row* was one condition only).
+            if set == "noisy" { clips = Array(clips.enumerated().filter { ($0.offset / 3) % 3 == 0 }.map(\.element)) }
             if let limit = env["PREVIEW_LIMIT"].flatMap(Int.init) { clips = Array(clips.prefix(limit)) }
             for clip in clips {
                 guard let samples = try? loadAudioSamples(from: URL(fileURLWithPath: clip.audio)) else { continue }
@@ -194,7 +201,7 @@ final class LivePreviewEngineBenchmarkTests: XCTestCase {
                 var row: [String: Any] = ["id": clip.id, "lang": set == "noisy" ? clip.lang : clip.lang, "text": text, "ok": true,
                                           "rtf": elapsed / max(seconds, 0.1), "detected": detected ?? "", "set": set]
                 if let cond = clip.extra["cond"] { row["cond"] = cond }
-                append(row, to: "hyp/\(name).jsonl")
+                append(row, to: out)
             }
             print("[PreviewBench] \(name) \(set): \(clips.count) clips")
         }

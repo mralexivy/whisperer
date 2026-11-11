@@ -1,0 +1,4 @@
+{"tag":"loaded","wall":203.37191605567932,"engine":"apple-pin","joules":47.710675305999999,"speechd_cpu_s":40.190000000000005,"gpu_s":103.19209549999999}
+{"tag":"loaded","speechd_cpu_s":40.200000000000003,"gpu_s":110.145183875,"engine":"wk-base-pin","wall":217.53096008300781,"joules":95.044742478000003}
+{"tag":"loaded","wall":235.3062629699707,"joules":130.243000698,"speechd_cpu_s":40.200000000000003,"engine":"wk-small-pin","gpu_s":118.606260792}
+{"gpu_s":122.438530417,"speechd_cpu_s":30.559999999999999,"engine":"wk-v3turbo-pin","wall":242.3955180644989,"tag":"loaded","joules":134.21383982399999}
