@@ -126,8 +126,13 @@ final class AudioRetentionService {
         // Always runs, independent of the retention setting: these files are leftovers no
         // record refers to, not part of anyone's library.
         let orphanAge = Self.orphanSessionAge
+        // A file a row still points at is not an orphan, however old: builds before 2026-11-11
+        // left meetings that never reached a normal stop with their only recording in Sessions/,
+        // and this sweep deleted it at day 7.
+        let protected = await MeetingManager.shared.referencedAudioFileNames()
+            .union(HistoryManager.shared.referencedSessionFileNames())
         let orphans = await Task.detached(priority: .background) {
-            SessionStorage.deleteOrphanedSessions(olderThan: orphanAge)
+            SessionStorage.deleteOrphanedSessions(olderThan: orphanAge, protecting: protected)
         }.value
 
         var transcriptionCount = 0

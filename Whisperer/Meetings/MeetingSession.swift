@@ -1209,17 +1209,10 @@ class MeetingSession: ObservableObject {
     /// is no recording on disk — the move is best-effort and a missing file is not fatal here.
     @discardableResult
     private func moveAudioToMeetingsDirectory(filename: String) -> URL? {
-        let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let source = appSupport.appendingPathComponent("Whisperer/Sessions/\(filename)")
-        let meetingsDir = appSupport.appendingPathComponent("Whisperer/Meetings")
-        let dest = meetingsDir.appendingPathComponent(filename)
-
-        if fm.fileExists(atPath: source.path) {
-            try? fm.createDirectory(at: meetingsDir, withIntermediateDirectories: true)
-            try? fm.moveItem(at: source, to: dest)
-        }
-        return fm.fileExists(atPath: dest.path) ? dest : nil
+        // Recorded into Recordings/Meetings/ since 2026-11-11, so normally already in place;
+        // a file an older build left in Sessions/ is brought over.
+        MeetingManager.adoptSessionAudio(fileName: filename)
+        return MeetingManager.locateAudio(storedName: filename)
     }
 
     // MARK: - Timer

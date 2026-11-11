@@ -13,6 +13,11 @@ nonisolated enum SessionStorage {
     // MARK: - URL Management
 
     /// Returns a URL for a new session audio file under ~/Library/Application Support/Whisperer/Sessions/
+    /// A new recording file in `directory`.
+    static func makeAudioURL(in directory: URL) -> URL {
+        AudioLibraryPaths.ensure(directory).appendingPathComponent("\(UUID().uuidString).\(AudioArchiveFormat.fileExtension)")
+    }
+
     static func makeSessionAudioURL() -> URL {
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -151,7 +156,8 @@ nonisolated enum SessionStorage {
     ///
     /// - Returns: how many files were removed and how many bytes that reclaimed.
     @discardableResult
-    static func deleteOrphanedSessions(olderThan age: TimeInterval = 7 * 24 * 3600) -> (count: Int, bytes: Int64) {
+    static func deleteOrphanedSessions(olderThan age: TimeInterval = 7 * 24 * 3600,
+                                       protecting protected: Set<String> = []) -> (count: Int, bytes: Int64) {
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let sessionsDir = appSupport.appendingPathComponent("Whisperer/Sessions")
@@ -162,7 +168,7 @@ nonisolated enum SessionStorage {
         let cutoff = Date().addingTimeInterval(-age)
         var count = 0
         var bytes: Int64 = 0
-        for item in items where AudioArchiveFormat.isRecognizedAudio(item) {
+        for item in items where AudioArchiveFormat.isRecognizedAudio(item) && !protected.contains(item.lastPathComponent) {
             let values = try? item.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
             let created = values?.creationDate ?? Date()
             guard created < cutoff else { continue }

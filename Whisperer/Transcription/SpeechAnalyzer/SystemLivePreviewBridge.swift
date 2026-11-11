@@ -168,6 +168,19 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// place across `agreementUpdates` consecutive updates and is not among the last
     /// `uncommittedTailWords`: the same local-agreement idea as the whisper eager stream.
     nonisolated static let agreementUpdates = 3
+    /// Speech heard without a single new word from Apple before the analyzer is restarted. The
+    /// user reported waiting "minutes" for new meeting text; a recognizer that stops returning
+    /// results must not stay silent until the next language switch happens to restart it.
+    nonisolated static let stallSpeechSeconds = 15.0
+    nonisolated static let stallReplaySamples = 16_000 * 8
+
+    // Live-text health, for the stall watchdog and the once-a-minute log line.
+    private var speechSecondsSinceText = 0.0
+    private var restartingForStall = false
+    private var healthSamples = 0
+    private var healthUpdates = 0
+    private var healthCommitted = 0
+    private var stallRestarts = 0
     nonisolated static let uncommittedTailWords = 3
     private var stableCallback: (@Sendable (String) -> Void)?
     private var committedWords: [String] = []
@@ -315,6 +328,41 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         scheduleReprobeIfDue()
     }
 
+    /// Restarts an analyzer that has gone quiet through speech, and logs the live text's health
+    /// once a minute of audio.
+    private func watchForStall(rms: Float, seconds: Double) {
+        let threshold = max(SpeechTurnDetector.minimumThreshold, (turns.noiseFloor ?? rms) * 4)
+        if rms >= threshold { speechSecondsSinceText += seconds }
+        healthSamples += Int(seconds * 16_000)
+        if healthSamples >= 16_000 * 60 {
+            Logger.info(String(format: "System dictation: last minute in %@ — %d text updates, %d words committed, %.0fs of speech since the last word, %d stall restart(s) this session",
+                               sessionLanguage?.rawValue ?? "-", healthUpdates, healthCommitted, speechSecondsSinceText, stallRestarts),
+                        subsystem: .transcription)
+            healthSamples = 0; healthUpdates = 0; healthCommitted = 0
+        }
+        guard speechSecondsSinceText >= Self.stallSpeechSeconds, input != nil, !restartingForStall,
+              let locale = sessionLocale else { return }
+        restartingForStall = true
+        let session = sessionID
+        Task { [weak self] in await self?.restartStalledAnalyzer(locale: locale, session: session) }
+    }
+
+    private func restartStalledAnalyzer(locale: Locale, session: Int) async {
+        defer { restartingForStall = false }
+        guard session == sessionID, sessionLocale == locale else { return }
+        stallRestarts += 1
+        Logger.warning(String(format: "System dictation: no new text through %.0fs of speech in %@ — restarting the analyzer, replaying the last 8 s",
+                              speechSecondsSinceText, locale.identifier(.bcp47)), subsystem: .transcription)
+        let carryFrom = max(fedSamples - Self.stallReplaySamples, fedSamples - recentAudio.count)
+        await retireAnalyzer()
+        guard session == sessionID else { return }
+        carried = composed()
+        finalized = ""
+        volatile = ""
+        speechSecondsSinceText = 0
+        await startAnalyzer(locale: locale, replayRecentFrom: carryFrom)
+    }
+
     /// Probe the first seconds of a new turn, and give a doubtful answer a second look.
     private func scheduleTurnProbeIfDue(_ samples: [Float]) {
         samplesSinceAnyProbe += samples.count
@@ -323,6 +371,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         for value in samples { sum += value * value }
         let rms = samples.isEmpty ? 0 : (sum / Float(samples.count)).squareRoot()
         let turnStarted = turns.observe(rms: rms, seconds: Double(samples.count) / 16_000)
+        watchForStall(rms: rms, seconds: Double(samples.count) / 16_000)
         guard probeStage == .decided, !probeInFlight, let probe, probeCandidates.count > 1,
               sessionLanguage != nil, recentAudio.count >= Self.turnProbeWindowSamples else { return }
         let confirming = turnChallenger != nil && samplesSinceChallenge >= Self.turnConfirmAfterSamples
@@ -431,6 +480,9 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         recentAudio = []
         fedSamples = 0
         turnStartSample = nil
+        speechSecondsSinceText = 0
+        restartingForStall = false
+        healthSamples = 0; healthUpdates = 0; healthCommitted = 0; stallRestarts = 0
         samplesSinceReprobe = 0
         reprobeInterval = Self.reprobeIntervalSamples
         turns = SpeechTurnDetector()
@@ -785,6 +837,8 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         let full = composed()
         guard !full.isEmpty, full != lastEmitted else { return }
         lastEmitted = full
+        speechSecondsSinceText = 0
+        healthUpdates += 1
         callback?(full)
         commitStableWords(full)
     }
@@ -805,6 +859,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         let finalizedCount = Self.words(Self.join(carried, finalized)).count
         let target = max(min(agreed, words.count - Self.uncommittedTailWords), finalizedCount)
         guard target > committedWords.count, target <= words.count else { return }
+        healthCommitted += target - committedWords.count
         committedWords.append(contentsOf: words[committedWords.count..<target])
         stableCallback?(committedWords.joined(separator: " "))
     }

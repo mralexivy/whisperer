@@ -84,6 +84,10 @@ class AudioRecorder: NSObject {
     /// The meeting's mute: the microphone is replaced by silence before the call's audio is mixed
     /// in, so the other side keeps being heard, transcribed and saved. Dictation mutes by dropping
     /// buffers instead (`AppState.isMicMuted`), as there is nothing else to hear.
+    /// Where the next recording's file is created; nil for `Sessions/` (dictation). A meeting
+    /// records straight into `AudioLibraryPaths.meetingRecordings`, so its file is never moved.
+    var recordingDirectory: URL?
+
     private var _isMicSilenced = false
     var isMicSilenced: Bool {
         get { isRecordingLock.lock(); defer { isRecordingLock.unlock() }; return _isMicSilenced }
@@ -621,7 +625,7 @@ class AudioRecorder: NSObject {
         // `closeSessionWriter` store to from the queue, and `recoverAudioEngine`'s Task can be
         // closing it while this runs. An unsynchronized read racing an ARC store can over-release.
         if sessionWriteQueue.sync(execute: { sessionAudioWriter == nil }) {
-            let sessionURL = SessionStorage.makeSessionAudioURL()
+            let sessionURL = recordingDirectory.map(SessionStorage.makeAudioURL(in:)) ?? SessionStorage.makeSessionAudioURL()
             sessionAudioURL = sessionURL
             openSessionWriter(at: sessionURL)
         }

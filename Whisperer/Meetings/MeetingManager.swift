@@ -540,8 +540,6 @@ class MeetingManager: ObservableObject {
     /// and pre-Opus `.caf` / `.wav` / `.m4a` files the optional compaction never rewrote. Nothing
     /// is moved or renamed to make an old row fit; the lookup comes to the file.
     nonisolated static func audioCandidates(storedName raw: String) -> [URL] {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Whisperer")
         let stored = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         var urls: [URL] = []
         if stored.hasPrefix("file://"), let url = URL(string: stored) {
@@ -550,7 +548,7 @@ class MeetingManager: ObservableObject {
             urls.append(URL(fileURLWithPath: stored))
         }
         let name = urls.first?.lastPathComponent ?? (stored as NSString).lastPathComponent
-        let folders = ["Meetings", "Sessions", "Recordings"].map { appSupport.appendingPathComponent($0) }
+        let folders = AudioLibraryPaths.meetingAudioFolders
         for folder in folders { urls.append(folder.appendingPathComponent(name)) }
         let base = (name as NSString).deletingPathExtension
         for ext in ["opus", "caf", "wav", "m4a"] where ext != (name as NSString).pathExtension.lowercased() {
@@ -566,20 +564,61 @@ class MeetingManager: ObservableObject {
         return audioCandidates(storedName: name).first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
-    /// Moves a recording from `Sessions/` into `Meetings/`, where it is kept. `Sessions/` is swept
-    /// after 7 days: a meeting whose file stayed there lost its audio for good.
+    /// Brings a meeting's recording into `Recordings/Meetings/`, where it is kept, from whichever
+    /// older folder it is in (`Sessions/` — swept after 7 days — or the old `Meetings/`). Returns
+    /// true when the file is there afterwards. Never overwrites, never deletes.
     @discardableResult
     nonisolated static func adoptSessionAudio(fileName name: String) -> Bool {
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let source = appSupport.appendingPathComponent("Whisperer/Sessions/\(name)")
-        let meetingsDir = appSupport.appendingPathComponent("Whisperer/Meetings")
-        let dest = meetingsDir.appendingPathComponent(name)
-        if fm.fileExists(atPath: source.path), !fm.fileExists(atPath: dest.path) {
-            try? fm.createDirectory(at: meetingsDir, withIntermediateDirectories: true)
-            try? fm.moveItem(at: source, to: dest)
+        let base = (name as NSString).lastPathComponent
+        let dest = AudioLibraryPaths.meetingRecordings.appendingPathComponent(base)
+        if fm.fileExists(atPath: dest.path) { return true }
+        guard let source = locateAudio(storedName: name) else { return false }
+        AudioLibraryPaths.ensure(AudioLibraryPaths.meetingRecordings)
+        do {
+            try fm.moveItem(at: source, to: dest)
+        } catch {
+            Logger.warning("Meetings: could not move \(base) into Recordings/Meetings (\(error.localizedDescription)) — it stays where it is", subsystem: .app)
+            return false
         }
         return fm.fileExists(atPath: dest.path)
+    }
+
+    /// One pass at launch: every meeting's recording that is still in an older folder moves into
+    /// `Recordings/Meetings/`, and a row holding a path instead of a name gets the name. A file is
+    /// moved only when it exists and nothing is at the destination; a row is changed only after
+    /// its file has arrived. Idempotent — a second run finds nothing to do.
+    func migrateAudioLayout() async {
+        let ctx = database.newBackgroundContext()
+        let rows: [(id: UUID, name: String)] = await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "audioFileURL != nil AND audioFileURL != '' AND isInProgress == NO")
+            return ((try? ctx.fetch(req)) ?? []).compactMap { e in e.audioFileURL.map { (e.id, $0) } }
+        }
+        let target = AudioLibraryPaths.meetingRecordings.standardizedFileURL.path
+        var moved = 0, renamed = 0, failed = 0
+        for row in rows {
+            guard let located = Self.locateAudio(storedName: row.name) else { continue }
+            let base = located.lastPathComponent
+            if located.deletingLastPathComponent().standardizedFileURL.path != target {
+                guard Self.adoptSessionAudio(fileName: located.path) else { failed += 1; continue }
+                moved += 1
+            }
+            if row.name != base, await updateAudioFileName(meetingID: row.id, fileName: base) { renamed += 1 }
+        }
+        if moved + renamed + failed > 0 {
+            Logger.info("Meetings: audio layout — \(moved) recording(s) moved into Recordings/Meetings, \(renamed) row(s) repointed, \(failed) left in place", subsystem: .app)
+        }
+    }
+
+    /// Every file name a meeting row refers to — protected from the `Sessions/` sweep.
+    func referencedAudioFileNames() async -> Set<String> {
+        let ctx = database.newBackgroundContext()
+        return await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "audioFileURL != nil")
+            return Set(((try? ctx.fetch(req)) ?? []).compactMap { $0.audioFileURL.map { ($0 as NSString).lastPathComponent } })
+        }
     }
 
     // MARK: - Orphaned recordings
@@ -609,9 +648,7 @@ class MeetingManager: ObservableObject {
 
         let referenced = Set(rows.compactMap { $0.name.flatMap { Self.locateAudio(storedName: $0)?.standardizedFileURL } })
         let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Whisperer")
-        let files = ["Sessions", "Meetings"].flatMap { folder -> [(url: URL, created: Date)] in
-            let dir = appSupport.appendingPathComponent(folder)
+        let files = [AudioLibraryPaths.meetingRecordings, AudioLibraryPaths.sessions, AudioLibraryPaths.meetingData].flatMap { dir -> [(url: URL, created: Date)] in
             return ((try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.creationDateKey])) ?? [])
                 .filter { AudioArchiveFormat.isRecognizedAudio($0) && !referenced.contains($0.standardizedFileURL) }
                 .compactMap { url in (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate).map { (url, $0) } }
@@ -634,9 +671,7 @@ class MeetingManager: ObservableObject {
             }
             used.insert(match.url)
             let name = match.url.lastPathComponent
-            if match.url.deletingLastPathComponent().lastPathComponent == "Sessions" {
-                guard Self.adoptSessionAudio(fileName: name) else { continue }
-            }
+            guard Self.adoptSessionAudio(fileName: match.url.path) else { continue }
             guard await updateAudioFileName(meetingID: meeting.id, fileName: name) else { continue }
             Logger.info("Meetings: recording reattached to \(meeting.id) (\(name))", subsystem: .app)
         }
@@ -738,14 +773,9 @@ class MeetingManager: ObservableObject {
             )
             guard let entities = try? ctx.fetch(req) else { return [] }
 
-            let meetingsDir = FileManager.default
-                .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("Whisperer/Meetings")
-
             return entities.map { entity -> (UUID, Int64) in
                 var bytes: Int64 = 0
-                if let rel = entity.audioFileURL, !rel.isEmpty {
-                    let url = meetingsDir.appendingPathComponent(rel)
+                if let rel = entity.audioFileURL, !rel.isEmpty, let url = Self.locateAudio(storedName: rel) {
                     bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize)
                         .flatMap { Int64($0) } ?? 0
                 }

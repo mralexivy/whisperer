@@ -170,6 +170,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
 
             await MeetingManager.shared.recoverCrashedSessions()
+            await MeetingManager.shared.migrateAudioLayout()
             await MeetingManager.shared.reattachOrphanedRecordings()
             await MeetingJobQueue.shared.restore()
             await AudioRetentionService.shared.runLaunchSweep()

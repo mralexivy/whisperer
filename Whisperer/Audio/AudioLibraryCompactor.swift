@@ -161,7 +161,7 @@ final class AudioLibraryCompactor: ObservableObject {
         }
 
         for item in await MeetingManager.shared.legacyAudioMeetings() {
-            let url = AudioLibraryFiles.meetingsDirectory.appendingPathComponent(item.fileName)
+            guard let url = MeetingManager.locateAudio(storedName: item.fileName) else { continue }
             result.append(Candidate(url: url) { name in
                 await MeetingManager.shared.updateAudioFileName(meetingID: item.id, fileName: name)
             })
@@ -212,7 +212,7 @@ nonisolated enum AudioLibraryFiles {
     /// show an estimate before the user commits — the real figure is reported after the run.
     static let opusBytesPerSecond: Double = 8.3 * 1024 * 1024 / 3600
 
-    private static let audioDirectories = ["Recordings", "Meetings", "Sessions"]
+    private static let audioDirectories = ["Recordings", "Recordings/Meetings", "Meetings", "Sessions"]
 
     static var appSupport: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

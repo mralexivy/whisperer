@@ -4096,6 +4096,7 @@ class AppState: ObservableObject {
                 // the recorder must keep fighting for it with backoff and device fallback
                 // instead of surrendering after three attempts in nine seconds, which is what
                 // cost the 2026-09-14 meeting.
+                audioRecorder?.recordingDirectory = AudioLibraryPaths.meetingRecordings
                 let audioURL = try await audioRecorder?.startRecording(route: route, recovery: .longForm)
                 currentAudioURL = audioURL
                 // The meeting names its recording from the first second, not at stop: a crash,
@@ -4605,6 +4606,7 @@ class AppState: ObservableObject {
                 // Dictation: `.dictation` keeps the short leash — the user is holding a key and
                 // can simply release and retry, so a long silent retry loop would be worse than
                 // a fast failure.
+                audioRecorder?.recordingDirectory = nil
                 let audioURL = try await audioRecorder?.startRecording(route: route, recovery: .dictation)
                 captureFailure = nil
                 currentAudioURL = audioURL

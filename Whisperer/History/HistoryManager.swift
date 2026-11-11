@@ -609,6 +609,17 @@ class HistoryManager: ObservableObject {
     ///
     /// Compaction calls this **after** the replacement is written and verified and **before**
     /// the original is unlinked: if the save fails, the row still names a file that exists.
+    /// File names transcription rows still point at in `Sessions/` (a dictation interrupted
+    /// before its audio moved to `Recordings/`) — protected from the `Sessions/` sweep.
+    func referencedSessionFileNames() async -> Set<String> {
+        let ctx = database.newBackgroundContext()
+        return await ctx.perform {
+            let req = TranscriptionEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "sessionAudioURL != nil")
+            return Set(((try? ctx.fetch(req)) ?? []).compactMap { $0.sessionAudioURL.map { ($0 as NSString).lastPathComponent } })
+        }
+    }
+
     func updateAudioFileName(id: UUID, fileName: String) async -> Bool {
         let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
         fetchRequest.predicate = NSPredicate(format: "id == %@", id as CVarArg)

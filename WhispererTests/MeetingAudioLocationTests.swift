@@ -59,6 +59,35 @@ final class MeetingAudioLocationTests: XCTestCase {
         XCTAssertEqual(MeetingManager.locateAudio(storedName: "\(base).opus")?.path, url.path)
     }
 
+    func testNewLayoutIsFoundFirst() throws {
+        let name = "test-\(UUID().uuidString).opus"
+        let old = try make("Meetings", name)
+        let new = try make("Recordings/Meetings", name)
+        XCTAssertEqual(MeetingManager.locateAudio(storedName: name)?.path, new.path)
+        _ = old
+    }
+
+    /// A file an older build left in Sessions/ moves into Recordings/Meetings/ once; a second
+    /// adopt is a no-op, and nothing at the destination is ever overwritten.
+    func testAdoptMovesOnceAndNeverOverwrites() throws {
+        let name = "test-\(UUID().uuidString).opus"
+        let source = try make("Sessions", name)
+        let dest = AudioLibraryPaths.meetingRecordings.appendingPathComponent(name)
+        created.append(dest)
+        XCTAssertTrue(MeetingManager.adoptSessionAudio(fileName: name))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: dest.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertTrue(MeetingManager.adoptSessionAudio(fileName: name), "idempotent")
+
+        let other = "test-\(UUID().uuidString).opus"
+        let inSessions = try make("Sessions", other)
+        let occupied = try make("Recordings/Meetings", other)
+        try Data([1, 2, 3]).write(to: occupied)
+        XCTAssertTrue(MeetingManager.adoptSessionAudio(fileName: other))
+        XCTAssertEqual(try Data(contentsOf: occupied), Data([1, 2, 3]), "the destination is kept")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: inSessions.path), "the source is not deleted")
+    }
+
     func testMissingIsNil() {
         XCTAssertNil(MeetingManager.locateAudio(storedName: "nope-\(UUID().uuidString).opus"))
         XCTAssertNil(MeetingManager.locateAudio(storedName: ""))
