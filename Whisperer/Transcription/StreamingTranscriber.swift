@@ -1199,6 +1199,12 @@ class StreamingTranscriber {
     /// See `EagerStreamEngine.Config.suppressesRepetitionLoops`. Must be set before `start()`,
     /// which is where the engine is built.
     var eagerSuppressesRepetitionLoops: Bool = true
+    /// Whether each whisper.cpp eager pass is prompted with the last 100 characters of committed
+    /// text. Off since 2026-11-11: conditioning a short window on preceding text skipped and
+    /// repeated words ("рассказали рассказал", "The The") and made every decode slower — without
+    /// it updates came every 0.77–0.83 s instead of 1.47 s on q5_0 (`LivePreviewEngineBenchmarkTests`).
+    /// The final decode at stop is not prompted from here and is unaffected.
+    var eagerUsesPreviousTextPrompt = false
 
     /// Words per second above which an eager pass is not physically possible and is discarded.
     ///
@@ -2798,7 +2804,7 @@ class StreamingTranscriber {
                     + "\(String(format: "%.2f", leading.confidence)))", subsystem: .transcription)
             }
         }
-        let prompt = completedChunkTexts.last.map { String($0.suffix(100)) }
+        let prompt = eagerUsesPreviousTextPrompt ? completedChunkTexts.last.map { String($0.suffix(100)) } : nil
         let normalizedSamples = normalizeSamples(samples)
         let base = audioBaseIndex
         let endIdx = candidateEndIndex

@@ -131,6 +131,14 @@ struct EagerStreamEngine {
         /// accounts for. See `advanceAgreement(to:)` — this is the margin that keeps a word whose
         /// offset was reported late from being cut out of every subsequent window.
         let boundaryTrailSamples: Int
+        /// Whether a pass that fails the anchor check is thrown away whole (shown nothing, confirmed
+        /// nothing). Off by default since 2026-11-11: the pass still displays, only two-pass
+        /// agreement is skipped for it. A large retraction is still held either way — showing it
+        /// would make text visibly shrink and come back. Measured on whisper.cpp q5_0 at 1x
+        /// (`LivePreviewEngineBenchmarkTests`, option-4 arms): the longest freeze while speaking
+        /// went 2.6 s → 1.6 s and revised words 14% → 6–8%, with the final transcript unchanged
+        /// within noise. A hold also discarded a finished decode, so the next pass re-ran it.
+        var holdsWholePass: Bool = false
 
         static let `default` = Config(
             boundaryWordCount: 2,
@@ -414,6 +422,7 @@ struct EagerStreamEngine {
         // ── Anchor / retraction guard ──────────────────────────────────────────────
         // A genuine correction aligns with the previous window on at least requiredAnchor
         // words. A transient decoder collapse does not — hold it for one more window.
+        var unstablePass = false
         if !previousHypothesis.isEmpty {
             let commonCount = commonPrefixCount(previousHypothesis, hyp)
             let requiredAnchor = min(config.requiredAnchor, min(previousHypothesis.count, hyp.count))
@@ -435,7 +444,11 @@ struct EagerStreamEngine {
             let anchorApplies = !(boundaryMoved && config.skipsAnchorCheckAfterBoundaryMove)
             let isUnanchored = anchorApplies && commonCount < requiredAnchor
             let isLargeRetraction = lostWordCount > config.maxRetraction
-            if isUnanchored || isLargeRetraction {
+            if isUnanchored && !isLargeRetraction && !config.holdsWholePass {
+                // Keep the pass: the hypotheses do not line up, so agreement is skipped below,
+                // but the display still updates and nothing already confirmed is touched.
+                unstablePass = true
+            } else if isUnanchored || isLargeRetraction {
                 // Hold — update previousHypothesis so the next window sees the new baseline.
                 previousHypothesis = hyp
                 let reason: EagerHoldReason = isUnanchored
@@ -448,7 +461,7 @@ struct EagerStreamEngine {
         }
 
         // ── LocalAgreement-2 confirmation ─────────────────────────────────────────
-        if languageIsLocked {
+        if languageIsLocked, !unstablePass {
             let commonCount = commonPrefixCount(previousHypothesis, hyp)
             let boundary = config.boundaryWordCount
 

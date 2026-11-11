@@ -129,10 +129,29 @@ final class EagerStreamEngineTests: XCTestCase {
         }
     }
 
+    /// `holdsWholePass` on — the behaviour before 2026-11-11 — for the tests that cover it.
+    static let holdingConfig = EagerStreamEngine.Config.default.holding()
+
     // MARK: - Anchor guard: unanchored revision is held
 
-    func testUnanchoredRevisionIsHeld() {
+    /// Today's default: a pass whose front does not line up with the last one is still shown —
+    /// the user sees the new words — but agreement is skipped, so nothing is confirmed from it.
+    func testUnanchoredRevisionIsShownButConfirmsNothing() {
         var engine = EagerStreamEngine()
+        engine.reset(at: 0)
+        _ = engine.consume(hypothesis: sentence("one two three four five"), audioBaseIndex: 0,
+                           languageIsLocked: true, lastCommittedIndex: 0, windowEndIndex: .max)
+        let outcome = engine.consume(hypothesis: sentence("alpha beta gamma delta epsilon"),
+                                     audioBaseIndex: 0, languageIsLocked: true,
+                                     lastCommittedIndex: 0, windowEndIndex: .max)
+        XCTAssertEqual(outcome.displayText, "alpha beta gamma delta epsilon")
+        XCTAssertFalse(outcome.wasHeld)
+        XCTAssertTrue(engine.confirmedWords.isEmpty, "an unstable pass must not confirm anything")
+    }
+
+    /// The previous behaviour, still available: hold the whole pass on an anchor failure.
+    func testUnanchoredRevisionIsHeld() {
+        var engine = EagerStreamEngine(config: Self.holdingConfig)
         engine.reset(at: 0)
 
         // Pass 1 — establish a 5-word hypothesis
@@ -161,7 +180,7 @@ final class EagerStreamEngineTests: XCTestCase {
     /// apart from `unanchoredSameStart` because they need opposite treatment, and because the
     /// profile could not otherwise tell which of the two is costing 40-50% of all passes.
     func testAnchorLossRightAfterBoundaryMoveIsClassifiedSeparately() {
-        var engine = EagerStreamEngine()
+        var engine = EagerStreamEngine(config: Self.holdingConfig)
         engine.reset(at: 0)
 
         // Pass 1 — confident enough for the entropy gate to confirm and move the boundary.
@@ -677,7 +696,7 @@ final class EagerStreamEngineTests: XCTestCase {
             maxRetraction: config.maxRetraction,
             skipsAnchorCheckAfterBoundaryMove: config.skipsAnchorCheckAfterBoundaryMove,
             suppressesRepetitionLoops: config.suppressesRepetitionLoops,
-            boundaryTrailSamples: trail))
+            boundaryTrailSamples: trail).holding())
         engine.reset(at: 0)
 
         // Two identical passes: LocalAgreement confirms all but the last `boundaryWordCount` (2).
@@ -805,5 +824,13 @@ final class EagerStreamEngineTests: XCTestCase {
         XCTAssertEqual(engine.consecutiveStalledPasses, 0,
                        "the caller took the escape hatch; the next window is fresh audio")
         XCTAssertEqual(engine.agreementStartIndex, 1_942_560)
+    }
+}
+
+extension EagerStreamEngine.Config {
+    func holding() -> EagerStreamEngine.Config {
+        var config = self
+        config.holdsWholePass = true
+        return config
     }
 }
