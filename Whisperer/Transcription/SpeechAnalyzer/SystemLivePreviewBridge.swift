@@ -112,6 +112,12 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// The last `reprobeWindowSamples` of audio, kept for the whole session (unlike `sessionAudio`,
     /// which stops at the replay limit).
     private var recentAudio: [Float] = []
+    /// Samples ever fed this session — `recentAudio` ends at this index, so a point in the
+    /// session can be found in it after the window has slid.
+    private var fedSamples = 0
+    /// Where the turn a turn probe is weighing began (in `fedSamples`), so a switch can hand the
+    /// new language the turn's first words: the old language wrote them as nothing or nonsense.
+    private var turnStartSample: Int?
     private var samplesSinceReprobe = 0
     private var reprobeInterval = SystemLivePreviewBridge.reprobeIntervalSamples
     private var reprobe = LanguageReprobeTracker()
@@ -124,8 +130,16 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// One turn probe at most this often, so a quick back-and-forth does not keep the GPU busy.
     nonisolated static let turnProbeMinGapSamples = 16_000 * 4
     nonisolated static let turnProbeWindowSamples = 16_000 * 3
-    /// A turn probe this sure of another language switches at once.
-    nonisolated static let turnSwitchProbability: Float = 0.95
+    /// A turn probe this sure of another language switches at once. A turn probe only asks the
+    /// others when the session's own language scored under 0.65, and no wrong locale ever led the
+    /// field this clearly in the Apple benchmark; waiting for a second look at 0.86–0.93 cost
+    /// 2 s of frozen text on every switch of the replayed meeting.
+    nonisolated static let turnSwitchProbability: Float = 0.85
+    /// A turn probe favouring another language at least this much earns a second look. At the
+    /// probe's usual 0.85 bar, a Russian meeting turning Hebrew was heard as Hebrew at 0.69 and
+    /// 0.81 and both were dropped, so the switch waited for the next turn: 36 s of Hebrew written
+    /// as Russian (replay of the user's 2026-11-10 pattern). Two agreeing looks are the guard.
+    nonisolated static let turnChallengeProbability: Float = 0.6
     nonisolated static let turnConfirmAfterSamples = 16_000 * 2
 
     private var analyzer: SpeechAnalyzer?
@@ -317,6 +331,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         samplesSinceReprobe = 0
         probeInFlight = true
         let window = Array(recentAudio.suffix(Self.turnProbeWindowSamples))
+        if !confirming { turnStartSample = fedSamples - window.count }
         let candidates = probeCandidates
         let id = sessionID
         // A second look checks the challenger first; a turn probe checks the session's language.
@@ -335,12 +350,13 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         probeInFlight = false
         guard let result, let current = sessionLanguage else { return }
         let confident = result.probability >= LanguageReprobeTracker.confidentProbability
+        Logger.debug("Language turn probe: \(result.language.rawValue) p=\(String(format: "%.2f", result.probability)) against \(current.rawValue)\(confirming ? " (second look)" : "")", subsystem: .transcription)
         if result.language == current {
             if confident { reprobeInterval = Self.nextReprobeInterval(current: reprobeInterval, confirmed: true) }
             turnChallenger = nil
             return
         }
-        guard confident else { return }
+        guard result.probability >= Self.turnChallengeProbability else { return }
         let scores = result.probabilities.sorted { $0.value > $1.value }
             .map { "\($0.key.rawValue)=\(String(format: "%.2f", $0.value))" }.joined(separator: " ")
         let sure = result.probability >= Self.turnSwitchProbability
@@ -350,7 +366,8 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
             reprobe.reset()
             reprobeInterval = Self.reprobeIntervalSamples
             UserDefaults.standard.set(result.language.rawValue, forKey: Self.lastLanguageKey)
-            await switchLanguage(to: result.language, reason: "turn probe", replay: false)
+            await switchLanguage(to: result.language, reason: "turn probe", replay: false, replayTurnFrom: turnStartSample)
+            turnStartSample = nil
             return
         }
         Logger.info("Language turn probe: \(result.language.rawValue) (\(scores)) against \(current.rawValue) — second look in 2 s", subsystem: .transcription)
@@ -412,6 +429,8 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         probeInFlight = false
         probedCheckpoints = []
         recentAudio = []
+        fedSamples = 0
+        turnStartSample = nil
         samplesSinceReprobe = 0
         reprobeInterval = Self.reprobeIntervalSamples
         turns = SpeechTurnDetector()
@@ -425,6 +444,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     private func recordRecentAudio(_ samples: [Float]) {
         recentAudio.append(contentsOf: samples)
+        fedSamples += samples.count
         // Trimmed in bulk, not per feed: a per-feed trim copied the whole 8 s window every 20 ms.
         if recentAudio.count > Self.reprobeWindowSamples * 2 {
             recentAudio.removeFirst(recentAudio.count - Self.reprobeWindowSamples)
@@ -588,7 +608,8 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// language) and the session's audio all still held, the new analyzer is fed it from the
     /// start and the wrong-language text is dropped, so the live text reads as if the right
     /// language had been chosen up front. Otherwise the text so far is carried over.
-    private func switchLanguage(to language: TranscriptionLanguage, reason: String, replay wantsReplay: Bool) async {
+    private func switchLanguage(to language: TranscriptionLanguage, reason: String, replay wantsReplay: Bool,
+                                replayTurnFrom: Int? = nil) async {
         // Claim the language before the first await: the actor is reentrant, and a probe or pin
         // arriving while this one awaits Apple must see the switch as taken, not start a second.
         guard language != sessionLanguage else { return }
@@ -610,21 +631,25 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         // Replay from the top drops the wrong-language text; carrying keeps it and replays only
         // what arrives while the old analyzer finishes, which no analyzer would hear otherwise.
         let replay = wantsReplay && !sessionAudioOverflowed
-        Logger.info("System dictation: restarting in \(locale.identifier(.bcp47)) (\(reason), \(replay ? String(format: "replaying %.1fs", Double(sessionAudio.count) / 16_000) : "carrying text"))", subsystem: .transcription)
-        let replayFrom: Int?
+        // Carrying, the new analyzer is fed from the recent window: from the turn's start when a
+        // turn probe found it, else from now. Either way it also gets whatever arrives while the
+        // old analyzer finishes — fed while there is no input, which was lost once a long meeting
+        // had outgrown `sessionAudio`.
+        let carryFrom = max(replayTurnFrom ?? fedSamples, fedSamples - recentAudio.count)
+        Logger.info("System dictation: restarting in \(locale.identifier(.bcp47)) (\(reason), \(replay ? String(format: "replaying %.1fs", Double(sessionAudio.count) / 16_000) : String(format: "carrying text, replaying the last %.1fs", Double(fedSamples - carryFrom) / 16_000)))", subsystem: .transcription)
         if replay {
-            replayFrom = 0
             await discardAnalyzer()
             resetText()
+            guard session == sessionID else { return }
+            await startAnalyzer(locale: locale, replayFrom: 0)
         } else {
-            replayFrom = sessionAudioOverflowed ? nil : sessionAudio.count
             await retireAnalyzer()
             carried = composed()
             finalized = ""
             volatile = ""
+            guard session == sessionID else { return }
+            await startAnalyzer(locale: locale, replayRecentFrom: carryFrom)
         }
-        guard session == sessionID else { return }
-        await startAnalyzer(locale: locale, replayFrom: replayFrom)
     }
 
     /// Allocate Apple's assets for the languages a session may switch to, ahead of the switch:
@@ -659,7 +684,7 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     /// Session audio from `replayFrom` on is fed before any live audio, read inside the same
     /// actor turn that publishes `input`, so nothing from `feed` can be lost or doubled.
-    private func startAnalyzer(locale: Locale, replayFrom: Int? = nil) async {
+    private func startAnalyzer(locale: Locale, replayFrom: Int? = nil, replayRecentFrom: Int? = nil) async {
         let module = DictationTranscriber(locale: locale, preset: Self.preset)
         let id = locale.identifier(.bcp47)
         do {
@@ -701,9 +726,18 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
             self.analyzerFormat = format
             self.converter = nil
             self.sessionLocale = locale
+            var replaySource: [Float] = []
+            var replayStart = 0
             if let replayFrom, replayFrom < sessionAudio.count {
-                let replay = sessionAudio
-                var offset = replayFrom
+                replaySource = sessionAudio
+                replayStart = replayFrom
+            } else if let replayRecentFrom {
+                replaySource = recentAudio
+                replayStart = max(0, recentAudio.count - (fedSamples - replayRecentFrom))
+            }
+            if replayStart < replaySource.count {
+                let replay = replaySource
+                var offset = replayStart
                 while offset < replay.count {
                     let end = min(offset + 8_000, replay.count)
                     if let buffer = makeBuffer(Array(replay[offset..<end]), format: format) {
