@@ -32,3 +32,16 @@ final class MeetingAnswerCitationTests: XCTestCase {
         XCTAssertEqual(MeetingAIService.stripCitations("Option [A] and [10 min] stay."), "Option [A] and [10 min] stay.")
     }
 }
+
+final class MeetingAskHistoryTests: XCTestCase {
+    func testFollowUpCarriesTheConversation() {
+        let q = MeetingAIService.withHistory("more detailed", [("Give me interview feedback", "- Background: …")])
+        XCTAssertTrue(q.contains("Give me interview feedback"))
+        XCTAssertTrue(q.contains("- Background: …"))
+        XCTAssertTrue(q.hasSuffix("more detailed"))
+    }
+
+    func testFirstQuestionIsSentAsIs() {
+        XCTAssertEqual(MeetingAIService.withHistory("What was decided?", []), "What was decided?")
+    }
+}

@@ -294,16 +294,19 @@ struct AskAIPane: View {
                         .font(.system(size: 12))
                         .foregroundColor(Color(hex: "5B6CF7"))
                         .padding(.top, 1)
+                        .fixedSize()
                 }
                 ChatBubbleTextView(
                     text: text, isRTL: isRTL,
                     fontSize: 13, textColor: NSColor.white.withAlphaComponent(0.85)
                 )
+                .layoutPriority(1)
                 if isRTL {
                     Text("✦")
                         .font(.system(size: 12))
                         .foregroundColor(Color(hex: "5B6CF7"))
                         .padding(.top, 1)
+                        .fixedSize()
                 }
                 if !isRTL { Spacer() }
             }
@@ -312,15 +315,18 @@ struct AskAIPane: View {
                 sourcesDisclosure(messageID: msg.id, sources: sources)
             }
 
-            if let by = msg.answeredBy {
-                HStack(spacing: 4) {
-                    ProviderMark(provider: AIProviderID.allCases.first { $0.displayName == by }, size: 11)
-                    Text(AIProviderID.allCases.first { $0.displayName == by }?.badgeName ?? by)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
+            HStack(spacing: 12) {
+                if let by = msg.answeredBy {
+                    HStack(spacing: 4) {
+                        ProviderMark(provider: AIProviderID.allCases.first { $0.displayName == by }, size: 11)
+                        Text(AIProviderID.allCases.first { $0.displayName == by }?.badgeName ?? by)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white.opacity(0.4))
+                    }
                 }
-                .padding(.leading, isRTL ? 0 : 20)
+                CopyAnswerButton(text: text)
             }
+            .padding(.leading, isRTL ? 0 : 20)
         }
     }
 
@@ -496,10 +502,20 @@ struct AskAIPane: View {
                     ?? "Generating answer…"
             }
 
+            let history: [(question: String, answer: String)] = await MainActor.run {
+                var pairs: [(question: String, answer: String)] = []
+                var pending: String?
+                for message in messages {
+                    if message.role == "user" { pending = message.text }
+                    else if let q = pending { pairs.append((q, MeetingAIService.stripCitations(message.text))); pending = nil }
+                }
+                return pairs
+            }
             let answer = await MeetingAIService.shared.ask(
                 question: q,
                 meetingID: meeting.id,
                 segments: meeting.segments,
+                history: history,
                 onPartial: { partial in
                     Task { @MainActor in streamingText = MeetingAIService.stripCitations(partial) }
                 }
@@ -898,6 +914,35 @@ struct SuggestionFlow: Layout {
 /// SwiftUI Text cannot set baseWritingDirection reliably (see CLAUDE.md), so Hebrew and
 /// Arabic answers would render with punctuation and [Xs] citations on the wrong side.
 /// Mirrors the pattern in MeetingSegmentTextView (MeetingSegmentRow.swift).
+/// Copies an Ask AI answer; says "Copied" for a moment.
+private struct CopyAnswerButton: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        Button {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            copied = true
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(1.5))
+                copied = false
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 10))
+                Text(copied ? "Copied" : "Copy")
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundColor(copied ? Color(hex: "10B981") : .white.opacity(0.45))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Copy answer")
+    }
+}
+
 private struct ChatBubbleTextView: NSViewRepresentable {
     let text: String
     let isRTL: Bool
@@ -934,6 +979,19 @@ private struct ChatBubbleTextView: NSViewRepresentable {
             .foregroundColor: textColor,
             .paragraphStyle: style,
         ])
+    }
+
+    /// The wrapped text's height at the offered width, asked on every layout. Without it SwiftUI
+    /// sized the field from its first line: a long question showed one line, and a long answer
+    /// drew past its bubble over the sources and the provider badge (2026-11-10). Same fix as
+    /// `MeetingSegmentTextView.sizeThatFits`.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: NSTextField, context: Context) -> CGSize? {
+        let width = proposal.width ?? field.bounds.width
+        guard width.isFinite, width > 0 else { return nil }
+        field.preferredMaxLayoutWidth = width
+        let height = field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: width,
+                                                            height: .greatestFiniteMagnitude)).height ?? 0
+        return CGSize(width: width, height: ceil(height))
     }
 
     final class Coordinator {

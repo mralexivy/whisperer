@@ -140,7 +140,10 @@ actor MeetingAIService {
     /// Ask a question about a meeting. Passes the whole timestamped transcript in the
     /// system prompt and sets `reuseWarmCache: true` so repeated questions about the
     /// same meeting hit the cached KV prefix instead of recomputing it.
+    /// `history`: this conversation's earlier turns, oldest first. A follow-up ("more detailed")
+    /// means nothing on its own; it reached the model without the question it followed (2026-11-10).
     func ask(question: String, meetingID: UUID, segments: [MeetingSegment],
+             history: [(question: String, answer: String)] = [],
              onPartial: (@Sendable (String) -> Void)? = nil) async -> RAGAnswer {
         guard !question.isEmpty else {
             return RAGAnswer(text: "Please enter a question.", sources: [], usedRAG: false)
@@ -148,7 +151,8 @@ actor MeetingAIService {
 
         // Connected AI first, when the user chose one; any failure falls through to local.
         if let provider = await MeetingIntelligenceRouter.activeProvider() {
-            if let answer = await askConnected(provider, question: question, meetingID: meetingID,
+            if let answer = await askConnected(provider, question: Self.withHistory(question, history),
+                                               meetingID: meetingID,
                                                segments: segments, onPartial: onPartial) {
                 return answer
             }
@@ -1231,6 +1235,18 @@ extension MeetingAIService {
     }
 
     /// Answers with a connected provider, or nil to fall back to local.
+    /// The question with the conversation so far, for a connected AI. The last few turns, each
+    /// answer trimmed, so a long chat does not crowd out the transcript.
+    nonisolated static func withHistory(_ question: String, _ history: [(question: String, answer: String)]) -> String {
+        let recent = history.suffix(4)
+        guard !recent.isEmpty else { return question }
+        let turns = recent.map { turn in
+            let answer = turn.answer.count > 6_000 ? String(turn.answer.prefix(6_000)) + " …" : turn.answer
+            return "User: \(turn.question)\nYou: \(answer)"
+        }.joined(separator: "\n\n")
+        return "Earlier in this conversation:\n\n\(turns)\n\nThe user now asks (answer this, building on the conversation above):\n\(question)"
+    }
+
     func askConnected(_ provider: any MeetingIntelligenceProvider, question: String, meetingID: UUID,
                       segments: [MeetingSegment],
                       onPartial: (@Sendable (String) -> Void)?) async -> RAGAnswer? {
