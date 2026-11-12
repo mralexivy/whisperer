@@ -1208,6 +1208,7 @@ struct HistorySettingsView: View {
                     connectedAISection
                     mcpSection
                     dataManagementSection
+                    HistoryArchiveSection(colorScheme: colorScheme)
                     dangerZoneSection
                 }
 
