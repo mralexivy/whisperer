@@ -951,6 +951,8 @@ class AppState: ObservableObject {
     /// meeting's live line is the two joined. See the `.accumulatedPartials` wiring.
     private var meetingPendingTail = ""
     private var meetingVolatileTail = ""
+    /// Words the built-in engine has settled (timed path) — the live tail starts after them.
+    private var meetingSettledWordCount = 0
     /// The ASR backend a meeting borrowed and must hand back, or nil when no meeting holds one.
     ///
     /// Meetings need a backend whose live output is the **growing accumulated transcript** that
@@ -3866,6 +3868,7 @@ class AppState: ObservableObject {
                     meetingTranscriptAccumulator.reset()
                     meetingPendingTail = ""
                     meetingVolatileTail = ""
+                    meetingSettledWordCount = 0
                     // Signal to MeetingSession that livePreviewText is now owned by the
                     // coordinator's onPendingTail callback — accumulate() must not clear it.
                     meetingSession.coordinatorOwnsTail = true
@@ -3874,12 +3877,22 @@ class AppState: ObservableObject {
                     // never change. The still-volatile words are shown after the pending tail.
                     if coordinatorFeed == .accumulatedPartials, let builtin = builtinInApp as? SystemLivePreviewBridge {
                         Task { [weak self] in
-                            await builtin.setStableTextCallback { [weak self] committed in
+                            // Settled words with their audio times — the live paragraph engine breaks
+                            // on the real pauses between them (docs/exec-plans/live-transcript-paragraphs.md).
+                            await builtin.setTimedWordsCallback { [weak self] words in
                                 Task { @MainActor [weak self] in
-                                    guard let self, let coordinator = self.meetingSpeakerCoordinator,
-                                          let accumulated = self.meetingTranscriptAccumulator.accept(committed) else { return }
-                                    self.enqueueCoordinatorText(coordinator) { await $0.onPartial(accumulated) }
+                                    guard let self, let coordinator = self.meetingSpeakerCoordinator else { return }
+                                    self.meetingSettledWordCount += words.count
+                                    self.enqueueCoordinatorText(coordinator) { await $0.onTimedWords(words) }
                                 }
+                            }
+                        }
+                    }
+                    Task {
+                        await coordinator.setWordsCallback { words, speakerIndex in
+                            Task { @MainActor in
+                                guard meetingSession.chunkGeneration == capturedGeneration else { return }
+                                meetingSession.onAttributedWords(words, speakerIndex: speakerIndex)
                             }
                         }
                     }
@@ -4039,7 +4052,7 @@ class AppState: ObservableObject {
                             return
                         }
                         if coordinatorFeed == .accumulatedPartials, self.meetingSpeakerCoordinator != nil {
-                            let committedCount = SystemLivePreviewBridge.words(self.meetingTranscriptAccumulator.published).count
+                            let committedCount = self.meetingSettledWordCount
                             self.meetingVolatileTail = SystemLivePreviewBridge.words(tail).dropFirst(committedCount).joined(separator: " ")
                             self.activeMeetingSession?.livePreviewText = SystemLivePreviewBridge.join(self.meetingPendingTail, self.meetingVolatileTail)
                             return

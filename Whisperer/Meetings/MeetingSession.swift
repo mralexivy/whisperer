@@ -723,6 +723,16 @@ class MeetingSession: ObservableObject {
         guard !trimmed.isEmpty, meetingID != nil else { return }
         AppState.shared.meetingSilenceWatcher.noteSpeech()
 
+        applySpeaker(speakerIndex)
+
+        // No idle flush here: on this path text arrival is gated by the diarizer, not by
+        // speech. See `accumulate(idleFlushTracksSpeech:)`.
+        accumulate(text: trimmed, start: startTimestamp, end: endTimestamp, idleFlushTracksSpeech: false)
+    }
+
+    /// Moves the open card to `speakerIndex`, closing it first when it is big enough to defend its
+    /// own label.
+    private func applySpeaker(_ speakerIndex: Int) {
         if speakerIndex != currentSpeakerIndex {
             // Close at the last voiced sample of the previous turn, not at this turn's start —
             // a pause between speakers belongs to neither card.
@@ -732,6 +742,7 @@ class MeetingSession: ObservableObject {
                 silenceFlushTask = nil
                 // `.commitAll`: a different person is talking now, so no remainder may carry.
                 closeSegment(endTimestamp: boundary, policy: .commitAll)
+                paragraphSegmenter.startTurn()
             }
             // Otherwise the open card is too small to defend its own label, so a change here is
             // likelier a diarizer wobble than a turn — and committing would leave a two-word
@@ -748,11 +759,45 @@ class MeetingSession: ObservableObject {
         liveSpeakerIndex = speakerIndex
         liveSpeakerName = currentSpeakerName
         hasSpeakerSignal = true
-
-        // No idle flush here: on this path text arrival is gated by the diarizer, not by
-        // speech. See `accumulate(idleFlushTracksSpeech:)`.
-        accumulate(text: trimmed, start: startTimestamp, end: endTimestamp, idleFlushTracksSpeech: false)
     }
+
+    /// Settled words with real audio times (Apple dictation), already attributed.
+    ///
+    /// Paragraphs break where `LiveParagraphSegmenter` says — on the pauses between words, with
+    /// punctuation, continuation words and length as weak evidence — instead of the arrival-gap
+    /// rule and the 30 s cap. A speaker turn is still one card; a paragraph is one segment.
+    func onAttributedWords(_ words: [TimedWord], speakerIndex: Int) {
+        guard !words.isEmpty, meetingID != nil else { return }
+        AppState.shared.meetingSilenceWatcher.noteSpeech()
+        timedParagraphs = true
+        applySpeaker(speakerIndex)
+
+        var group: [TimedWord] = []
+        func flush() {
+            guard let first = group.first, let last = group.last else { return }
+            let text = group.map(\.text).joined(separator: " ")
+            let start = first.start ?? lastChunkEndTimestamp
+            accumulate(text: text, start: start, end: last.end ?? start,
+                       idleFlushTracksSpeech: false, engineParagraphs: true)
+            group = []
+        }
+        for word in words {
+            if paragraphSegmenter.breaksBefore(word) {
+                flush()
+                silenceFlushTask?.cancel()
+                silenceFlushTask = nil
+                closeSegment(endTimestamp: lastChunkEndTimestamp, policy: .commitAll)
+            }
+            group.append(word)
+        }
+        flush()
+    }
+
+    private var paragraphSegmenter = LiveParagraphSegmenter()
+    /// True once the timed path has delivered words: the segmenter owns paragraph length, so the
+    /// 30 s cap (made for backends with no timing) steps aside for a 90 s safety net.
+    private var timedParagraphs = false
+    private var segmentCap: Double { timedParagraphs ? 90 : maxSegmentDuration }
 
     /// Shared accumulation used by both the whisper VAD-chunk path and the attributed
     /// Nemotron path. Kept in one place so the two can't drift on flush rules.
@@ -763,7 +808,8 @@ class MeetingSession: ObservableObject {
     ///   covers it, and the diarizer only finalizes a turn when it *closes* — so during an
     ///   unbroken monologue text arrives in bursts at every micro-breath. Treating those
     ///   arrival gaps as pauses chopped a 48s continuous recording into seven cards.
-    private func accumulate(text: String, start: Double, end: Double, idleFlushTracksSpeech: Bool) {
+    private func accumulate(text: String, start: Double, end: Double, idleFlushTracksSpeech: Bool,
+                            engineParagraphs: Bool = false) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         // Guard on meetingID rather than isRecording so the tail chunk delivered
         // after isRecording=false (during stop drain) still accumulates.
@@ -794,7 +840,7 @@ class MeetingSession: ObservableObject {
 
         if currentSegmentText.isEmpty {
             currentSegmentStartTimestamp = chunkStart
-        } else if chunkStart - lastChunkEndTimestamp >= silenceSplitGap {
+        } else if !engineParagraphs, chunkStart - lastChunkEndTimestamp >= silenceSplitGap {
             // The speaker paused — or the diarizer's finalized timeline has a hole, which is
             // the same thing on the audio clock. `.softBreak` makes the text arbitrate.
             closeSegment(endTimestamp: lastChunkEndTimestamp, policy: .softBreak)
@@ -822,10 +868,11 @@ class MeetingSession: ObservableObject {
             return
         }
 
-        if chunkEnd - currentSegmentStartTimestamp >= maxSegmentDuration {
+        if chunkEnd - currentSegmentStartTimestamp >= segmentCap {
             silenceFlushTask?.cancel()
             silenceFlushTask = nil
             closeSegment(endTimestamp: chunkEnd, policy: .capBreak)
+            paragraphSegmenter.startTurn()
         } else if idleFlushTracksSpeech {
             // Reset silence timer: if no new chunk arrives within 2.5s, flush the
             // current paragraph. The gap check above only fires once the *next* chunk
@@ -946,7 +993,7 @@ class MeetingSession: ObservableObject {
         // and pieces cut from unpolished text would carry timings computed from characters the
         // card no longer contains.
         let polished = polishCard(text)
-        let pieces = Self.splitByDuration(text: polished, start: start, end: end, cap: maxSegmentDuration)
+        let pieces = Self.splitByDuration(text: polished, start: start, end: end, cap: segmentCap)
         let newSegments = pieces.map {
             MeetingSegment(
                 timestamp: $0.start,

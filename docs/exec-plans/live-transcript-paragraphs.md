@@ -1,6 +1,18 @@
 # Live transcript paragraphs — design and implementation plan
 
-Status: **proposed, not implemented** (2026-11-11). Scope: the meeting live text in the floating
+Status: **steps 1–5 implemented 2026-11-12** (timed words, segmenter, coordinator + session wiring,
+live-window turn cards); workspace card grouping and the post-meeting pass (6) are not done.
+
+> **Correction (measured while implementing).** Only *final* results carry one range per word.
+> *Volatile* results carry **a single run for the whole phrase** — `rs`..`re`, where `re` moves to
+> the end of the newest word. The bridge therefore places each new volatile word backwards from
+> `re` (0.4 s per word, capped by the jump), so a jump in `re` over one word is a pause; finals
+> replace the estimate for words not yet handed out. Checked on the 101 s pauses clip with real
+> Apple dictation: 215 timed words of 216, pauses of 3 s and 6 s measured as 5.0 s and 9.2 s
+> (the clip's own edge silence adds ~2 s), breaks at both, none inside the 0.4 / 1.5 s pauses.
+> `AppleTimedWordsIntegrationTests`.
+
+Status (original): proposed (2026-11-11). Scope: the meeting live text in the floating
 window and the workspace, and the same engine for long dictation. No VAD, no new model, no audio
 processing, no LLM in the live path.
 

@@ -184,6 +184,30 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     nonisolated static let uncommittedTailWords = 3
     private var stableCallback: (@Sendable (String) -> Void)?
     private var committedWords: [String] = []
+
+    // MARK: Timed words (live paragraphs)
+
+    private var timedCallback: (@Sendable ([TimedWord]) -> Void)?
+    /// Audio-clock position (seconds since the session began) of the analyzer's first sample.
+    private var timeBase: Double = 0
+    /// The newest volatile phrase, one word per token, with the audio time each word was given.
+    private var volatileWords: [TimedWord] = []
+    /// Words of the current phrase already handed out (`volatileWords` indices below it).
+    private var phraseEmitted = 0
+    /// Audio time the recognised speech had reached before the newest volatile words appeared.
+    private var volatileEnd: Double = 0
+    /// End of the last word handed out. Nothing at or before it is emitted again, so a replay after
+    /// a language switch can re-decode earlier audio without duplicating or reordering.
+    private var timedLastEnd: Double = -1
+    /// Words from the newest volatile result that may still change. Measured revision depth on
+    /// Apple's results is one word (p99 = max = 1), so two is a margin, not a guess.
+    nonisolated static let unsettledTailWords = 2
+    /// Spoken length given to a volatile word. Apple's volatile results carry **one run for the
+    /// whole phrase** — only the range end moves, to where the newest word ends — so a word's time
+    /// is placed backwards from that end: a word followed by a long jump in the end is a word after
+    /// a long pause, which is exactly the signal the paragraph engine reads. Finals carry real
+    /// per-word ranges and replace the estimate for everything not yet handed out.
+    nonisolated static let volatileWordSeconds = 0.4
     private var recentUpdates: [[String]] = []
 
     /// Locales whose assets this process has already allocated. `assetInstallationRequest` must
@@ -206,6 +230,131 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// `endSession`, so set it for each session that wants it.
     func setStableTextCallback(_ callback: (@Sendable (String) -> Void)?) {
         stableCallback = callback
+    }
+
+    /// Receives **settled** words with their audio-clock times, in order, each exactly once. A
+    /// settled word is never revised, so a consumer can make decisions on it that are final.
+    func setTimedWordsCallback(_ callback: (@Sendable ([TimedWord]) -> Void)?) {
+        timedCallback = callback
+    }
+
+    /// What one Apple result tells the timed path. Final results carry a range per word; volatile
+    /// ones carry a single range for the phrase, so only its end is useful.
+    struct TimedSnapshot: Sendable {
+        var words: [TimedWord]
+        var rangeEnd: Double?
+    }
+
+    /// Words with no letter or digit (a stray ". " opening the next phrase) are not words.
+    nonisolated private static func isWord(_ token: String) -> Bool {
+        token.contains { $0.isLetter || $0.isNumber }
+    }
+
+    nonisolated static func timedSnapshot(from text: AttributedString, isFinal: Bool) -> TimedSnapshot {
+        var out: [TimedWord] = []
+        var rangeEnd: Double?
+        for run in text.runs {
+            let piece = clean(String(text[run.range].characters))
+            let start = run.audioTimeRange?.start.seconds
+            let end = run.audioTimeRange?.end.seconds
+            if let end { rangeEnd = max(rangeEnd ?? end, end) }
+            guard !piece.isEmpty else { continue }
+            if !piece.contains(where: { $0.isLetter || $0.isNumber }) {
+                if let previous = out.last, !piece.hasPrefix(".") || previous.text.last?.isLetter == true {
+                    out[out.count - 1] = TimedWord(text: previous.text + piece, start: previous.start, end: previous.end)
+                }
+                continue
+            }
+            let tokens = piece.split(separator: " ").map(String.init).filter(isWord)
+            for (index, token) in tokens.enumerated() {
+                guard isFinal, let start, let end, tokens.count > 1 else {
+                    out.append(TimedWord(text: token, start: isFinal ? start : nil, end: isFinal ? end : nil)); continue
+                }
+                let share = (end - start) / Double(tokens.count)
+                out.append(TimedWord(text: token, start: start + share * Double(index),
+                                     end: start + share * Double(index + 1)))
+            }
+        }
+        return TimedSnapshot(words: out, rangeEnd: rangeEnd)
+    }
+
+    private func handleTimed(_ snapshot: TimedSnapshot, isFinal: Bool, generation gen: Int) {
+        guard gen == generation, timedCallback != nil, probeStage == .decided else { return }
+        if isFinal {
+            let words = snapshot.words.map(shifted)
+            // The final restates the whole phrase with real ranges; hand out what was not yet.
+            emitTimed(Array(words.dropFirst(phraseEmitted)))
+            if let end = words.last?.end { volatileEnd = max(volatileEnd, end) }
+            volatileWords = []
+            phraseEmitted = 0
+            return
+        }
+        let tokens = snapshot.words.map(\.text)
+        var words = volatileWords
+        let known = words.count
+        for index in 0..<min(known, tokens.count) {
+            words[index] = TimedWord(text: tokens[index], start: words[index].start, end: words[index].end)
+        }
+        if tokens.count < known {
+            words.removeLast(known - max(tokens.count, phraseEmitted))
+        } else if tokens.count > known {
+            let fresh = Array(tokens[known...])
+            let rangeEnd = snapshot.rangeEnd.map { $0 + timeBase }
+            if let rangeEnd {
+                let span = max(0, rangeEnd - volatileEnd)
+                let duration = min(Self.volatileWordSeconds, span / Double(fresh.count))
+                for (offset, token) in fresh.enumerated() {
+                    let end = rangeEnd - Double(fresh.count - 1 - offset) * duration
+                    words.append(TimedWord(text: token, start: end - duration, end: end))
+                }
+                volatileEnd = max(volatileEnd, rangeEnd)
+            } else {
+                words.append(contentsOf: fresh.map { TimedWord(text: $0, start: nil, end: nil) })
+            }
+        }
+        volatileWords = words
+        let settledCount = max(phraseEmitted, words.count - Self.unsettledTailWords)
+        if settledCount > phraseEmitted {
+            emitTimed(Array(words[phraseEmitted..<settledCount]))
+            phraseEmitted = settledCount
+        }
+    }
+
+    private func shifted(_ word: TimedWord) -> TimedWord {
+        TimedWord(text: word.text, start: word.start.map { $0 + timeBase }, end: word.end.map { $0 + timeBase })
+    }
+
+    /// After a language switch the new analyzer re-decodes audio already handed out; until it
+    /// moves past it, words at or before the last handed out are dropped. Otherwise delivery is
+    /// by index and nothing is filtered — a time filter drops real words when an estimate runs
+    /// ahead of the final's true range.
+    private var timedReplayGuard = false
+
+    /// Hands out words in order.
+    private func emitTimed(_ words: [TimedWord]) {
+        var fresh = words
+        if timedReplayGuard {
+            fresh = words.filter { ($0.end ?? .infinity) > timedLastEnd + 0.005 }
+            if fresh.count == words.count { timedReplayGuard = false }
+        }
+        guard !fresh.isEmpty else { return }
+        // An estimate can run ahead of the final that follows it; never let time go backwards.
+        var previousEnd = timedLastEnd
+        fresh = fresh.map { word in
+            guard let start = word.start, let end = word.end else { return word }
+            let clamped = TimedWord(text: word.text, start: max(start, previousEnd), end: max(end, previousEnd))
+            previousEnd = clamped.end ?? previousEnd
+            return clamped
+        }
+        timedLastEnd = previousEnd
+        timedCallback?(fresh)
+    }
+
+    /// Session over: everything Apple produced is final.
+    private func flushTimedWords() {
+        guard volatileWords.count > phraseEmitted else { return }
+        emitTimed(Array(volatileWords[phraseEmitted...]))
+        phraseEmitted = volatileWords.count
     }
 
     // MARK: - Availability and assets
@@ -426,6 +575,8 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
 
     func endSession() async -> String {
         await retireAnalyzer()
+        flushTimedWords()
+        timedCallback = nil
         let text = composed()
         // The session is over: everything Apple produced is final, so commit all of it before
         // the consumer closes its stream.
@@ -479,6 +630,12 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
         probedCheckpoints = []
         recentAudio = []
         fedSamples = 0
+        timeBase = 0
+        volatileWords = []
+        phraseEmitted = 0
+        volatileEnd = 0
+        timedLastEnd = -1
+        timedReplayGuard = false
         turnStartSample = nil
         speechSecondsSinceText = 0
         restartingForStall = false
@@ -737,7 +894,12 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     /// Session audio from `replayFrom` on is fed before any live audio, read inside the same
     /// actor turn that publishes `input`, so nothing from `feed` can be lost or doubled.
     private func startAnalyzer(locale: Locale, replayFrom: Int? = nil, replayRecentFrom: Int? = nil) async {
-        let module = DictationTranscriber(locale: locale, preset: Self.preset)
+        // The preset plus per-word audio time: the live paragraph engine breaks on real pauses, and
+        // arrival time is not one (docs/exec-plans/live-transcript-paragraphs.md, measured).
+        let module = DictationTranscriber(
+            locale: locale, contentHints: [], transcriptionOptions: Self.preset.transcriptionOptions,
+            reportingOptions: Self.preset.reportingOptions,
+            attributeOptions: Self.preset.attributeOptions.union([.audioTimeRange]))
         let id = locale.identifier(.bcp47)
         do {
             if !allocatedLocales.contains(id) {
@@ -766,7 +928,9 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
             resultsTask = Task { [weak self] in
                 do {
                     for try await result in module.results {
+                        let timed = Self.timedSnapshot(from: result.text, isFinal: result.isFinal)
                         await self?.handle(text: String(result.text.characters), isFinal: result.isFinal, generation: gen)
+                        await self?.handleTimed(timed, isFinal: result.isFinal, generation: gen)
                     }
                 } catch {
                     Logger.warning("System dictation results ended: \(error.localizedDescription)", subsystem: .transcription)
@@ -798,6 +962,10 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
                     offset = end
                 }
             }
+            // The analyzer's clock starts at its first sample: the replayed audio, then live audio.
+            // Both end at `fedSamples`, so the first sample sits `replayCount` before it.
+            let replayCount = replayStart < replaySource.count ? replaySource.count - replayStart : 0
+            timeBase = Double(max(0, fedSamples - replayCount)) / 16_000
             Logger.info("System dictation: streaming in \(id)", subsystem: .transcription)
         } catch {
             Logger.error("System dictation: failed to start \(id): \(error.localizedDescription)", subsystem: .transcription)
@@ -873,6 +1041,9 @@ actor SystemLivePreviewBridge: LivePreviewEngine {
     }
 
     private func resetText() {
+        volatileWords = []
+        phraseEmitted = 0
+        timedReplayGuard = true
         carried = ""
         finalized = ""
         volatile = ""

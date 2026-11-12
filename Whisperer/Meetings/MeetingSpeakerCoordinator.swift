@@ -37,6 +37,15 @@ actor MeetingSpeakerCoordinator {
     /// Speaker the diarizer *thinks* is talking right now, from the latest finalized segment.
     private var onLiveSpeaker: (@Sendable (Int) -> Void)?
 
+    /// Settled words with real audio times, attributed: `(words, speakerIndex)`. The timed path
+    /// (Apple dictation) delivers through this instead of `onAttributed`, so the session can break
+    /// paragraphs on the pauses between words rather than on arrival gaps.
+    private var onAttributedWords: (@Sendable ([TimedWord], Int) -> Void)?
+
+    func setWordsCallback(_ callback: @escaping @Sendable ([TimedWord], Int) -> Void) {
+        onAttributedWords = callback
+    }
+
     func setCallbacks(
         onAttributed: @escaping @Sendable (String, Int, TimeInterval, TimeInterval) -> Void,
         onPendingTail: @escaping @Sendable (String) -> Void,
@@ -71,6 +80,9 @@ actor MeetingSpeakerCoordinator {
     /// Last accumulated transcript seen, split into words, and the audio position it reached.
     private var lastWords: [String] = []
     private var lastPartialAudioSeconds: TimeInterval = 0
+
+    /// Settled timed words waiting for the finalized timeline (the timed path's `pending`).
+    private var pendingTimed: [[TimedWord]] = []
 
     /// Word count already handed to `onAttributed` — the floor below which a Nemotron
     /// revision cannot rewrite history.
@@ -160,6 +172,7 @@ actor MeetingSpeakerCoordinator {
         finalizedUntil = 0
         lastEmittedSpeaker = nil
         pending = []
+        pendingTimed = []
         lastWords = []
         lastPartialAudioSeconds = 0
         emittedWordCount = 0
@@ -206,6 +219,14 @@ actor MeetingSpeakerCoordinator {
     /// ~1120 ms, not a delta, so the new text has to be diffed out.
     func onPartial(_ accumulated: String) {
         ingestAccumulated(accumulated)
+    }
+
+    /// Settled words from the timed path — never revised, so there is nothing to diff. Queued
+    /// until the diarizer's finalized timeline covers them, exactly like `pending`.
+    func onTimedWords(_ words: [TimedWord]) {
+        guard !words.isEmpty else { return }
+        pendingTimed.append(words)
+        drainPending()
     }
 
     /// Nemotron's final pass. The argument MUST be the **full accumulated transcript**,
@@ -382,13 +403,47 @@ actor MeetingSpeakerCoordinator {
             pending.removeFirst()
             emit(first)
         }
-        publishTail(pending.flatMap { $0.words }.joined(separator: " "))
+        while let first = pendingTimed.first {
+            let end = first.last?.end ?? audioSeconds
+            guard end <= finalizedUntil || end <= deadline else { break }
+            pendingTimed.removeFirst()
+            emitTimed(first)
+        }
+        publishTail((pending.flatMap { $0.words } + pendingTimed.flatMap { $0.map(\.text) }).joined(separator: " "))
+    }
+
+    /// Hands settled timed words downstream with the speaker the finalized timeline puts them on.
+    /// No apportioning across voiced runs: the words already carry their own times.
+    private func emitTimed(_ words: [TimedWord]) {
+        emittedWordCount += words.count
+        let start = words.first?.start ?? audioSeconds
+        let end = words.last?.end ?? audioSeconds
+        let raw = resolvedSpeaker(dominantSpeaker(from: start, to: end), at: start)
+        let shown = ordinal(forRaw: raw)
+        if let previous = lastEmittedSpeaker, previous != raw {
+            Logger.info("Diarization: speaker \((displayOrdinal[previous] ?? previous) + 1) → \(shown + 1) at \(String(format: "%.1f", start))s (slot \(raw))",
+                        subsystem: .model)
+        }
+        lastEmittedSpeaker = raw
+        onAttributedWords?(words, shown)
+    }
+
+    /// A voice nobody has heard yet takes over only once it has said something real.
+    private func resolvedSpeaker(_ speaker: Int, at start: TimeInterval) -> Int {
+        if displayOrdinal[speaker] == nil, let current = lastEmittedSpeaker,
+           slotCoverage[speaker, default: 0] < Self.minIntroductionSeconds {
+            return current
+        }
+        return speaker
     }
 
     /// Stop-time flush: nothing more is coming, so commit the queue with the best guess.
     private func flushRemaining() {
         while !pending.isEmpty {
             emit(pending.removeFirst())
+        }
+        while !pendingTimed.isEmpty {
+            emitTimed(pendingTimed.removeFirst())
         }
         publishTail("")
     }
