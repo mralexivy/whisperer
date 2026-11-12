@@ -27,6 +27,9 @@ git push origin main
 - Work on another branch that belongs in the release is merged into `main` first
   (`git merge --no-ff <branch>`), tested, then pushed. Branches that are other people's / other
   features (`feature/*`, worktrees) are left alone unless the user names them.
+- Before building, list what is *not* in main: `git branch -a --no-merged main` and
+  `git cherry main <branch>` (a `+` line is a patch main does not have). Report each one in the
+  release message — "left out on purpose: …" — and ask before merging work from another feature.
 - Build from the pushed commit: `SHA=$(git rev-parse HEAD)` and `git status` clean of tracked changes.
 
 ## 2. Build the artifact
@@ -44,14 +47,19 @@ gh release create "$TAG" ~/Downloads/Whisperer.zip \
   --repo mralexivy/whisperer \
   --target "$SHA" \
   --title "Whisperer $VERSION (build $BUILD) — local build $(date '+%Y-%m-%d %H:%M')" \
-  --notes-file ~/Downloads/Whisperer-release-log.txt \
+  --notes-file ~/Downloads/Whisperer-release-notes.md \
   --prerelease
 ```
 
 - **No `--draft`.** `--prerelease` because the build is unsigned and has every feature on (not the App Store build);
   drop it only if the user wants it as "Latest".
 - `--target "$SHA"` is the exact commit built, not the moving `main`.
-- The notes are the release log: commit subjects since the last local build.
+- The notes are a **real changelog**, not the `/local` one-line log: everything merged to `main` since
+  the last *published* release (or, if there is none, since the start of the version line), grouped by
+  area — new in this build, then older days, developer notes, known limits. Write it from
+  `git log --since=<date> --no-merges --format='%ad %s'` and the plan/knowledge docs; user-visible
+  wording, measured numbers where they exist. Save it to `~/Downloads/Whisperer-release-notes.md`
+  and pass `--notes-file` that file. A 15-line commit list is not a changelog.
 
 ## 4. Verify — do not report success from the command's exit code
 
