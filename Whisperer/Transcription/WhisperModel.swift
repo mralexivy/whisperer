@@ -290,16 +290,16 @@ nonisolated enum WhisperModel: String, CaseIterable, Identifiable {
         switch self {
         case .distilLargeV3:
             // Hosted at official distil-whisper repo
-            return URL(string: "https://huggingface.co/distil-whisper/distil-large-v3-ggml/resolve/main/ggml-distil-large-v3.bin")!
+            return URL(string: "https://huggingface.co/distil-whisper/distil-large-v3-ggml/resolve/\(ModelChecksums.distilLargeRevision)/ggml-distil-large-v3.bin")!
         case .distilSmallEn:
             // Hosted at dharmab's community repo
-            return URL(string: "https://huggingface.co/dharmab/distill-whisper-ggml/resolve/main/ggml-distil-small.en.bin")!
+            return URL(string: "https://huggingface.co/dharmab/distill-whisper-ggml/resolve/\(ModelChecksums.distilSmallRevision)/ggml-distil-small.en.bin")!
         case .ivritLargeTurbo:
             // Hebrew fine-tuned model from ivrit-ai
-            return URL(string: "https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/resolve/main/ggml-model.bin")!
+            return URL(string: "https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/resolve/\(ModelChecksums.ivritRevision)/ggml-model.bin")!
         default:
             // Standard models from ggerganov/whisper.cpp
-            return URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/\(rawValue)")!
+            return URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/\(ModelChecksums.whisperCppRevision)/\(rawValue)")!
         }
     }
 
