@@ -127,6 +127,7 @@ Each skill is a folder in `.claude/skills/` with a `SKILL.md` (YAML frontmatter 
 - **stuck-dump-analyze** — Root-cause analysis of `stuck-*.dump` files. Triggers on HUD stuck / "Listening…" forever.
 - **design-check** — Design system compliance. Triggers on UI code changes.
 - **app-store-check** — Guideline 2.4.5 compliance scan. Triggers on KeyListener/TextInjector/Permissions changes.
+- **github-release** — Publish a build as a real GitHub release: main merged + pushed, tag on the built commit, published (never draft) release with the zip, verified. Triggers on "release to GitHub", "upload the release", "publish the build".
 - **submission-prep** — Full App Store submission workflow with templates. Triggers on "prepare submission", "build for release".
 
 ## Knowledge System

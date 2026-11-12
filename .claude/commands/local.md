@@ -60,3 +60,10 @@ Date: YYYY-MM-DD HH:MM
 Report: "Local build ready at ~/Downloads/Whisperer.zip — version X.Y (build Z), all features enabled. Unzip and double-click to run."
 
 Then display the release log contents.
+
+### 5. Release to GitHub (only when asked)
+
+When the user asks to release / upload / publish the build, follow the **`github-release`** skill
+(`.claude/skills/github-release/SKILL.md`): main merged and pushed, a tag on the built commit, a
+**published** release (never a draft) with `Whisperer.zip` and the release log, verified. Do not
+improvise `gh release create` with `--draft`.
