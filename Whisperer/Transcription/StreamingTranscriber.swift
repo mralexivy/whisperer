@@ -612,6 +612,37 @@ class StreamingTranscriber {
     // VAD scan interval
     private let vadScanInterval: UInt64 = 500_000_000  // 500ms
 
+    // MARK: - Pause pre-decode (whisper.cpp pause-cut path)
+
+    /// A whole decode of everything after the last committed chunk, started the moment the
+    /// speaker pauses, so that a release during that pause has nothing left to decode.
+    ///
+    /// Committed chunks already end at pauses and decode whole, which is what makes this path
+    /// match one whole-recording decode word for word (`DictationProgressiveTests`). What it
+    /// left at release was the audio after the last chunk — the whole recording for anything
+    /// under the 3 s chunk minimum — decoded synchronously while the user waited, ~0.8-1.1 s.
+    /// This decodes the same audio with the same prompt and language the tail would use, so
+    /// reusing it changes the latency and never the text. It is dropped the moment speech
+    /// resumes after its end, or a chunk commits under it.
+    private struct PausePredecode {
+        let startIndex: Int
+        let endIndex: Int
+        var text: String?
+    }
+    private let pausePredecodeLock = NSLock()
+    private var _pausePredecode: PausePredecode?
+    private var pauseWatchTask: Task<Void, Never>?
+    private var pausePredecode: PausePredecode? {
+        get { pausePredecodeLock.withLock { _pausePredecode } }
+        set { pausePredecodeLock.withLock { _pausePredecode = newValue } }
+    }
+    /// Silence at the end of the ring that counts as a pause worth pre-decoding.
+    private static let pausePredecodeSilenceSeconds: Double = 0.3
+
+    /// whisper.cpp without the eager word stream: committed chunks are cut at pauses and decoded
+    /// whole, and the stop path waits for them instead of aborting them.
+    private var usesPauseCutChunks: Bool { !usesEagerStream && whisper is WhisperBridge }
+
     // MARK: - Language Routing
 
     private var modelPool: ModelPool?
@@ -1444,6 +1475,17 @@ class StreamingTranscriber {
         }
         #endif
 
+        if usesPauseCutChunks {
+            pausePredecode = nil
+            pauseWatchTask = Task.detached(priority: .userInitiated) { [weak self] in
+                while !Task.isCancelled {
+                    guard let self, !self.isStopped else { break }
+                    self.startPausePredecodeIfPaused()
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+            }
+        }
+
         // Start VAD scan task
         vadScanTask = Task.detached(priority: .userInitiated) { [weak self] in
             // Wait for initial audio to accumulate
@@ -1831,6 +1873,126 @@ class StreamingTranscriber {
         processNextChunk()
     }
 
+    /// Start a `PausePredecode` when the speaker has paused and nothing else is decoding.
+    /// Polled every 100 ms by `pauseWatchTask` — the 500 ms chunk scan noticed a pause up to
+    /// 0.8 s after it began, which on a decode that costs ~0.75 s of encoder is the whole point.
+    private func startPausePredecodeIfPaused() {
+        guard usesPauseCutChunks, !isStopped, !isPreparingToStop, !isTranscribingChunk,
+              pendingChunks.isEmpty, let vad, let bridge = whisper as? WhisperBridge else { return }
+        let start = lastTranscribedSampleIndex
+        let pauseSamples = Int(Self.pausePredecodeSilenceSeconds * sampleRate)
+        var end = 0
+        var trailing: [Float] = []
+        do {
+            try allSamplesLock.withLock {
+                end = ring.baseSampleIndex + ring.inMemoryCount
+                if start >= ring.baseSampleIndex, end - start >= Int(0.5 * sampleRate) {
+                    trailing = ring.slice(fromAbsolute: end - pauseSamples, toAbsolute: end)
+                }
+            }
+        } catch { return }
+        guard trailing.count == pauseSamples, !vad.hasSpeech(samples: trailing) else { return }
+        // Still valid: same start, and nothing said since it ends.
+        if let current = pausePredecode, current.startIndex == start {
+            guard end - current.endIndex >= Int(0.1 * sampleRate) else { return }
+            let since = (try? allSamplesLock.withLock { ring.slice(fromAbsolute: current.endIndex, toAbsolute: end) }) ?? []
+            if !vad.hasSpeech(samples: since) { return }
+        }
+        let pending = (try? allSamplesLock.withLock { ring.slice(fromAbsolute: start, toAbsolute: end) }) ?? []
+        guard pending.count == end - start, vad.hasSpeech(samples: pending) else { return }
+
+        pausePredecode = PausePredecode(startIndex: start, endIndex: end, text: nil)
+        bridge.transcribeAsync(
+            samples: normalizeSamples(pending),
+            initialPrompt: tailPrompt(),
+            language: effectiveLanguage,
+            singleSegment: false,
+            maxTokens: 0
+        ) { [weak self] text in
+            guard let self else { return }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let adopter: VADSegmenter.AudioChunk? = self.pausePredecodeLock.withLock {
+                guard self._pausePredecode?.startIndex == start, self._pausePredecode?.endIndex == end else { return nil }
+                self._pausePredecode?.text = trimmed
+                defer { self.pausePredecodeAdopter = nil }
+                return self.pausePredecodeAdopter
+            }
+            if let adopter { self.completeChunk(adopter, text: trimmed) }
+        }
+    }
+
+    /// A committed chunk waiting on the in-flight pause pre-decode for its text. Under
+    /// `pausePredecodeLock`, so the completion and the adoption cannot both miss each other.
+    private var pausePredecodeAdopter: VADSegmenter.AudioChunk?
+
+    /// Let `chunk` take its text from the pause pre-decode that covers it. The chunk is widened to
+    /// the pre-decode's end — that is the audio the text describes — so nothing after the chunk's
+    /// own end is decoded twice.
+    private func adoptPausePredecode(for chunk: VADSegmenter.AudioChunk) -> Bool {
+        let result: (chunk: VADSegmenter.AudioChunk, text: String?)? = pausePredecodeLock.withLock {
+            guard let p = _pausePredecode, p.startIndex == chunk.startSample, p.endIndex >= chunk.endSample else { return nil }
+            let widened = VADSegmenter.AudioChunk(startSample: chunk.startSample, endSample: p.endIndex,
+                                                  samples: chunk.samples, overlapPrefixSamples: chunk.overlapPrefixSamples)
+            if p.text == nil { pausePredecodeAdopter = widened }
+            return (widened, p.text)
+        }
+        guard let result else { return false }
+        lastClaimedSampleIndex = max(lastClaimedSampleIndex, result.chunk.endSample)
+        Logger.debug("Chunk adopted the pause pre-decode (\(result.text == nil ? "in flight" : "done"))", subsystem: .transcription)
+        if let text = result.text { completeChunk(result.chunk, text: text) }
+        return true
+    }
+
+    /// The prompt the release tail decodes with: Prompt Words plus the end of the last chunk.
+    private func tailPrompt() -> String? {
+        guard let prev = completedChunkTexts.last, !prev.isEmpty else { return initialPrompt }
+        var combined = ""
+        if let ip = initialPrompt, !ip.isEmpty { combined = ip + " " }
+        return combined + String(prev.suffix(100))
+    }
+
+    /// Stop-path half of the pause-cut path: let a committed chunk that is already decoding finish,
+    /// then reuse a pause pre-decode if it covers everything after it.
+    ///
+    /// Aborting the in-flight chunk — what every other path does — was wrong here twice over.
+    /// Whisper polls the abort once per encode, so a chunk past its encoder decodes to the end
+    /// anyway and lands after the tail has re-decoded the same audio: the whole recording twice
+    /// in the final text. And a chunk that does abort throws away a decode that was most of the
+    /// way done, to start the same decode again as the tail.
+    ///
+    /// - Returns: the reused text, or nil when the tail must be decoded.
+    private func finishPauseCutChunksAtStop() async -> String? {
+        pendingChunks.removeAll()   // the tail covers queued chunks
+        var waited = 0
+        while isTranscribingChunk, waited < 400 {   // 4 s: a 30 s chunk decodes in ~1.5 s
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            waited += 1
+        }
+        if waited > 0 {
+            Logger.debug("Stop waited \(waited * 10)ms for the committed chunk to finish", subsystem: .transcription)
+        }
+        guard let predecode = pausePredecode, predecode.startIndex == lastTranscribedSampleIndex else { return nil }
+        // Spoken past its end → it is missing words; the tail must decode.
+        var ringEnd = predecode.endIndex
+        var after: [Float] = []
+        do {
+            try allSamplesLock.withLock {
+                ringEnd = ring.baseSampleIndex + ring.inMemoryCount
+                after = ring.slice(fromAbsolute: predecode.endIndex, toAbsolute: ringEnd)
+            }
+        } catch { return nil }
+        if after.count >= Int(0.1 * sampleRate), vad?.hasSpeech(samples: after) ?? true { return nil }
+        waited = 0
+        while pausePredecode?.text == nil, pausePredecode?.endIndex == predecode.endIndex, waited < 300 {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+            waited += 1
+        }
+        guard let text = pausePredecode?.text, pausePredecode?.endIndex == predecode.endIndex else { return nil }
+        Logger.info("Stop reused the pause pre-decode (\(String(format: "%.1f", Double(predecode.endIndex - predecode.startIndex) / sampleRate))s, waited \(waited * 10)ms)",
+                    subsystem: .transcription)
+        return text
+    }
+
     /// Transcribe the next pending chunk
     private func processNextChunk() {
         guard !isStopped, !isTranscribingChunk, !pendingChunks.isEmpty else { return }
@@ -1862,6 +2024,11 @@ class StreamingTranscriber {
             kind: .progress,
             metadata: ["durationSec": .double(chunkDuration), "samples": .int(chunk.samples.count), "backlog": .int(pendingChunks.count)]
         )
+
+        // A pause pre-decode of this same audio is already done or running: the chunk is cut at
+        // the pause it started on, so decoding it again would only queue a duplicate decode behind
+        // it — the 1.3-1.6 s waits at release the stop path logged.
+        if usesPauseCutChunks, adoptPausePredecode(for: chunk) { return }
 
         // Context from previous chunk
         let prevText = completedChunkTexts.last
@@ -1924,136 +2091,141 @@ class StreamingTranscriber {
             singleSegment: true,
             maxTokens: 0
         ) { [weak self] text in
-            guard let self = self else { return }
-
-            // Clear live segment callback
-            if let bridge = self.whisper as? WhisperBridge {
-                bridge.onNewSegment = nil
-            }
-            #if canImport(WhisperKit)
-            if self.whisper.streamingPolicy.serializesInferenceWithPreview {
-                (self.whisper as? WhisperKitBridge)?.clearCallbacks()
-            }
-            #endif
-
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if !trimmed.isEmpty && !self.isHallucination(trimmed) {
-                // Post-chunk script stabilizer — check for language mismatches
-                self.checkScriptStability(chunkText: trimmed)
-
-                // Qwen3 names the language in a header ahead of every transcript, so each
-                // committed chunk carries a free detection. Folding it into the arbiter's tally
-                // is what lets the offline refine pass build a language timeline without loading
-                // a Whisper model purely to scan — the same role Nemotron's per-chunk guesses
-                // play on that path, which is why they share the tally.
-                if let qwen = self.whisper as? Qwen3ASRBridge {
-                    self.languageArbiter.recordNemotron(code: qwen.lastDetectedLanguage)
-                    self.pinLivePreview(fromChunkLanguage: qwen.lastDetectedLanguage, text: trimmed)
-                }
-
-                // Track whisper_full_lang_id against the locked language for script-mismatch signals.
-                // On the fixed-language path lang_id reflects the configured language, not a detect;
-                // on the .auto path it is a real mel-based detect. Both are useful for mismatch counting.
-                if let bridge = self.whisper as? WhisperBridge,
-                   let detectedCode = bridge.lastDetectedLanguage,
-                   let detectedLang = TranscriptionLanguage(rawValue: detectedCode),
-                   let langRouter = self.languageRouter,
-                   case .locked(let lockedLang) = langRouter.state {
-                    if detectedLang != lockedLang {
-                        self.chunkLangMismatchCount += 1
-                    } else {
-                        self.chunkLangMismatchCount = max(0, self.chunkLangMismatchCount - 1)
-                    }
-                }
-
-                // Deduplicate overlap with previous chunk
-                let deduped: String
-                if let prevText = self.completedChunkTexts.last, !prevText.isEmpty {
-                    deduped = VADSegmenter.deduplicateOverlap(previousText: prevText, newText: trimmed)
-                } else {
-                    deduped = trimmed
-                }
-
-                if !deduped.isEmpty, !self.createsSeamLoop(appending: deduped) {
-                    self.completedChunkTexts.append(deduped)
-                    // VAD chunk boundaries are the exact voiced span, so the gap to the
-                    // next chunk's start is genuine silence.
-                    self.onChunkCompleted?(TranscriptChunk(
-                        text: deduped,
-                        start: Double(chunk.startSample) / self.sampleRate,
-                        end: Double(chunk.endSample) / self.sampleRate,
-                        recordedDuration: self.recordedDuration
-                    ))
-                }
-            }
-
-            // Only advance past this chunk when transcription produced text.
-            // Empty results (abort or timeout) must NOT advance the index — the tail pass
-            // will re-transcribe that audio. This is safe for all backends: Whisper's
-            // abort fires with isStopped=true (tail covers it); Parakeet timeouts during
-            // recording previously advanced the index incorrectly, losing audio.
-            if !trimmed.isEmpty {
-                self.rebaseAgreementAcrossCommit(committedText: trimmed,
-                                                 newBase: chunk.endSample)
-                self.lastTranscribedSampleIndex = chunk.endSample
-                // Clear preview accumulated text — chunk covers this audio now. Not when Nemotron
-                // owns it: its partials accumulate the whole session and are never replaced.
-                #if canImport(FluidAudio)
-                if !self.livePreviewOwnsDisplay { self.previewAccumulatedText = "" }
-                #else
-                self.previewAccumulatedText = ""
-                #endif
-                self.lastPreviewedSampleIndex = chunk.endSample
-                self.latestWhisperKitPreviewText = ""
-                self.latestWhisperKitPreviewStartIndex = chunk.endSample
-                self.latestWhisperKitPreviewEndIndex = chunk.endSample
-                self.latestWhisperKitPreviewAverageLogProbability = nil
-                self.latestWhisperKitPreviewLanguageIsLocked = false
-                self.whisperKitPreviewAnchoredAtTailStart = false
-                #if canImport(WhisperKit)
-                self.resetWhisperKitStreamingState(at: chunk.endSample)
-                #endif
-            }
-            self.currentChunkLiveText = ""
-            self.provisionalChunkText = ""
-            self.isTranscribingChunk = false
-            self.isProcessing = false
-            self.stCurrentOp = nil
-            self.transcriptionProgressCounter &+= 1
-
-            // Trim ring: drop samples safely before both transcribed and previewed positions.
-            // Keep 1s overlap for chunk boundary quality on next chunk.
-            let overlapSamples = Int(1.0 * self.sampleRate)
-            let safeDrop = min(self.lastTranscribedSampleIndex, self.lastPreviewedSampleIndex) - overlapSamples
-            if safeDrop > 0 {
-                do {
-                    try self.allSamplesLock.withLock {
-                        self.ring.dropFront(toAbsoluteIndex: safeDrop)
-                    }
-                    EventRingBuffer.shared.record(
-                        component: "StreamingTranscriber",
-                        operation: "ringTrimmed",
-                        kind: .state,
-                        metadata: ["inMemory": .int(self.ring.inMemoryCount)]
-                    )
-                } catch {
-                    Logger.error("Failed to trim ring: \(error.localizedDescription)", subsystem: .transcription)
-                }
-            }
-
-            // Update live preview with completed chunks
-            self.updateLivePreview()
-
-            #if canImport(WhisperKit)
-            if self.whisper.streamingPolicy.serializesInferenceWithPreview {
-                self.releaseWhisperKitInference(.chunk)
-            }
-            #endif
-
-            // Process next pending chunk
-            self.processNextChunk()
+            self?.completeChunk(chunk, text: text)
         }
+    }
+
+    /// The result of one committed chunk decode — from `processNextChunk`, or a pause pre-decode
+    /// the chunk adopted (`adoptPausePredecode`).
+    private func completeChunk(_ chunk: VADSegmenter.AudioChunk, text: String) {
+
+        // Clear live segment callback
+        if let bridge = self.whisper as? WhisperBridge {
+            bridge.onNewSegment = nil
+        }
+        #if canImport(WhisperKit)
+        if self.whisper.streamingPolicy.serializesInferenceWithPreview {
+            (self.whisper as? WhisperKitBridge)?.clearCallbacks()
+        }
+        #endif
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if !trimmed.isEmpty && !self.isHallucination(trimmed) {
+            // Post-chunk script stabilizer — check for language mismatches
+            self.checkScriptStability(chunkText: trimmed)
+
+            // Qwen3 names the language in a header ahead of every transcript, so each
+            // committed chunk carries a free detection. Folding it into the arbiter's tally
+            // is what lets the offline refine pass build a language timeline without loading
+            // a Whisper model purely to scan — the same role Nemotron's per-chunk guesses
+            // play on that path, which is why they share the tally.
+            if let qwen = self.whisper as? Qwen3ASRBridge {
+                self.languageArbiter.recordNemotron(code: qwen.lastDetectedLanguage)
+                self.pinLivePreview(fromChunkLanguage: qwen.lastDetectedLanguage, text: trimmed)
+            }
+
+            // Track whisper_full_lang_id against the locked language for script-mismatch signals.
+            // On the fixed-language path lang_id reflects the configured language, not a detect;
+            // on the .auto path it is a real mel-based detect. Both are useful for mismatch counting.
+            if let bridge = self.whisper as? WhisperBridge,
+               let detectedCode = bridge.lastDetectedLanguage,
+               let detectedLang = TranscriptionLanguage(rawValue: detectedCode),
+               let langRouter = self.languageRouter,
+               case .locked(let lockedLang) = langRouter.state {
+                if detectedLang != lockedLang {
+                    self.chunkLangMismatchCount += 1
+                } else {
+                    self.chunkLangMismatchCount = max(0, self.chunkLangMismatchCount - 1)
+                }
+            }
+
+            // Deduplicate overlap with previous chunk
+            let deduped: String
+            if let prevText = self.completedChunkTexts.last, !prevText.isEmpty {
+                deduped = VADSegmenter.deduplicateOverlap(previousText: prevText, newText: trimmed)
+            } else {
+                deduped = trimmed
+            }
+
+            if !deduped.isEmpty, !self.createsSeamLoop(appending: deduped) {
+                self.completedChunkTexts.append(deduped)
+                // VAD chunk boundaries are the exact voiced span, so the gap to the
+                // next chunk's start is genuine silence.
+                self.onChunkCompleted?(TranscriptChunk(
+                    text: deduped,
+                    start: Double(chunk.startSample) / self.sampleRate,
+                    end: Double(chunk.endSample) / self.sampleRate,
+                    recordedDuration: self.recordedDuration
+                ))
+            }
+        }
+
+        // Only advance past this chunk when transcription produced text.
+        // Empty results (abort or timeout) must NOT advance the index — the tail pass
+        // will re-transcribe that audio. This is safe for all backends: Whisper's
+        // abort fires with isStopped=true (tail covers it); Parakeet timeouts during
+        // recording previously advanced the index incorrectly, losing audio.
+        if !trimmed.isEmpty {
+            self.rebaseAgreementAcrossCommit(committedText: trimmed,
+                                             newBase: chunk.endSample)
+            self.lastTranscribedSampleIndex = chunk.endSample
+            // Clear preview accumulated text — chunk covers this audio now. Not when Nemotron
+            // owns it: its partials accumulate the whole session and are never replaced.
+            #if canImport(FluidAudio)
+            if !self.livePreviewOwnsDisplay { self.previewAccumulatedText = "" }
+            #else
+            self.previewAccumulatedText = ""
+            #endif
+            self.lastPreviewedSampleIndex = chunk.endSample
+            self.latestWhisperKitPreviewText = ""
+            self.latestWhisperKitPreviewStartIndex = chunk.endSample
+            self.latestWhisperKitPreviewEndIndex = chunk.endSample
+            self.latestWhisperKitPreviewAverageLogProbability = nil
+            self.latestWhisperKitPreviewLanguageIsLocked = false
+            self.whisperKitPreviewAnchoredAtTailStart = false
+            #if canImport(WhisperKit)
+            self.resetWhisperKitStreamingState(at: chunk.endSample)
+            #endif
+        }
+        self.currentChunkLiveText = ""
+        self.provisionalChunkText = ""
+        self.isTranscribingChunk = false
+        self.isProcessing = false
+        self.stCurrentOp = nil
+        self.transcriptionProgressCounter &+= 1
+
+        // Trim ring: drop samples safely before both transcribed and previewed positions.
+        // Keep 1s overlap for chunk boundary quality on next chunk.
+        let overlapSamples = Int(1.0 * self.sampleRate)
+        let safeDrop = min(self.lastTranscribedSampleIndex, self.lastPreviewedSampleIndex) - overlapSamples
+        if safeDrop > 0 {
+            do {
+                try self.allSamplesLock.withLock {
+                    self.ring.dropFront(toAbsoluteIndex: safeDrop)
+                }
+                EventRingBuffer.shared.record(
+                    component: "StreamingTranscriber",
+                    operation: "ringTrimmed",
+                    kind: .state,
+                    metadata: ["inMemory": .int(self.ring.inMemoryCount)]
+                )
+            } catch {
+                Logger.error("Failed to trim ring: \(error.localizedDescription)", subsystem: .transcription)
+            }
+        }
+
+        // Update live preview with completed chunks
+        self.updateLivePreview()
+
+        #if canImport(WhisperKit)
+        if self.whisper.streamingPolicy.serializesInferenceWithPreview {
+            self.releaseWhisperKitInference(.chunk)
+        }
+        #endif
+
+        // Process next pending chunk
+        self.processNextChunk()
     }
 
     /// Publish display text from the engine that produces the final transcript.
@@ -3385,6 +3557,8 @@ class StreamingTranscriber {
         isStopped = true
         vadScanTask?.cancel()
         vadScanTask = nil
+        pauseWatchTask?.cancel()
+        pauseWatchTask = nil
         previewTask?.cancel()
         previewTask = nil
 
@@ -3499,8 +3673,13 @@ class StreamingTranscriber {
             )
         }
 
-        // Energy check as secondary guard (when VAD is nil)
-        if !hasEnergy(tailChunk.samples) {
+        // Energy check as secondary guard — only when there is no VAD, as the comment always said.
+        // With a VAD, `finalizeTail` has already found speech here, and a fixed RMS floor
+        // contradicts it on quiet speech: FLEURS Hebrew read at RMS < 0.003 had 8.5s of speech per
+        // the VAD and this returned nothing — the whole dictation lost at release
+        // (`DictationProgressiveTests`). Whisper decodes the normalized samples, so a quiet voice is
+        // not too quiet for it.
+        if vad == nil, !hasEnergy(tailChunk.samples) {
             Logger.debug("Tail audio has no energy, skipping", subsystem: .transcription)
             return
         }
@@ -3666,6 +3845,8 @@ class StreamingTranscriber {
         isStopped = true
         vadScanTask?.cancel()
         vadScanTask = nil
+        pauseWatchTask?.cancel()
+        pauseWatchTask = nil
         previewTask?.cancel()
         previewTask = nil
         pendingChunks.removeAll()
@@ -3708,6 +3889,8 @@ class StreamingTranscriber {
         guard let wkBridge = whisper as? WhisperKitBridge else { return }
         vadScanTask?.cancel()
         vadScanTask = nil
+        pauseWatchTask?.cancel()
+        pauseWatchTask = nil
         previewTask?.cancel()
         previewTask = nil
 
@@ -3743,6 +3926,8 @@ class StreamingTranscriber {
         stopGateLock.withLock { _isPreparingToStop = true }
         vadScanTask?.cancel()
         vadScanTask = nil
+        pauseWatchTask?.cancel()
+        pauseWatchTask = nil
         previewTask?.cancel()
         previewTask = nil
 
@@ -3871,6 +4056,14 @@ class StreamingTranscriber {
             // eager pass is still running, so drain that first rather than queueing the tail
             // behind a decode whose result is now worthless.
             await drainInFlightEagerPass()
+        }
+
+        if usesPauseCutChunks {
+            if let text = await finishPauseCutChunksAtStop() {
+                isStopped = true
+                appendTailTranscription(text)
+                return finalizeCompletedChunks(skipCorrections: skipCorrections)
+            }
         }
 
         isStopped = true
@@ -4240,7 +4433,8 @@ class StreamingTranscriber {
         } catch {
             return nil
         }
-        guard !samples.isEmpty, ringEnd > reconciliationStart, hasEnergy(samples) else { return nil }
+        guard !samples.isEmpty, ringEnd > reconciliationStart,
+              vad.map({ $0.hasSpeech(samples: samples) }) ?? hasEnergy(samples) else { return nil }
 
         let fullTailDuration = Double(ringEnd - lastTranscribedSampleIndex) / sampleRate
         let duration = Double(samples.count) / sampleRate
@@ -4447,7 +4641,8 @@ class StreamingTranscriber {
             Logger.debug("No tail audio to transcribe", subsystem: .transcription)
             return nil
         }
-        guard hasEnergy(tailChunk.samples) else {
+        // As in `transcribeTail`: the VAD already said speech; an RMS floor only stands in for it.
+        guard vad != nil || hasEnergy(tailChunk.samples) else {
             Logger.debug("Tail audio has no energy, skipping", subsystem: .transcription)
             return nil
         }
@@ -4590,7 +4785,7 @@ class StreamingTranscriber {
             return clearAndReturn("")
         }
 
-        if !hasEnergy(allSamples) {
+        if !(vad.map({ $0.hasSpeech(samples: allSamples) }) ?? hasEnergy(allSamples)) {
             return clearAndReturn("")
         }
 

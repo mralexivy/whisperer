@@ -94,11 +94,14 @@ nonisolated class VADSegmenter {
             // No speech found — check if there's enough accumulated audio to emit
             let audioSinceLastTranscribed = Double(totalSamples - lastTranscribedIndex) / sampleRate
 
-            // Emit only if accumulated audio has actual energy (not pure silence).
+            // Emit only if the accumulated audio holds speech (not pure silence).
             // Pure silence produces Whisper hallucinations ("Thank you for watching", etc.)
+            // Asked of the VAD, not an RMS floor: quiet speech (FLEURS Hebrew, RMS < 0.003) never
+            // cleared the floor, so no chunk was ever emitted and the whole recording rode on the
+            // tail at release.
             if audioSinceLastTranscribed > minChunkDuration {
                 let pendingSamples = Array(allSamples[lastTranscribedIndex..<totalSamples])
-                if hasEnergy(pendingSamples) {
+                if vad.hasSpeech(samples: pendingSamples) {
                     let chunk = makeChunk(
                         allSamples: allSamples,
                         startSample: lastTranscribedIndex,

@@ -2241,6 +2241,20 @@ class AppState: ObservableObject {
     /// Requires an installed language. Handing over the display also switches off the main
     /// engine's own preview, so a language Apple has no assets for must keep that preview rather
     /// than show a blank HUD.
+    /// `false` (no eager word stream) for a whisper.cpp dictation whose live text another engine
+    /// draws; nil keeps the transcriber's default.
+    ///
+    /// The eager stream's only output that reaches the user, while Apple dictation draws the live
+    /// text, is the final transcript — and as a final transcript it is poor: against one whole
+    /// decode by the same model it dropped 9-14 % of the words and matched on 0 of 79 recordings
+    /// (FLEURS en WER 24.9 vs 3.2). The pause-cut path decodes each pause-to-pause chunk whole
+    /// and, with the stop-path fixes, returns the whole-decode text (`DictationProgressiveTests`).
+    /// Meetings keep their own path: the live engine writes them and a refine pass re-decodes.
+    func pauseCutDictation(previewOnly: Bool) -> Bool? {
+        guard previewOnly, selectedBackendType == .whisperCpp, !isMeetingMode else { return nil }
+        return false
+    }
+
     func builtinEngineDrivesLiveText(for backend: BackendType) -> Bool {
         guard backend == .whisperCpp || backend == .qwen3asr else { return false }
         return builtinEngineCanStreamSession
@@ -3797,7 +3811,7 @@ class AppState: ObservableObject {
                 // .auto, whisper re-detects on every eager pass, and languageIsLocked is false for the
                 // full 30 s unroutedCommitGrace — blocking all LocalAgreement-2 confirmation.
                 let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: anyNemotronInApp, nemotronPreviewOnly: nemotronPreviewOnlyInApp)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: anyNemotronInApp, nemotronPreviewOnly: nemotronPreviewOnlyInApp, eagerStreamOverride: pauseCutDictation(previewOnly: nemotronPreviewOnlyInApp))
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
@@ -4512,7 +4526,7 @@ class AppState: ObservableObject {
                 }
                 // See the matching comment at the in-app transcriber creation above.
                 let startLanguage = routingConfig.singleLanguageStartLanguage ?? selectedLanguage
-                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron, nemotronPreviewOnly: nemotronPreviewOnlyDictation)
+                streamingTranscriber = StreamingTranscriber(backend: bridge, vad: sileroVAD, language: startLanguage, initialPrompt: promptWordsString, fillerWordRemovalEnabled: fillerWordRemovalEnabled, modelPool: modelPool, languageRouter: routingConfig.isRoutingEnabled ? LanguageRouter(allowed: routingConfig.allowedLanguages, primary: routingConfig.primaryLanguage) : nil, modelRouter: routingConfig.isRoutingEnabled ? ModelRouter(languageModelMap: buildLanguageModelMap(), fallbackProfile: buildFallbackProfile()) : nil, previewBridge: livePreviewBridge(for: bridge), nemotronBridge: nemotron, nemotronPreviewOnly: nemotronPreviewOnlyDictation, eagerStreamOverride: pauseCutDictation(previewOnly: nemotronPreviewOnlyDictation))
 
                 // Wire language detection → UI update
                 streamingTranscriber?.onLanguageDetected = { [weak self] lang in
