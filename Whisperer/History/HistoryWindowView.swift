@@ -1207,6 +1207,7 @@ struct HistorySettingsView: View {
                     languageRoutingSection
                     connectedAISection
                     mcpSection
+                    StorageUsageSection(colorScheme: colorScheme)
                     dataManagementSection
                     HistoryArchiveSection(colorScheme: colorScheme)
                     dangerZoneSection
