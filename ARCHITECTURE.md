@@ -894,7 +894,7 @@ Infrastructure (Logger, SafeLock, CrashHandler)
 | Audio recordings | File system (`~/Library/Application Support/Whisperer/Recordings/`) | Large binary data |
 | Whisper models | File system (`~/Library/Application Support/Whisperer/`) | ~500MB-1.5GB files |
 | Logs | File system (`~/Library/Logs/Whisperer/`) | Rotation, crash recovery |
-| History export / import | Apple Archive `.aar` (`HistoryArchive`) | Move history between Macs: manifest + one JSON line per Core Data row (written generically from the model) + audio. LZFSE, streaming, sandbox-safe, no dependency. Import merges by row `id`, never overwrites. Settings → Move History |
+| History export / import | Apple Archive `.aar` (`HistoryArchive`) | Move the whole history between Macs. Categories: dictations, meetings (+ Ask-AI threads), dictionary, command chats, records (best streak, typing speed). Rows are written generically from the Core Data model; import merges by row `id` (dictionary by what the entry does) and never overwrites. Scope: categories, time range, audio on/off. Large libraries: planned into self-contained parts under a size cap, one part staged / unpacked at a time, manifest readable without unpacking, disk-space checks up front, cancellable. Settings → Move History |
 
 ## Audio Storage — one format, and something that deletes
 
