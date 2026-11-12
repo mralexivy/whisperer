@@ -172,6 +172,8 @@ enum HistoryTestLoader {
                 segments: segments,
                 language: language,
                 audioURL: resolvedAudioURL(filename: column(stmt, 5), dir: meetingsDir)
+                    // Current builds keep meeting audio under Recordings/Meetings.
+                    ?? resolvedAudioURL(filename: column(stmt, 5), dir: recordingsDir.appendingPathComponent("Meetings"))
             ))
         }
 

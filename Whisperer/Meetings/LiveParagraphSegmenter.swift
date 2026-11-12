@@ -75,14 +75,20 @@ nonisolated struct LiveParagraphSegmenter: Sendable {
 
     // MARK: - Score
 
+    /// Punctuation is weak evidence live (Apple's commas and periods flicker and Hebrew has none)
+    /// and strong evidence in a finished transcript, where Whisper punctuated the whole thing.
+    static let liveSentenceWeight = 1.5
+    static let finalSentenceWeight = 2.5
+
     static func shouldBreak(after previous: TimedWord, before next: TimedWord,
-                            paragraphWords length: Int, paragraphSeconds: Double) -> Bool {
+                            paragraphWords length: Int, paragraphSeconds: Double,
+                            sentenceWeight: Double = liveSentenceWeight) -> Bool {
         var pause: Double?
         if let end = previous.end, let start = next.start { pause = max(0, start - end) }
 
         if let pause {
             var score = pause < 0.7 ? 0.0 : pause < 1.5 ? 1 : pause < 3 ? 2.5 : pause < 5 ? 4 : 6
-            if endsSentence(previous.text) { score += 1.5 }
+            if endsSentence(previous.text) { score += sentenceWeight }
             if isContinuation(previous.text) { score -= 2 }
             score += length < 25 ? -3 : length < 60 ? 0 : length < 90 ? 1 : 2
             return score >= breakScore && length >= minimumWords

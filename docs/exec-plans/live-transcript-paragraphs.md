@@ -1,7 +1,11 @@
 # Live transcript paragraphs — design and implementation plan
 
-Status: **steps 1–5 implemented 2026-11-12** (timed words, segmenter, coordinator + session wiring,
-live-window turn cards); workspace card grouping and the post-meeting pass (6) are not done.
+Status: **implemented 2026-11-12** (timed words, segmenter, coordinator + session wiring, post-meeting
+`FinalParagraphPass` in `MeetingJobQueue` before the editor pass). The live window and the Workspace
+draw the same `MeetingSession.segments` with the same per-segment cards and one speaker header per turn,
+so there is nothing to keep aligned: the paragraphs are decided once, upstream. Real-data checks:
+`FinalParagraphPassTests` (the 7 saved meetings: 25 → 10 cards, 15 → 0 fragments, every word kept,
+idempotent) and `MeetingLiveRealAudioTests` (Apple dictation at 1x on the same meetings' audio).
 
 > **Correction (measured while implementing).** Only *final* results carry one range per word.
 > *Volatile* results carry **a single run for the whole phrase** — `rs`..`re`, where `re` moves to

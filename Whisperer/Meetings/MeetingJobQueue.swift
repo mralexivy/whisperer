@@ -322,7 +322,9 @@ final class MeetingJobQueue: ObservableObject {
                     let refined = await MeetingTranscriptRefiner.shared.run(
                         meetingID: meetingID, segments: segments, redoAll: true)
                     if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }
-                    segments = await runEditorPass(segments: refined, meetingID: meetingID)
+                    // Paragraphs first: the editor then sees the cards it will keep.
+                    segments = await runParagraphPass(segments: refined, meetingID: meetingID)
+                    segments = await runEditorPass(segments: segments, meetingID: meetingID)
                     editorPassRan = true
                 }
             } else {
@@ -331,6 +333,7 @@ final class MeetingJobQueue: ObservableObject {
                 Logger.info("MeetingJobQueue: fine-tuning skipped — \(skipReason)", subsystem: .transcription)
             }
             if !editorPassRan, !segments.isEmpty, !Task.isCancelled {
+                segments = await runParagraphPass(segments: segments, meetingID: meetingID)
                 segments = await runEditorPass(segments: segments, meetingID: meetingID)
             }
         }
@@ -406,6 +409,22 @@ final class MeetingJobQueue: ObservableObject {
 
         runningTask = nil
         startNext()
+    }
+
+    /// Re-cuts the finished transcript into paragraphs with the live scorer on final punctuation
+    /// (`FinalParagraphPass`), then stores and broadcasts the result the way the refiner does.
+    /// Every word stays; only card boundaries move.
+    private func runParagraphPass(segments: [MeetingSegment], meetingID: UUID) async -> [MeetingSegment] {
+        let repaginated = FinalParagraphPass.apply(segments)
+        guard repaginated != segments else { return segments }
+        await MeetingManager.shared.updateSegments(meetingID: meetingID, segments: repaginated)
+        NotificationCenter.default.post(
+            name: .meetingSegmentsDidRefine,
+            object: meetingID,
+            userInfo: ["segments": repaginated]
+        )
+        Logger.info("MeetingJobQueue paragraphs: \(segments.count) → \(repaginated.count) card(s)", subsystem: .transcription)
+        return repaginated
     }
 
     /// Runs the mmBERT + deterministic polish pass off the main actor.

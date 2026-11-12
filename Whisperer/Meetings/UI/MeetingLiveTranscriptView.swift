@@ -61,9 +61,9 @@ struct MeetingLiveTranscriptView: View {
                     if segments.isEmpty && !hasLiveTail {
                         emptyState
                     } else {
-                        ForEach(turns, id: \.first!.id) { turn in
-                            turnCard(turn)
-                                .id(turn.first!.id)
+                        ForEach(Array(segments.enumerated()), id: \.element.id) { index, segment in
+                            segmentCard(segment, previous: index > 0 ? segments[index - 1] : nil)
+                                .id(segment.id)
                         }
                     }
 
@@ -129,34 +129,23 @@ struct MeetingLiveTranscriptView: View {
 
     // MARK: - Committed segments
 
-    /// Consecutive segments of one speaker are one turn: one card, one header, and a paragraph
-    /// per segment. The session cuts paragraphs at pauses, so a two-minute monologue is a few
-    /// paragraphs under one name instead of a stack of identical cards.
-    private var turns: [[MeetingSegment]] {
-        var result: [[MeetingSegment]] = []
-        for segment in segments {
-            if let last = result.last?.last,
-               last.speakerIndex == segment.speakerIndex, last.speakerName == segment.speakerName {
-                result[result.count - 1].append(segment)
-            } else {
-                result.append([segment])
-            }
-        }
-        return result
+    /// A speaker header only when the speaker actually changes — a name above every card turns a
+    /// monologue into a wall of labels.
+    private func startsNewTurn(_ segment: MeetingSegment, previous: MeetingSegment?) -> Bool {
+        guard let previous else { return true }
+        return previous.speakerIndex != segment.speakerIndex
+            || previous.speakerName != segment.speakerName
     }
 
     @ViewBuilder
-    private func turnCard(_ turn: [MeetingSegment]) -> some View {
-        let first = turn[0]
+    private func segmentCard(_ segment: MeetingSegment, previous: MeetingSegment?) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            speakerHeader(name: first.speakerName,
-                          index: first.speakerIndex,
-                          seconds: first.timestamp)
-            VStack(alignment: .leading, spacing: 10) {
-                ForEach(turn, id: \.id) { segment in
-                    transcriptText(segment.text)
-                }
+            if startsNewTurn(segment, previous: previous) {
+                speakerHeader(name: segment.speakerName,
+                              index: segment.speakerIndex,
+                              seconds: segment.timestamp)
             }
+            transcriptText(segment.text)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 9)
@@ -167,7 +156,7 @@ struct MeetingLiveTranscriptView: View {
         )
         .overlay(alignment: isRTL ? .trailing : .leading) {
             Rectangle()
-                .fill(speakerColor(for: first.speakerIndex).opacity(0.32))
+                .fill(speakerColor(for: segment.speakerIndex).opacity(0.32))
                 .frame(width: 3)
         }
         .overlay(
