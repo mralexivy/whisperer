@@ -70,6 +70,18 @@ final class HistoryArchiveSectionClickTests: XCTestCase {
         XCTAssertEqual(model.panel, .none, "clicking the open row folds it")
     }
 
+    func testTheCloudRowUnfoldsAnInertPanelAndNeverStartsAnything() throws {
+        guard HistoryArchiveModel.cloudRowVisible else { throw XCTSkip("the Cloud row is hidden in the App Store build") }
+        host(HistoryArchiveModel())
+        try click("transfer.row.cloud", x: 0.3)
+        XCTAssertEqual(model.panel, .cloud)
+        XCTAssertNotNil(frame("transfer.cloud.subscribe"))
+        try click("transfer.cloud.subscribe")
+        XCTAssertEqual(model.state, .idle, "a disabled button does nothing")
+        try click("transfer.row.export", x: 0.3)
+        XCTAssertEqual(model.panel, .export, "one panel at a time")
+    }
+
     func testClickingTheChipsChangesTheScope() throws {
         host(HistoryArchiveModel())
         try click("transfer.row.export", x: 0.3)

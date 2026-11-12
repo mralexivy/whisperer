@@ -17,7 +17,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class HistoryArchiveModel: ObservableObject {
 
-    enum Panel: Equatable { case none, export, `import` }
+    enum Panel: Equatable { case none, export, `import`, cloud }
 
     enum RangePreset: String, CaseIterable, Identifiable {
         case all = "All time", lastYear = "Past year", last30 = "Past 30 days", custom = "Custom"
@@ -75,6 +75,17 @@ final class HistoryArchiveModel: ObservableObject {
 
     init(environment: HistoryArchive.Environment? = nil) {
         self.environment = environment ?? .app
+    }
+
+    /// Whisperer Cloud (paid sync) is not live yet: the row is built and tested, and shown only where
+    /// the feature may be mentioned — never in the App Store build until it works (App Review rejects
+    /// placeholders). Flip when the service ships (docs/exec-plans/cloud-sync.md).
+    static var cloudRowVisible: Bool {
+        #if APP_STORE
+        return false
+        #else
+        return true
+        #endif
     }
 
     var isBusy: Bool { if case .working = state { return true } else { return false } }
@@ -285,8 +296,8 @@ final class HistoryArchiveModel: ObservableObject {
         if let n = result.counts[.commandChats], n > 0 { parts.append(count(n, "chat")) }
         var lines = ["Exported " + (parts.isEmpty ? "your settings records" : parts.joined(separator: ", ")) + "."]
         lines.append(result.files.count == 1
-                     ? "\(size(result.archiveBytes)) in 1 file."
-                     : "\(size(result.archiveBytes)) in \(result.files.count) files — import any of them, in any order.")
+                     ? "\(size(result.archiveBytes)) in 1 file. Copy it to your other Mac, then choose Import history there."
+                     : "\(size(result.archiveBytes)) in \(result.files.count) files. Copy them all to your other Mac and choose Import history there — in any order.")
         return lines
     }
 
@@ -327,17 +338,24 @@ struct HistoryArchiveSection: View {
             VStack(alignment: .leading, spacing: 16) {
                 SettingsSectionHeader(icon: "arrow.up.arrow.down.square", title: "Move History",
                                       colorScheme: colorScheme, color: WhispererColors.accentBlue)
-                Text("Take everything Whisperer has recorded to another Mac, or bring it in — dictations, meetings, recordings, dictionary and records. Importing only adds: nothing already here is replaced.")
+                Text("Move everything Whisperer has recorded to another Mac — dictations, meetings, recordings, dictionary and records. Export to a file, copy it across, and import it there. Importing only adds: nothing already here is replaced.")
                     .font(.system(size: 12)).foregroundColor(secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 choiceRow(.export, icon: "square.and.arrow.up", tint: WhispererColors.accentBlue,
-                          title: "Export history", subtitle: "Save to a file you can copy to another Mac")
+                          title: "Export history", subtitle: "Save to a file, then copy it to another Mac")
                 if model.panel == .export { exportPanel.transition(.move(edge: .top).combined(with: .opacity)) }
 
                 choiceRow(.import, icon: "square.and.arrow.down", tint: .cyan,
                           title: "Import history", subtitle: "Add a history file from another Mac")
                 if model.panel == .import { importPanel.transition(.move(edge: .top).combined(with: .opacity)) }
+
+                if HistoryArchiveModel.cloudRowVisible {
+                    choiceRow(.cloud, icon: "icloud.and.arrow.up", tint: .purple,
+                              title: "Whisperer Cloud", subtitle: "Keep your history in sync across your Macs, automatically",
+                              pill: "Coming soon")
+                    if model.panel == .cloud { cloudPanel.transition(.move(edge: .top).combined(with: .opacity)) }
+                }
 
                 statusView
             }
@@ -366,7 +384,8 @@ struct HistoryArchiveSection: View {
 
     // MARK: Rows
 
-    private func choiceRow(_ panel: HistoryArchiveModel.Panel, icon: String, tint: Color, title: String, subtitle: String) -> some View {
+    private func choiceRow(_ panel: HistoryArchiveModel.Panel, icon: String, tint: Color, title: String, subtitle: String,
+                           pill: String? = nil) -> some View {
         let selected = model.panel == panel
         return Button { withAnimation(spring) { model.toggle(panel) } } label: {
             HStack(spacing: 14) {
@@ -375,7 +394,14 @@ struct HistoryArchiveSection: View {
                     Image(systemName: icon).font(.system(size: 15, weight: .semibold)).foregroundColor(tint)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(primary)
+                    HStack(spacing: 8) {
+                        Text(title).font(.system(size: 14, weight: .semibold)).foregroundColor(primary)
+                        if let pill {
+                            Text(pill).font(.system(size: 10, weight: .semibold)).foregroundColor(secondary)
+                                .padding(.horizontal, 8).padding(.vertical, 3)
+                                .background(Capsule().fill(secondary.opacity(0.15)))
+                        }
+                    }
                     Text(subtitle).font(.system(size: 12)).foregroundColor(secondary)
                 }
                 Spacer()
@@ -394,8 +420,17 @@ struct HistoryArchiveSection: View {
         }
         .buttonStyle(.plain).pointerOnHover()
         .disabled(model.isBusy)
-        .uiTestFrame("transfer.row.\(panel == .export ? "export" : "import")")
-        .accessibilityIdentifier("history-\(panel == .export ? "export" : "import")-row")
+        .uiTestFrame("transfer.row.\(rowName(panel))")
+        .accessibilityIdentifier("history-\(rowName(panel))-row")
+    }
+
+    private func rowName(_ panel: HistoryArchiveModel.Panel) -> String {
+        switch panel {
+        case .export: return "export"
+        case .import: return "import"
+        case .cloud: return "cloud"
+        case .none: return "none"
+        }
     }
 
     private func sectionLabel(_ text: String, hint: String? = nil) -> some View {
@@ -406,6 +441,37 @@ struct HistoryArchiveSection: View {
                 Text(hint).font(.system(size: 12)).foregroundColor(secondary).fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+
+    // MARK: Cloud panel
+
+    /// The shape of the paid sync offer, ready for the service (docs/exec-plans/cloud-sync.md). Nothing
+    /// here can be bought or started yet, so the one action says so rather than doing nothing.
+    private var cloudPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach([("lock.shield.fill", "End-to-end encrypted", "Your recordings and transcripts are encrypted on your Mac before they leave it. We cannot read them."),
+                     ("arrow.triangle.2.circlepath", "Seamless sync", "New dictations and meetings appear on your other Macs in the background — nothing to export or copy."),
+                     ("macbook.and.iphone", "A new Mac, instantly", "Sign in to the same Apple ID and your history is there, text first, recordings as you play them.")],
+                    id: \.1) { icon, title, text in
+                HStack(alignment: .top, spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 7).fill(Color.purple.opacity(0.15)).frame(width: 28, height: 28)
+                        Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundColor(.purple)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title).font(.system(size: 13, weight: .semibold)).foregroundColor(primary)
+                        Text(text).font(.system(size: 12)).foregroundColor(secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+            HStack(spacing: 12) {
+                Text("Whisperer Cloud is a subscription and is not available yet. Until then, Export and Import move your history by file.")
+                    .font(.system(size: 12)).foregroundColor(secondary).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+                actionButton("Not available yet", icon: "icloud.and.arrow.up", id: "transfer.cloud.subscribe", enabled: false) { }
+            }
+        }
+        .padding(.leading, 50)
     }
 
     // MARK: Export panel
@@ -454,7 +520,7 @@ struct HistoryArchiveSection: View {
             }
 
             VStack(alignment: .leading, spacing: 10) {
-                sectionLabel("File size", hint: "A large history can be split into smaller files — for a USB stick, a mail attachment or a slow disk. Each file imports on its own, in any order.")
+                sectionLabel("File size", hint: "A large history can be split into smaller files — for a USB drive, a shared folder or a slow disk. Each file imports on its own, in any order.")
                 chips(HistoryArchiveModel.SplitPreset.allCases, selection: $model.split, id: "split")
             }
 

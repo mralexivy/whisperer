@@ -62,8 +62,10 @@ final class HistoryArchiveSectionRenderTests: XCTestCase {
         working.state = .working(phase: "Part 2 of 4", fraction: 0.41, detail: "Dictations 380 of 620"); try render(working, scheme: .dark, name: "export-working", dir: dir)
 
         let done = HistoryArchiveModel()
-        done.state = .finished(lines: ["Exported 1,240 dictations, 86 meetings, 312 dictionary words.", "3.4 GB in 4 files — import any of them, in any order."],
+        done.state = .finished(lines: ["Exported 1,240 dictations, 86 meetings, 312 dictionary words.", "3.4 GB in 4 files. Copy them all to your other Mac and choose Import history there — in any order."],
                                revealing: [URL(fileURLWithPath: "/tmp/x.aar")]); try render(done, scheme: .dark, name: "export-done", dir: dir)
+
+        let cloud = HistoryArchiveModel(); cloud.panel = .cloud; try render(cloud, scheme: .dark, name: "cloud", dir: dir)
 
         let pick = HistoryArchiveModel(); pick.panel = .import; try render(pick, scheme: .dark, name: "import-empty", dir: dir)
 
