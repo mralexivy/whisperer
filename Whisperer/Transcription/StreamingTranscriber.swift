@@ -1199,6 +1199,9 @@ class StreamingTranscriber {
     /// See `EagerStreamEngine.Config.suppressesRepetitionLoops`. Must be set before `start()`,
     /// which is where the engine is built.
     var eagerSuppressesRepetitionLoops: Bool = true
+    /// Replaces the eager engine's whole configuration, for the live-speed sweep in
+    /// `LivePreviewEngineBenchmarkTests`. Nil — always, outside that sweep — keeps `.default`.
+    var eagerConfigOverride: EagerStreamEngine.Config?
     /// Whether each whisper.cpp eager pass is prompted with the last 100 characters of committed
     /// text. Off since 2026-11-11: conditioning a short window on preceding text skipped and
     /// repeated words ("рассказали рассказал", "The The") and made every decode slower — without
@@ -1361,7 +1364,7 @@ class StreamingTranscriber {
         // Eager engine: used by both WhisperKit (always) and whisper.cpp (when flag on)
         let needsEagerEngine = whisper.streamingPolicy.requiresEagerEngine || usesEagerStream
         eagerEngine = needsEagerEngine
-            ? EagerStreamEngine(config: EagerStreamEngine.Config.default
+            ? EagerStreamEngine(config: eagerConfigOverride ?? EagerStreamEngine.Config.default
                 .with(skipsAnchorCheckAfterBoundaryMove: eagerSkipsAnchorCheckAfterBoundaryMove,
               suppressesRepetitionLoops: eagerSuppressesRepetitionLoops))
             : nil

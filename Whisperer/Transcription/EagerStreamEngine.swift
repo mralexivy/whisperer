@@ -139,6 +139,13 @@ struct EagerStreamEngine {
         /// went 2.6 s → 1.6 s and revised words 14% → 6–8%, with the final transcript unchanged
         /// within noise. A hold also discarded a finished decode, so the next pass re-ran it.
         var holdsWholePass: Bool = false
+        /// Benchmark-only switches (`LivePreviewEngineBenchmarkTests`, option-4 arms); off in the app.
+        /// - `confirmsWithoutLanguageLock`: confirm even before the session language is locked.
+        var confirmsWithoutLanguageLock: Bool = false
+        /// - `timeGuardSeconds` (AlignAtt-lite): confirm a word after a single pass once it ends at
+        ///   least this far before the decoded window's end (and has p ≥ 0.6) — the audio the
+        ///   decoder no longer needs to look past. nil: off.
+        var timeGuardSeconds: Double? = nil
 
         static let `default` = Config(
             boundaryWordCount: 2,
@@ -461,6 +468,7 @@ struct EagerStreamEngine {
         }
 
         // ── LocalAgreement-2 confirmation ─────────────────────────────────────────
+        let languageIsLocked = languageIsLocked || config.confirmsWithoutLanguageLock
         if languageIsLocked, !unstablePass {
             let commonCount = commonPrefixCount(previousHypothesis, hyp)
             let boundary = config.boundaryWordCount
@@ -504,6 +512,20 @@ struct EagerStreamEngine {
             }
         }
 
+        if languageIsLocked, let guardSeconds = config.timeGuardSeconds, hyp.count > config.boundaryWordCount {
+            let limit = windowEndIndex - Int(guardSeconds * 16_000)
+            var settled = 0
+            for word in hyp.prefix(hyp.count - config.boundaryWordCount) {
+                guard word.endIndex <= limit, word.probability >= 0.6 else { break }
+                settled += 1
+            }
+            if settled > 0 {
+                confirm(Array(hyp.prefix(settled)))
+                let strict = advanceAgreement(to: hyp[settled].startIndex)
+                prefixTokens = Array(hyp.prefix(settled)).suffix(2).flatMap(\.tokens)
+                hyp = hyp.filter { $0.startIndex >= strict }
+            }
+        }
         // Must be AFTER the entropy gate — setting it before would cause stale prevHypothesis
         // words to mismatch on the next clip, cascading into anchor=0 every pass.
         previousHypothesis = hyp

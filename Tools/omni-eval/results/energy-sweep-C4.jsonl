@@ -1,0 +1,2 @@
+{"wall":212.1575540304184,"joules":64.494121694,"speechd_cpu_s":0.010000000000005116,"tag":"sweep-C4","gpu_s":106.04324479100001,"engine":"cpp-v3-pin"}
+{"engine":"wkapp-v3turbo-pin","wall":219.51162695884705,"joules":88.631761195999999,"gpu_s":1.159036875,"speechd_cpu_s":0.0099999999999980105,"tag":"sweep-C4"}

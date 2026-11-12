@@ -1,0 +1,3 @@
+{"gpu_s":113.208190833,"engine":"cpp-v3-pin","speechd_cpu_s":0,"tag":"same","joules":60.078293629999997,"wall":218.04606699943542}
+{"wall":216.25274300575256,"gpu_s":1.0406318750000001,"speechd_cpu_s":0,"engine":"wkapp-v3turbo-pin","joules":81.778060373000002,"tag":"same"}
+{"joules":72.189713531999999,"tag":"same","speechd_cpu_s":0.0099999999999980105,"engine":"wkapp547-pin","wall":224.32229697704315,"gpu_s":0.796456583}

@@ -1,0 +1,2 @@
+{"tag":"armH","gpu_s":103.580963083,"engine":"cpp-v3-pin","speechd_cpu_s":0,"wall":208.75916695594788,"joules":60.677349372999998}
+{"gpu_s":106.315836542,"engine":"cpp-v3-auto","wall":211.71037900447845,"tag":"armH","speechd_cpu_s":0,"joules":26.429793750000002}

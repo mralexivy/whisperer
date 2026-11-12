@@ -1,0 +1,2 @@
+{"engine":"cpp-v3-pin","tag":"armBprompt","wall":212.47644102573395,"joules":61.893769464000002,"gpu_s":106.910395041,"speechd_cpu_s":0.0099999999999980105}
+{"gpu_s":108.41300808299999,"engine":"cpp-v3-auto","tag":"armBprompt","joules":28.285369636999999,"speechd_cpu_s":0,"wall":214.53584802150726}
