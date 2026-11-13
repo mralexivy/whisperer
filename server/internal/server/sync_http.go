@@ -16,11 +16,10 @@ import (
 // WithSync turns on the storage routes (/v1/sync/*).
 func (s *Server) WithSync(svc *syncplane.Service) *Server { s.sync = svc; return s }
 
-// WithSweeper turns on POST /internal/sweep. `authorize` must accept only Cloud Scheduler's identity.
-func (s *Server) WithSweeper(sw *retention.Sweeper, authorize func(*http.Request) bool) *Server {
-	s.sweeper, s.authorizeSweep = sw, authorize
-	return s
-}
+// WithSweeper turns on the retention sweep. There is no scheduler: the sweep rides on requests the server is
+// already handling (Apple's notifications and a fraction of sessions), which is plenty because deletion
+// happens weeks after a subscription ends and a day's delay costs cents.
+func (s *Server) WithSweeper(sw *retention.Sweeper) *Server { s.sweeper = sw; return s }
 
 func (s *Server) syncRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/sync/heads", s.limited(s.authed(s.handleHeads)))
@@ -234,27 +233,13 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request, c auth.Cla
 	writeJSON(w, 200, map[string]int{"deleted": n})
 }
 
-// handleSweep is the hourly Cloud Scheduler call. It is bounded and restartable; see package retention.
-func (s *Server) handleSweep(w http.ResponseWriter, r *http.Request) {
-	if s.sweeper == nil || s.authorizeSweep == nil || !s.authorizeSweep(r) {
-		fail(w, 403, "forbidden", "not allowed")
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 50*time.Second)
-	defer cancel()
-	rep := s.sweeper.Run(ctx)
-	writeJSON(w, 200, map[string]any{"due": rep.Due, "deleted": len(rep.Deleted), "inProgress": len(rep.InProgress),
-		"reactivated": len(rep.Reactivated), "skipped": len(rep.Skipped), "dryRun": len(rep.DryRun), "tripped": rep.Tripped})
-}
-
-// opportunisticSweep is a small safety net for when the scheduler is late; it uses the same guarded sweeper.
-func (s *Server) opportunisticSweep() {
+// sweepNow runs one bounded, guarded retention pass inside the current request. It is synchronous on purpose:
+// Cloud Run throttles CPU once a response is sent, so a background goroutine would be starved.
+func (s *Server) sweepNow(ctx context.Context) {
 	if s.sweeper == nil {
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		s.sweeper.Run(ctx)
-	}()
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	s.sweeper.Run(ctx)
 }

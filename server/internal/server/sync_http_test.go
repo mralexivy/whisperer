@@ -2,10 +2,10 @@ package server_test
 
 import (
 	"context"
-	"net/http"
 	"testing"
 	"time"
 
+	"github.com/mralexivy/whisperer/server/internal/entitlement"
 	"github.com/mralexivy/whisperer/server/internal/retention"
 	"github.com/mralexivy/whisperer/server/internal/syncplane"
 )
@@ -119,12 +119,21 @@ func TestSealedAccountsExportTextButNotAudio(t *testing.T) {
 	}
 }
 
-func TestSweepEndpointIsForbiddenWithoutSchedulerAuth(t *testing.T) {
+func TestAnAppleNotificationRunsTheGuardedSweep(t *testing.T) {
 	r := newSyncRig(t)
+	later := r.clock.Add(400 * 24 * time.Hour) // the sweeper's clock; Apple's test certificates are only valid near the rig's own
+	lapsed := entitlement.FromTransaction(nil, "gone", entitlementTx("9000", later.Add(-300*24*time.Hour)), later.Add(-330*24*time.Hour))
+	_ = r.store.Put(t.Context(), lapsed)
+	pre := syncplane.Prefix("whisperer", "gone", 1)
+	r.blobs.Put(pre+"audio/00000000000000000000000000000001", 10, 0)
 	sw := &retention.Sweeper{Entitlements: r.store, Apple: staticApple{}, Blobs: r.blobs, Root: "whisperer",
-		Epoch: func(context.Context, string) (int, error) { return 1, nil }, Now: func() time.Time { return *r.clock }}
-	r.srv.WithSweeper(sw, func(req *http.Request) bool { return req.Header.Get("X-Scheduler") == "ok" })
-	if code, _ := r.do("POST", "/internal/sweep", nil, ""); code != 403 {
-		t.Fatalf("unauthenticated sweep: %d", code)
+		Epoch: func(context.Context, string) (int, error) { return 1, nil }, Now: func() time.Time { return later }}
+	r.srv.WithSweeper(sw)
+	n := notification(r.rig, "DID_RENEW", "sweep-1", r.tx(map[string]any{"originalTransactionId": "9100"}), *r.clock)
+	if code, _ := r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": n}, ""); code != 200 {
+		t.Fatalf("notification: %d", code)
+	}
+	if r.blobs.Count(pre) != 0 {
+		t.Fatal("the lapsed account's data should have been deleted by the sweep (Apple said expired)")
 	}
 }

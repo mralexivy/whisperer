@@ -43,10 +43,8 @@ type Server struct {
 	verifier *auth.Verifier
 	sync     *syncplane.Service
 	sweeper  *retention.Sweeper
-	// authorizeSweep decides whether a request may trigger the retention sweep (Cloud Scheduler's OIDC token in production).
-	authorizeSweep func(*http.Request) bool
-	limiter        *limiter
-	log            *slog.Logger
+	limiter  *limiter
+	log      *slog.Logger
 }
 
 func New(cfg Config, a *apple.Verifier, store entitlement.Store, signer *auth.Signer, log *slog.Logger) *Server {
@@ -70,7 +68,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /v1/account", s.limited(s.authed(s.handleAccount)))
 	mux.HandleFunc("POST /v1/apple/notifications", s.handleNotification)
 	s.syncRoutes(mux)
-	mux.HandleFunc("POST /internal/sweep", s.handleSweep)
 	return mux
 }
 
@@ -154,7 +151,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	readOnly := !e.CanWrite(now)
 	token, claims := s.signer.Issue(uid, req.DeviceID, readOnly, now)
 	if rand.IntN(20) == 0 {
-		s.opportunisticSweep()
+		s.sweepNow(r.Context())
 	}
 	pl, _ := s.planFor(e.ProductID)
 	writeJSON(w, 200, sessionResponse{Token: token, ExpiresAt: time.Unix(claims.Exp, 0).UTC(), State: state,
@@ -285,6 +282,7 @@ func (s *Server) handleNotification(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	s.sweepNow(r.Context())
 	writeJSON(w, 200, map[string]any{"applied": changed})
 }
 

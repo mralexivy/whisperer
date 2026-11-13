@@ -1,8 +1,8 @@
 # Whisperer Cloud — implementation plan
 
 Status: **proposed — awaiting approval gate 0** (2026-11-13). Mac App Store build only. Read `cloud-sync.md` (*Lean rules*, *Plans and margins*) first.
-Baseline services (unchanged): **Cloud Run · Cloud Storage · Firestore · Secret Manager**. One justified addition, pending your approval:
-**Cloud Scheduler (1 job, $0)**. Platform capabilities used without being application services: IAM, IAM Credentials (`signBlob`),
+Baseline services (unchanged): **Cloud Run · Cloud Storage · Firestore · Secret Manager**. No additions.
+No Cloud Scheduler: deletion rides on requests the server already handles (revised 2026-11-13 — see D10). Platform capabilities used without being application services: IAM, IAM Credentials (`signBlob`),
 Artifact Registry (one 6 MB image), Cloud Logging/Monitoring (defaults), Resource Manager. Nothing else is enabled or planned.
 
 ## 0. Decision log (alternatives → trade-offs → selected)
@@ -18,7 +18,7 @@ Artifact Registry (one 6 MB image), Cloud Logging/Monitoring (defaults), Resourc
 | D7 | **Quota accounting** | check on commit only; reconcile by LIST; **reservation → commit → rare reconcile** | **Reservation in Firestore transaction before any URL is signed**, corrected to real size on commit, reconciled by LIST only on demand/rarely. LIST-based accounting costs more than the storage |
 | D8 | **Data-plane auth** | STS downscoped tokens; HMAC keys; **V4 signed URLs via IAM `signBlob`**; server-initiated resumable sessions for large objects | **V4 signed URLs** (small objects) + **server-initiated resumable sessions** (≥ 8 MB). No key files, no extra API |
 | D9 | **Apple integration** | JWS verification only; + Notifications V2; + Server API | **All three**: StoreKit JWS = proof from the device, Notifications V2 = push of lifecycle events, **Server API = authority** and reconciliation. Firestore state is a *cache* of Apple's truth |
-| D10 | **Day-60 deletion trigger** | opportunistic sweeps; GCS `customTime` lifecycle; Cloud Tasks; Eventarc; **one Cloud Scheduler job** | **Scheduler job (hourly) + opportunistic sweeps.** Lifecycle rules are object-age, not subscription-relative, and touching every object on lapse costs more than it saves; Tasks/Eventarc add services. Scheduler is free at one job |
+| D10 | **Deletion trigger** | one Cloud Scheduler job; GCS `customTime` lifecycle; Cloud Tasks; Eventarc; **opportunistic sweeps in requests** | **Opportunistic sweeps** (Apple notifications + a fraction of sessions), synchronous and bounded. Deletion happens 81–201 days after a subscription ends, so a day's delay costs cents and a precise timer buys nothing; Scheduler/Tasks/Eventarc would each be one more service. Lifecycle rules are object-age, not subscription-relative |
 | D11 | **Key recovery material** | user-held only; server-held; wrapped blob in GCS; **wrapped blob in Firestore + user-held recovery key** | Primary key in iCloud Keychain; recovery key (user-held, never stored by us) wraps a copy of the master key; the *wrapped* blob (≈ 100 B) lives in the account doc so a new Mac can fetch it before enrolling |
 | D12 | **Reset / key rotation** | in-place rewrite; **library epoch in the namespace** | `…/e{epoch}/…`. A reset or "re-encrypt" is: bump the epoch, upload under the new key, delete the old epoch later. Atomic, no partial states |
 | D13 | **Firestore shape** | per-object docs; per-change docs; **few small docs per account** | One heads doc + one usage doc + one account doc: ≤ ~5 KB/account, ≤ 3 reads per request. Per-object docs would cost more than the storage they describe |
@@ -37,7 +37,7 @@ Artifact Registry (one 6 MB image), Cloud Logging/Monitoring (defaults), Resourc
 │  Mac app    │   HTTPS   ┌──────────────────────────────────────────────────────────┐
 │  SyncEngine │──────────▶│  Cloud Run  whisperer-api   (Go, scale-to-zero, ≤2 inst) │
 │  encrypts   │◀──────────│  verify Apple · accounts/devices · quotas · sign URLs     │──▶ Secret Manager
-│  locally    │ grants    │  · retention sweep (/internal/sweep ◀── Cloud Scheduler)  │     (UID_SECRET,
+│  locally    │ grants    │  · guarded retention sweep (inside requests)           │     (UID_SECRET,
 └──────┬──────┘ (URLs)    └───────────┬───────────────────────────┬──────────────────┘      SESSION_KEY,
        │                              │ Firestore (control plane) │ IAM signBlob            IAP key .p8)
        │                              ▼                           ▼
@@ -122,7 +122,7 @@ gs://whisperer-491716-user-data/
 
 ## 5. API contracts (`/v1`, JSON; errors `{"error":code,"message":text}`)
 
-Auth: `S` = session token; `D` = device-signed (nonce signature); `A` = Apple-signed payload; `O` = Scheduler OIDC. Every state-changing route is idempotent as noted.
+Auth: `S` = session token; `D` = device-signed (nonce signature); `A` = Apple-signed payload. Every state-changing route is idempotent as noted.
 
 | Route | Auth | Request → response | Notes / errors |
 |---|---|---|---|
@@ -144,7 +144,6 @@ Auth: `S` = session token; `D` = device-signed (nonce signature); `A` = Apple-si
 | `POST /v1/sync/delete` | S (write) | `[name]` → counts | server reads the real size first (Class B) to decrement `committed` |
 | `DELETE /v1/account/data` | S + confirmation | → `{retention:{state:"deleting"}}` | user-requested erasure (§7) |
 | `POST /v1/apple/notifications` | A | `{signedPayload}` → 200 | verified, deduped, order-safe (§6) |
-| `POST /internal/sweep` | O | → counts | retention, reconcile, orphans; bounded work per run |
 | `GET /healthz` | none | | never limited |
 
 ## 6. Apple purchases and the subscription lifecycle
@@ -220,7 +219,7 @@ Return codes: bad signature ⇒ 400; not ours ⇒ 200 (Apple must not retry); tr
 - **Three-stage deletion, each reversible until the last:** (1) *read-only window* above — data intact, export always works; (2) **seal** (14 d) — warnings escalate, uploads/downloads of audio refused, text export and the local copy on every Mac still available; (3) **soft-delete** (7 d) — objects are *not* removed yet: the account is marked `deleting-soft`, any payment or Apple-confirmed reactivation restores everything intact; only after that does the irreversible hard pass (steps below) run.
 - **Never-delete safeguards (all must hold, re-checked at the moment of each destructive step):** Apple's fresh status says expired/revoked (not active, grace, billing retry, or unknown); the last successful Apple check is < 24 h old; account state is not `active/grace/retry`; the cached entitlement agrees with Apple; the account has no purchase in the last 24 h; at most **N accounts per sweep** and a global **circuit breaker** — if more than max(5, 2 % of accounts) become due in one run, or the sweep sees an abnormal due-count spike (e.g. a bug mis-marking active users), it stops and alerts instead of deleting; a dry-run mode lists what it *would* delete and is the default for the first month in production.
 - **User warnings** (in-app and by the Mac app's notifications; the server exposes `retention.deleteAfter` and `stage`): at lapse, 30 d, 7 d and 1 d before the seal and before the hard delete; the Cloud page shows the exact date and a one-tap **Export everything** / **Resubscribe**. Local data on Macs is never touched by retention.
-- **Trigger:** Cloud Scheduler → `POST /internal/sweep` hourly (OIDC; audience = service URL; service account `whisperer-scheduler@…` with no other role), plus opportunistic 1-in-20 sweeps inside normal requests. Sweep is bounded (≤ 5 accounts × ~500 objects, 50 s) and restartable.
+- **Trigger:** opportunistic only — no scheduler. The guarded sweep runs synchronously (10 s cap) inside every Apple notification and 1 in 20 sessions. Paying users generate constant traffic, and nothing here is time-critical (windows are weeks). It is bounded (≤ 5 accounts per run) and restartable. With zero traffic nothing is deleted, which costs a few cents of storage.
 - **Deletion algorithm** (idempotent; every step re-checks state inside a transaction):
   1. select `retention.state=scheduled AND deleteAfter ≤ now`;
   2. **Apple re-check** (fresh): active/grace/retry ⇒ cancel retention; Apple unreachable ⇒ skip (never delete on stale data);
@@ -331,9 +330,7 @@ Tombstones live in snapshots for **90 days** (`tombstoneHorizon = snapshot time 
 | Item | Configuration |
 |---|---|
 | APIs enabled today | `run`, `artifactregistry`, `secretmanager`, `firestore`, `iam`, `iamcredentials`, `cloudresourcemanager`, `storage` |
-| **To add (needs approval, Stage C)** | `cloudscheduler` only |
 | Runtime SA `whisperer-api@` | `storage.objectAdmin` on the bucket; `datastore.user`; `serviceAccountTokenCreator` on itself; `secretmanager.secretAccessor` on the 3 secrets only |
-| Scheduler SA `whisperer-scheduler@` (new) | no project roles; used only to mint the OIDC token; endpoint verifies issuer, audience, email |
 | Deployer SA `whisperer-deployer@` (new) | `run.developer` on the service, `artifactregistry.writer` on the repo, `iam.serviceAccountUser` on the runtime SA; trusted by a **Workload Identity Federation** pool restricted to `repo:mralexivy/whisperer` on `refs/heads/main` (+ environment) |
 | Secret Manager | `UID_SECRET`, `SESSION_SIGNING_KEY`, `APPLE_IAP_KEY_P8` (key id + issuer id as env). Mounted as env at deploy |
 | Cloud Run | `us-central1`, 256 MiB, 1 vCPU (request-based), concurrency 80, **min 0 / max 2**, timeout 60 s (sweep) — normal requests end in ms; allow-unauthenticated (the Mac and Apple must reach it; every route self-authenticates) |
@@ -342,7 +339,7 @@ Tombstones live in snapshots for **90 days** (`tombstoneHorizon = snapshot time 
 | Logging / Monitoring | default `_Default` log bucket, structured logs (ids, sizes, no content), `/healthz` excluded; alert policies: 5xx rate, instance count = max, request spike, `deleting` > 3 days, sweep errors |
 | Billing | budget 700 ILS (≈ $200) alerts 5/25/100 % (exists) |
 
-Platform APIs vs application services: IAM / IAM Credentials / Resource Manager / Artifact Registry are plumbing, not services we operate; **Scheduler is the only added service**, one job, $0.
+Platform APIs vs application services: IAM / IAM Credentials / Resource Manager / Artifact Registry are plumbing, not services we operate. **No service is added to the baseline: Cloud Run, Cloud Storage, Firestore, Secret Manager.**
 
 ## 13. Sequence diagrams
 
@@ -441,13 +438,13 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant S as Cloud Scheduler
+  participant S as Apple notification / session
   participant R as Cloud Run
   participant A as Apple
   participant F as Firestore
   participant G as GCS
   Note over S,G: Deletion
-  S->>R: POST /internal/sweep (OIDC)
+  S->>R: request (notification or 1-in-20 session)
   R->>F: due: scheduled AND deleteAfter<=now
   R->>A: Server API: still expired?
   alt active / grace / retry
@@ -516,7 +513,7 @@ Layers: **U** Go unit · **H** Go HTTP with fakes · **I** integration on real G
 
 ## 16. Cost and performance validation
 
-Assumptions (stated, to be re-measured): GCS Standard regional $0.020/GB-mo (30 % hot) + Nearline $0.010; Class A $0.005/1k, B $0.0004/1k; egress $0.12/GB; Firestore us-central1 **$0.03/100k reads, $0.09/100k writes, free 50k/20k per day**; Cloud Run 0.25-vCPU-billing, 100 ms rounding ≈ $1.06e-6/request after free tier (2 M requests); Scheduler 1 job free; Apple API free; signing free; 3 % retry overhead; 60-day retention storage included.
+Assumptions (stated, to be re-measured): GCS Standard regional $0.020/GB-mo (30 % hot) + Nearline $0.010; Class A $0.005/1k, B $0.0004/1k; egress $0.12/GB; Firestore us-central1 **$0.03/100k reads, $0.09/100k writes, free 50k/20k per day**; Cloud Run 0.25-vCPU-billing, 100 ms rounding ≈ $1.06e-6/request after free tier (2 M requests); Apple API free; signing free; 3 % retry overhead; 60-day retention storage included.
 
 | Profile (per user / month) | Requests | Firestore r/w | Storage | GCS ops | Egress | Run + FS | **Total** |
 |---|---|---|---|---|---|---|---|
@@ -540,7 +537,7 @@ One-off events: restore of a 2 GB library ≈ $0.26; 20 GB ≈ $2.56 (egress + N
 
 ## 17. Implementation stages and approval gates
 
-Cloud commands, API enablement (Scheduler), secret creation, deployment and any App Store Connect change are each shown and **approved before they run**. Nothing is put on sale until you say so.
+Cloud commands, secret creation, deployment and any App Store Connect change are each shown and **approved before they run**. Nothing is put on sale until you say so.
 
 **Stage 0 — Approval and prerequisites.** *Scope:* confirm this plan and the decisions below; you create the In-App Purchase key (.p8) and enable a 16-day billing grace period in App Store Connect. *Deliverables:* signed-off plan; key file path. *Deps:* none. *Acceptance:* decisions recorded. *Tests:* —. *Cost:* $0. *Security:* key stored only under `~/whisperer-secrets/` then Secret Manager. *Rollback:* n/a.
 
@@ -548,7 +545,7 @@ Cloud commands, API enablement (Scheduler), secret creation, deployment and any 
 
 **Stage B — Server storage control plane (Go).** *Scope:* heads/commit/grants/download/delete, usage reservations, quota by plan, signed URL + resumable-session signer behind an interface, retention + reconcile sweep, `/internal/sweep` with OIDC verification. *Deliverables:* `server/internal/{sync,quota,gcs,retention}`. *Deps:* A. *Acceptance:* rows 9–11, 16–21 green on fakes; sweep idempotent under crash injection. *Tests:* U/H with fake GCS/Firestore + property tests on quota. *Cost:* $0. *Security:* names built server-side; validators; cross-user isolation tests. *Rollback:* revert.
 
-**Stage C — Provision and deploy (cloud; every command approved).** *Scope:* enable `cloudscheduler` (the only new API), create scheduler job + SA, deployer SA + WIF, secrets (3), Firestore index/rules/TTL, Cloud Run deploy via GitHub Actions, monitoring alerts, kill-switch rehearsal; integration tests (row set I) against a `test/` namespace. *Deps:* B. *Acceptance:* `/healthz` live; deploy by push; rollback by revision verified; alerts fire in a drill; integration rows green. *Cost:* ≈ $0 (+ $1.50 fixed). *Security:* least-privilege matrix §12; no keys; secrets only in Secret Manager. *Rollback:* `gcloud run services update … --max-instances=0` / previous revision; disable scheduler job; delete `test/` prefix.
+**Stage C — Provision and deploy (cloud; every command approved).** *Scope:* no new API; deployer SA + WIF, secrets (3), Firestore index/rules/TTL, Cloud Run deploy via GitHub Actions, monitoring alerts, kill-switch rehearsal; integration tests (row set I) against a `test/` namespace. *Deps:* B. *Acceptance:* `/healthz` live; deploy by push; rollback by revision verified; alerts fire in a drill; integration rows green. *Cost:* ≈ $0 (+ $1.50 fixed). *Security:* least-privilege matrix §12; no keys; secrets only in Secret Manager. *Rollback:* `gcloud run services update … --max-instances=0` / previous revision; delete `test/` prefix.
 
 **Stage D — App Store Connect drafts + Sandbox.** *Scope:* group, 6 products (Max later), prices, Starter intro offer, Family Sharing off, ASSN V2 URLs (prod+sandbox), sandbox testers; confirm Apple's notification retry schedule. *Deps:* C. *Acceptance:* sandbox purchase/renewal/cancel/expire/refund observed in the live service (rows 13–15, 22). *Tests:* B + `.storekit` config. *Cost:* $0. *Security:* products in "Missing Metadata"/not for sale. *Rollback:* delete drafts via API.
 
@@ -568,7 +565,7 @@ Estimate: A–B ≈ 2 weeks, C–D ≈ 1 week, E–H ≈ 4 weeks, I–J ≈ 1.5 
 
 ## 18. Decisions needing your confirmation (defaults assumed unless you object)
 
-1. **Cloud Scheduler, one job** for deterministic, safeguarded deletion (default **yes**; alternative opportunistic-only = no guarantee).
+1. ~~Cloud Scheduler~~ — **dropped (2026-11-13)**: deletion is opportunistic; the baseline stays at four services.
 2. **Recovery key** strongly encouraged but skippable (default); alternative mandatory.
 3. **Reactivation after deletion started** ⇒ new empty library (default).
 4. **Billing grace period** 16 days in App Store Connect (default).

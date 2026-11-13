@@ -38,7 +38,7 @@ VPC connectors / NAT, Cloud KMS (encryption is on the Mac), Memorystore, BigQuer
 sinks, Storage Transfer, Workflows, API Gateway.
 
 What replaces them:
-- **Scheduler: one job, justified (revised 2026-11-13).** Opportunistic sweeps alone cannot guarantee day-60 deletion, so a single Cloud Scheduler job (free, 3 per billing account) calls an OIDC-authenticated `/internal/sweep` hourly; sweeps still also run opportunistically. Originally: retention is enforced *opportunistically*: the entitlement doc carries a
+- **No Scheduler (decided 2026-11-13).** Retention is enforced *opportunistically*, inside Apple notifications and a fraction of sessions, by a guarded sweeper (asks Apple first, stops on any doubt, circuit breaker). Deletion happens 81–201 days after a subscription ends, so a day's delay costs cents. The baseline stays at four services. (An earlier revision proposed one Scheduler job; it was dropped.)
   `deleteAfter` date; any request the server handles (and every Apple webhook) sweeps at most a handful of due
   accounts and deletes their prefix. A lapsed user's data costs about two cents a month, so "eventually" is fine.
   An explicit admin sweep is one `curl` for the odd day it is needed.
