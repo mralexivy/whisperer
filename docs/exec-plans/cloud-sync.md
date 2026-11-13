@@ -1,5 +1,7 @@
 # Whisperer Cloud — paid, end-to-end encrypted history sync
 
+> **Superseded in detail by [cloud-sync-implementation.md](cloud-sync-implementation.md)** (2026-11-13): identity, discovery, Apple integration, quotas, key recovery, retention, costs and stages are specified there. Corrections to this document: Firestore's free tier covers ~300–400 subscribers (not ~10k); Cloud Run is ≈ $35/mo at 10k (not < $10); the App Store Server API needs an In-App Purchase key (3 secrets, not 2); one Cloud Scheduler job is justified for deterministic deletion.
+
 Status: **plan, nothing built** (2026-11-12). Scope: a subscription (StoreKit) that keeps a user's
 history — dictations, meetings, recordings, dictionary, records — in sync across their Macs, on
 Google Cloud, with a small Go service in this repo. Builds on `HistoryArchive` (the export/import
@@ -25,8 +27,8 @@ exactly **four things**, all scale-to-zero or pay-per-use:
 |---|---|---|
 | **Cloud Run** (1 service, Go) | the control plane: verify Apple purchases, meter quotas, sign URLs | $0 idle; request-based CPU only while a request runs; free tier 2 M requests / 180k vCPU-s a month |
 | **Cloud Storage** (1 bucket) | all user data, end-to-end encrypted | $/GB-month + operations + egress (the only line that can grow with usage) |
-| **Firestore** (1 database) | entitlements + usage counters, a few KB per payer | inside the free tier (1 GiB, 50k reads / 20k writes a day) for the first ~10k payers |
-| **Secret Manager** (≤ 2 secrets) | Apple key, session-signing key | ~$0.06 per secret-version a month |
+| **Firestore** (1 database) | entitlements + usage counters, a few KB per payer | free tier (1 GiB, 50k reads / 20k writes a day) covers only the first ~300–400 subscribers; ≈ $1.4/mo at 1,000, ≈ $23/mo at 10,000 (validated in `cloud-sync-implementation.md` §16) |
+| **Secret Manager** (3 secrets) | session-signing key, uid secret, App Store Server API (In-App Purchase) key | ~$0.06 per secret-version a month |
 
 (plus Artifact Registry for one 15 MB image — pennies — and IAM, which is free.)
 
@@ -36,7 +38,7 @@ VPC connectors / NAT, Cloud KMS (encryption is on the Mac), Memorystore, BigQuer
 sinks, Storage Transfer, Workflows, API Gateway.
 
 What replaces them:
-- **No Scheduler / jobs.** Retention is enforced *opportunistically*: the entitlement doc carries a
+- **Scheduler: one job, justified (revised 2026-11-13).** Opportunistic sweeps alone cannot guarantee day-60 deletion, so a single Cloud Scheduler job (free, 3 per billing account) calls an OIDC-authenticated `/internal/sweep` hourly; sweeps still also run opportunistically. Originally: retention is enforced *opportunistically*: the entitlement doc carries a
   `deleteAfter` date; any request the server handles (and every Apple webhook) sweeps at most a handful of due
   accounts and deletes their prefix. A lapsed user's data costs about two cents a month, so "eventually" is fine.
   An explicit admin sweep is one `curl` for the odd day it is needed.
@@ -120,7 +122,7 @@ fix is the allowance, not the price.
 |---|---|---|
 | Data plane | **Client ↔ GCS directly.** The server never touches a byte of user data | Bandwidth and CPU are the cost of a sync service; a control plane that only mints credentials costs ~nothing |
 | Control plane | **One Go binary on Cloud Run**, scale-to-zero, ~15 MB image | Same IAM as GCS (signed URLs through the service account, no key files), Go static binary cold-starts in ~0.1–0.3 s, pay only while a request runs. Cloud Functions (2nd gen) *is* Cloud Run; Lambda is the same price class — compute is noise either way (§3) |
-| Small server state | **Firestore (Native)**: entitlements + usage counters | Free tier (1 GiB, 50k reads / 20k writes a day) covers the first ~10k payers; no database to run |
+| Small server state | **Firestore (Native)**: entitlements + usage counters | Free tier covers only the first ~300–400 subscribers (not 10k — corrected); cost is ≈ $23/mo at 10k; no database to run |
 | Identity | **No accounts.** The user is the Apple subscription (`originalTransactionId`), proven by StoreKit's signed transaction | Keeps "there is no Whisperer account" (App Review 4.8 does not apply), works on every Mac signed into the same Apple ID, nothing to log in to |
 | Privacy | **End-to-end encrypted** with a key in iCloud Keychain | Voice recordings and meeting transcripts are the most sensitive data we hold. We cannot read it, so a breach, a subpoena or a rogue engineer exposes nothing. It is also the headline feature |
 | Pricing | **Four plans, each 5× the last** (5 / 25 / 100 / 500 GB) from **$0.99/mo**, one Apple subscription group | Starts at a few dollars and grows with the library; worst case (a user fills the plan *and* uses the whole download allowance every month) still leaves **≥ 40–55 % after Apple's 15 %**, typical users ≈ 95 % — see *Plans and margins* |
