@@ -200,14 +200,26 @@ Return codes: bad signature ⇒ 400; not ours ⇒ 200 (Apple must not retry); tr
 
 ```
  active ──(autoRenew off)──▶ active … ──(expiresAt)──▶ [grace] ──▶ expired ──┐
-   ▲                                                      │                  │ readOnly 60 days
+   ▲                                                      │                  │ readOnly: plan window
    │ DID_RENEW / resubscribe                              ▼                  ▼
    └────────── (retention=scheduled → cancel) ◀──── scheduled ──(deleteAfter, Apple re-check)──▶ deleting ──▶ deleted
                                                                                                     │
         reactivation while deleting/deleted ──▶ NEW epoch, empty library; old epoch deletion continues ┘
 ```
 
-- **Day 60 starts** at `accessEnd = max(expiresAt, graceUntil)` (or `revokedAt`); `deleteAfter = accessEnd + 60 d`. Billing-retry accounts keep that clock; if Apple recovers payment before deletion, `DID_RENEW` cancels it.
+- **Principle: a paying user's data is never touched; a lapsed user's data is deleted late, never early.** Deleting is free (Class A/B ops only for the LIST, ≈ $0.005 per 1,000 objects), so batching deletions saves nothing; the only cost is *holding* the bytes (≈ $0.013/GB-month blended). Waiting is therefore a cheap, deliberate purchase of safety, and the window is sized to what the user stands to lose:
+
+  | Plan | Read-only window after access ends | + seal | + soft-delete | Total before bytes are gone | Cost to hold a *full* plan (typical 40 % full) |
+  |---|---|---|---|---|---|
+  | Starter 5 GB | 180 d | 14 d | 7 d | 201 d | $0.44 ($0.17) |
+  | Standard 25 GB | 120 d | 14 d | 7 d | 141 d | $1.53 ($0.61) |
+  | Large 100 GB | 90 d | 14 d | 7 d | 111 d | $4.81 ($1.92) |
+  | Max 500 GB | 60 d | 14 d | 7 d | 81 d | $17.55 ($7.02) |
+
+  Longest hold ≤ ~0.8 month of that plan's net revenue, so the 30 % margin rule still holds when every lapsed user is counted at full plan (the Go margin test is extended to include it). Implemented as `entitlement.RetentionFor(productID)` (tested; unknown product ⇒ the 60-day floor). The window runs from `accessEnd = max(expiresAt, graceUntil)` (or `revokedAt`); `deleteAfter = accessEnd + window`. Billing-retry accounts keep that clock; if Apple recovers payment before deletion, `DID_RENEW` cancels it.
+- **Three-stage deletion, each reversible until the last:** (1) *read-only window* above — data intact, export always works; (2) **seal** (14 d) — warnings escalate, uploads/downloads of audio refused, text export and the local copy on every Mac still available; (3) **soft-delete** (7 d) — objects are *not* removed yet: the account is marked `deleting-soft`, any payment or Apple-confirmed reactivation restores everything intact; only after that does the irreversible hard pass (steps below) run.
+- **Never-delete safeguards (all must hold, re-checked at the moment of each destructive step):** Apple's fresh status says expired/revoked (not active, grace, billing retry, or unknown); the last successful Apple check is < 24 h old; account state is not `active/grace/retry`; the cached entitlement agrees with Apple; the account has no purchase in the last 24 h; at most **N accounts per sweep** and a global **circuit breaker** — if more than max(5, 2 % of accounts) become due in one run, or the sweep sees an abnormal due-count spike (e.g. a bug mis-marking active users), it stops and alerts instead of deleting; a dry-run mode lists what it *would* delete and is the default for the first month in production.
+- **User warnings** (in-app and by the Mac app's notifications; the server exposes `retention.deleteAfter` and `stage`): at lapse, 30 d, 7 d and 1 d before the seal and before the hard delete; the Cloud page shows the exact date and a one-tap **Export everything** / **Resubscribe**. Local data on Macs is never touched by retention.
 - **Trigger:** Cloud Scheduler → `POST /internal/sweep` hourly (OIDC; audience = service URL; service account `whisperer-scheduler@…` with no other role), plus opportunistic 1-in-20 sweeps inside normal requests. Sweep is bounded (≤ 5 accounts × ~500 objects, 50 s) and restartable.
 - **Deletion algorithm** (idempotent; every step re-checks state inside a transaction):
   1. select `retention.state=scheduled AND deleteAfter ≤ now`;
@@ -556,13 +568,14 @@ Estimate: A–B ≈ 2 weeks, C–D ≈ 1 week, E–H ≈ 4 weeks, I–J ≈ 1.5 
 
 ## 18. Decisions needing your confirmation (defaults assumed unless you object)
 
-1. **Cloud Scheduler, one job** for deterministic day-60 deletion (default **yes**; alternative opportunistic-only = no guarantee).
+1. **Cloud Scheduler, one job** for deterministic, safeguarded deletion (default **yes**; alternative opportunistic-only = no guarantee).
 2. **Recovery key** strongly encouraged but skippable (default); alternative mandatory.
 3. **Reactivation after deletion started** ⇒ new empty library (default).
 4. **Billing grace period** 16 days in App Store Connect (default).
 5. **Device caps** Starter 2 / Standard 4 / Large 8; minimum poll 20 s (default).
 6. **Sandbox**: separate roots, limits ÷ 10, 14-day retention, 200-account cap (default).
-7. Add the **In-App Purchase key** (Stage 0) — required for Server API reconciliation.
+7. **Retention windows** 180/120/90/60 days by plan + 14 d seal + 7 d soft-delete (default; shorter saves cents, longer costs ~$0.013/GB-month).
+8. Add the **In-App Purchase key** (Stage 0) — required for Server API reconciliation.
 
 ## 19. What changes in existing code/docs when implementation is approved (not now)
 

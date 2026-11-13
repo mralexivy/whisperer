@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mralexivy/whisperer/server/internal/apple"
+	"github.com/mralexivy/whisperer/server/internal/quota"
 )
 
 // State is what a user may do right now.
@@ -23,8 +24,24 @@ const (
 	Deleted State = "deleted" // past retention: the data is gone
 )
 
-// Retention is how long a lapsed user keeps read access before their data is deleted.
+// Retention is the shortest time a lapsed user keeps read access before their data is deleted; bigger
+// plans hold more data worth keeping and cost little more to hold, so they get longer (RetentionFor).
 const Retention = 60 * 24 * time.Hour
+
+// retentionDays is the read-only window by plan. Waiting costs only storage (~$0.013/GB-month) while
+// deleting early can lose a customer's data for good, so the window is sized to what a user stands to lose,
+// capped so a full plan never costs more than about a month of net revenue to hold (see cloud-sync-implementation.md §7).
+var retentionDays = map[string]int{"starter": 180, "standard": 120, "large": 90, "max": 60}
+
+// RetentionFor is how long the product's subscriber keeps read access after their paid period ends.
+func RetentionFor(productID string) time.Duration {
+	if p, ok := quota.ForProduct(quota.ProductPrefix, productID); ok {
+		if d, ok := retentionDays[p.Name]; ok {
+			return time.Duration(d) * 24 * time.Hour
+		}
+	}
+	return Retention
+}
 
 // Entitlement is one subscriber, identified by the Apple subscription (never by an account).
 type Entitlement struct {
@@ -45,6 +62,9 @@ type Entitlement struct {
 	DataDeletedAt time.Time `json:"dataDeletedAt,omitempty" firestore:"dataDeletedAt"`
 }
 
+// retention is this subscriber's read-only window, by the plan they last held.
+func (e Entitlement) retention() time.Duration { return RetentionFor(e.ProductID) }
+
 // paidUntil is the end of the last period the user is entitled to write in.
 func (e Entitlement) paidUntil() time.Time {
 	if e.GraceUntil.After(e.ExpiresAt) {
@@ -59,7 +79,7 @@ func (e Entitlement) StateAt(now time.Time) State {
 		return Deleted
 	}
 	if !e.RevokedAt.IsZero() {
-		if now.Before(e.RevokedAt.Add(Retention)) {
+		if now.Before(e.RevokedAt.Add(e.retention())) {
 			return Lapsed
 		}
 		return Deleted
@@ -69,7 +89,7 @@ func (e Entitlement) StateAt(now time.Time) State {
 		return Active
 	case now.Before(e.GraceUntil):
 		return Grace
-	case now.Before(e.paidUntil().Add(Retention)):
+	case now.Before(e.paidUntil().Add(e.retention())):
 		return Lapsed
 	}
 	return Deleted
@@ -121,11 +141,11 @@ func FromTransaction(existing *Entitlement, uid string, tx apple.Transaction, no
 func (e Entitlement) withDeleteAfter() Entitlement {
 	switch {
 	case !e.RevokedAt.IsZero():
-		e.DeleteAfter = e.RevokedAt.Add(Retention)
+		e.DeleteAfter = e.RevokedAt.Add(e.retention())
 	case e.paidUntil().IsZero():
 		e.DeleteAfter = time.Time{}
 	default:
-		e.DeleteAfter = e.paidUntil().Add(Retention)
+		e.DeleteAfter = e.paidUntil().Add(e.retention())
 	}
 	return e
 }
