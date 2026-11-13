@@ -5,6 +5,16 @@ history — dictations, meetings, recordings, dictionary, records — in sync ac
 Google Cloud, with a small Go service in this repo. Builds on `HistoryArchive` (the export/import
 format and merge rules already shipped).
 
+## Provisioned (2026-11-13, project `whisperer-491716`, region `us-central1`)
+
+Created by hand with `gcloud`, nothing deployed and nothing billing beyond pennies yet:
+- APIs: Cloud Run, Cloud Build, Artifact Registry, Secret Manager, IAM (+ Credentials), Firestore, Scheduler, STS, Resource Manager, Billing Budgets.
+- Bucket `gs://whisperer-491716-user-data` — private (public access prevention enforced, uniform access), soft delete off (a deletion is a deletion), lifecycle: `*.pack` audio Standard → Nearline after 30 days.
+- Service account `whisperer-api@whisperer-491716.iam.gserviceaccount.com` (Cloud Run runtime): `storage.objectAdmin` on that bucket only, `datastore.user`, and `serviceAccountTokenCreator` on itself (for signed URLs). No key file exists or should.
+- Artifact Registry Docker repo `whisperer`; Firestore `(default)`, native mode.
+- Budget "Whisperer Cloud" on billing account `014CFB-C8ABCF-52C29A` (currency **ILS**): 700 ILS with alerts at 5 % / 25 % / 100 % ≈ $10 / $50 / $200.
+- Still to do: Workload Identity Federation for GitHub deploys, the Go service, Cloud Run, Secret Manager entries (Apple keys), the App Store Connect subscription group and products. App Store Connect has no in-app purchases yet (the Pro Pack in the app does not exist there either); **do not release — target is the next version.**
+
 ## 0. Recommendation in one page
 
 | Decision | Choice | Why |
