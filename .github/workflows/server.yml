@@ -1,0 +1,26 @@
+name: server
+
+# Tests for the Whisperer Cloud server (server/). No deploy here: deploys come later through Workload
+# Identity Federation. Runs only when the server or this workflow changes, so it costs nothing otherwise.
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", ".github/workflows/server.yml"]
+  pull_request:
+    paths: ["server/**", ".github/workflows/server.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+      - run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - run: go test -race ./...
+      - run: CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /tmp/api ./cmd/api
