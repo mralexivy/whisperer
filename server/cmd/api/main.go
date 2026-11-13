@@ -32,6 +32,7 @@ import (
 	"github.com/mralexivy/whisperer/server/internal/entitlement"
 	"github.com/mralexivy/whisperer/server/internal/quota"
 	"github.com/mralexivy/whisperer/server/internal/server"
+	"github.com/mralexivy/whisperer/server/internal/syncplane"
 )
 
 func main() {
@@ -80,7 +81,9 @@ func run(log *slog.Logger) error {
 	srv := server.New(server.Config{
 		BundleID: env("BUNDLE_ID", "com.ivy.whisperer"), ProductPrefix: env("PRODUCT_PREFIX", quota.ProductPrefix),
 		AllowSandbox: os.Getenv("ALLOW_SANDBOX") == "1", UIDSecret: uidSecret,
-	}, verifier, store, signer, nil, log)
+	}, verifier, store, signer, log)
+	srv.WithSync(&syncplane.Service{Store: syncplane.NewMemoryStore(), Blobs: syncplane.NewMemoryBlobs(), Root: "whisperer"})
+	log.Warn("sync runs on in-memory fakes until the Firestore and Cloud Storage backends are configured")
 
 	httpSrv := &http.Server{
 		Addr: ":" + env("PORT", "8080"), Handler: srv.Handler(),

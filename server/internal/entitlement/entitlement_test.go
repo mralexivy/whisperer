@@ -31,7 +31,9 @@ func TestLifecycleActiveGraceLapsedDeleted(t *testing.T) {
 		{t0.Add(day(30) + time.Hour), entitlement.Grace, true, true},
 		{t0.Add(day(46) + time.Hour), entitlement.Lapsed, false, true},
 		{t0.Add(day(46 + 59)), entitlement.Lapsed, false, true},
-		{t0.Add(day(46+60) + time.Hour), entitlement.Deleted, false, false},
+		{t0.Add(day(46+60) + time.Hour), entitlement.Sealed, false, true},
+		{t0.Add(day(46+60+14) + time.Hour), entitlement.SoftDeleted, false, false},
+		{t0.Add(day(46+60+14+7) + time.Hour), entitlement.Deleted, false, false},
 	}
 	for _, c := range cases {
 		if got := e.StateAt(c.at); got != c.state || e.CanWrite(c.at) != c.write || e.CanRead(c.at) != c.read {
@@ -114,5 +116,32 @@ func TestMemoryStoreFindsDueAndByTransaction(t *testing.T) {
 	got, ok, _ := m.ByOriginalTransactionID(ctx, "2000")
 	if !ok || got.UID != "fresh" {
 		t.Fatal("lookup by original transaction id")
+	}
+}
+
+func TestNothingIsDueUntilEveryReversibleStageHasPassed(t *testing.T) {
+	e := entitlement.FromTransaction(nil, "u", tx(t0), t0) // unknown product: 60-day window
+	for _, c := range []struct {
+		after int
+		due   bool
+	}{{59, false}, {61, false}, {74, false}, {80, false}, {82, true}} {
+		if got := e.Due(t0.Add(day(c.after))); got != c.due {
+			t.Errorf("day %d: Due = %v, want %v", c.after, got, c.due)
+		}
+	}
+	if want := t0.Add(day(60 + 14 + 7)); !e.HardDeleteAt().Equal(want) {
+		t.Errorf("HardDeleteAt = %v, want %v", e.HardDeleteAt(), want)
+	}
+}
+
+func TestAPaymentDuringSoftDeleteRestoresEverything(t *testing.T) {
+	e := entitlement.FromTransaction(nil, "u", tx(t0), t0)
+	at := t0.Add(day(60 + 14 + 3)) // soft-deleted
+	if e.StateAt(at) != entitlement.SoftDeleted {
+		t.Fatal("setup: not soft-deleted")
+	}
+	e = entitlement.FromTransaction(&e, "u", tx(at.Add(day(30))), at)
+	if e.StateAt(at.Add(time.Hour)) != entitlement.Active || e.Due(at.Add(day(60))) {
+		t.Fatal("a renewal must bring the account fully back and cancel the pending delete")
 	}
 }

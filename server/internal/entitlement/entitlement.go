@@ -18,10 +18,20 @@ import (
 type State string
 
 const (
-	Active  State = "active"  // paid up: read and write
-	Grace   State = "grace"   // billing retry inside Apple's grace period: read and write
-	Lapsed  State = "lapsed"  // not paying: read and export only
-	Deleted State = "deleted" // past retention: the data is gone
+	Active State = "active" // paid up: read and write
+	Grace  State = "grace"  // billing retry inside Apple's grace period: read and write
+	Lapsed State = "lapsed" // not paying: read and export only
+	// Sealed is the last warning stage after the read-only window: text can still be exported, audio is refused.
+	Sealed State = "sealed"
+	// SoftDeleted keeps every object but locks the account; a payment or an Apple-confirmed reactivation restores it whole.
+	SoftDeleted State = "soft_deleted"
+	Deleted     State = "deleted" // past every stage: the data is gone
+)
+
+// Seal and SoftDelete are the two reversible stages between the read-only window and the irreversible delete.
+const (
+	Seal       = 14 * 24 * time.Hour
+	SoftDelete = 7 * 24 * time.Hour
 )
 
 // Retention is the shortest time a lapsed user keeps read access before their data is deleted; bigger
@@ -58,6 +68,13 @@ type Entitlement struct {
 	UpdatedAt         time.Time `json:"updatedAt" firestore:"updatedAt"`
 	// DeleteAfter is the indexed moment the retention sweep looks for. Zero while the user is paid up.
 	DeleteAfter time.Time `json:"deleteAfter,omitempty" firestore:"deleteAfter"`
+	// DeletingSince is set when the irreversible delete begins; PassOneDoneAt when the first full pass finished
+	// (a second pass, after in-flight upload URLs have expired, catches stragglers).
+	DeletingSince  time.Time `json:"deletingSince,omitempty" firestore:"deletingSince"`
+	PassOneDoneAt  time.Time `json:"passOneDoneAt,omitempty" firestore:"passOneDoneAt"`
+	DeletedObjects int       `json:"deletedObjects,omitempty" firestore:"deletedObjects"`
+	// LastVerifiedAt is the last time Apple confirmed this subscription's status to us.
+	LastVerifiedAt time.Time `json:"lastVerifiedAt,omitempty" firestore:"lastVerifiedAt"`
 	// DataDeletedAt is set once the sweep has removed the user's data.
 	DataDeletedAt time.Time `json:"dataDeletedAt,omitempty" firestore:"dataDeletedAt"`
 }
@@ -78,19 +95,37 @@ func (e Entitlement) StateAt(now time.Time) State {
 	if !e.DataDeletedAt.IsZero() {
 		return Deleted
 	}
-	if !e.RevokedAt.IsZero() {
-		if now.Before(e.RevokedAt.Add(e.retention())) {
-			return Lapsed
+	if e.RevokedAt.IsZero() {
+		switch {
+		case now.Before(e.ExpiresAt):
+			return Active
+		case now.Before(e.GraceUntil):
+			return Grace
 		}
-		return Deleted
 	}
+	return e.lapsedStage(now)
+}
+
+// windowEnd is when the read-only window closes.
+func (e Entitlement) windowEnd() time.Time {
+	if !e.RevokedAt.IsZero() {
+		return e.RevokedAt.Add(e.retention())
+	}
+	return e.paidUntil().Add(e.retention())
+}
+
+// HardDeleteAt is the earliest moment the irreversible delete may run: window + seal + soft-delete.
+func (e Entitlement) HardDeleteAt() time.Time { return e.windowEnd().Add(Seal + SoftDelete) }
+
+func (e Entitlement) lapsedStage(now time.Time) State {
+	end := e.windowEnd()
 	switch {
-	case now.Before(e.ExpiresAt):
-		return Active
-	case now.Before(e.GraceUntil):
-		return Grace
-	case now.Before(e.paidUntil().Add(e.retention())):
+	case now.Before(end):
 		return Lapsed
+	case now.Before(end.Add(Seal)):
+		return Sealed
+	case now.Before(end.Add(Seal + SoftDelete)):
+		return SoftDeleted
 	}
 	return Deleted
 }
@@ -102,10 +137,10 @@ func (e Entitlement) CanWrite(now time.Time) bool {
 
 func (e Entitlement) CanRead(now time.Time) bool {
 	s := e.StateAt(now)
-	return s == Active || s == Grace || s == Lapsed
+	return s == Active || s == Grace || s == Lapsed || s == Sealed
 }
 
-// Due reports whether the retention sweep should delete this user's data at `now`.
+// Due reports whether the irreversible delete is allowed at `now` (the sweep still re-checks with Apple).
 func (e Entitlement) Due(now time.Time) bool {
 	return e.DataDeletedAt.IsZero() && e.StateAt(now) == Deleted
 }
@@ -245,4 +280,16 @@ func (m *Memory) Due(_ context.Context, now time.Time, limit int) ([]Entitlement
 		due = due[:limit]
 	}
 	return due, nil
+}
+
+// Refreshed folds Apple's authoritative answer into the entitlement: the expiry never moves backwards.
+func (e Entitlement) Refreshed(expires, graceUntil time.Time, now time.Time) Entitlement {
+	if expires.After(e.ExpiresAt) {
+		e.ExpiresAt = expires
+	}
+	if graceUntil.After(e.GraceUntil) {
+		e.GraceUntil = graceUntil
+	}
+	e.LastVerifiedAt, e.UpdatedAt = now, now
+	return e.withDeleteAfter()
 }

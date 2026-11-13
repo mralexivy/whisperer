@@ -2,13 +2,11 @@ package server_test
 
 import (
 	"bytes"
-	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -21,26 +19,14 @@ import (
 
 var now = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 
-type deleter struct {
-	mu      sync.Mutex
-	deleted []string
-}
-
-func (d *deleter) DeleteUser(_ context.Context, uid string) error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.deleted = append(d.deleted, uid)
-	return nil
-}
-
 type rig struct {
-	t     *testing.T
-	apple *testkit.Apple
-	srv   *server.Server
-	h     http.Handler
-	store *entitlement.Memory
-	del   *deleter
-	clock *time.Time
+	t      *testing.T
+	apple  *testkit.Apple
+	srv    *server.Server
+	h      http.Handler
+	store  *entitlement.Memory
+	clock  *time.Time
+	signer *auth.Signer
 }
 
 func newRig(t *testing.T, allowSandbox bool) *rig {
@@ -49,14 +35,14 @@ func newRig(t *testing.T, allowSandbox bool) *rig {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	_ = pub
 	store := entitlement.NewMemory()
-	del := &deleter{}
 	cfg := server.Config{
 		BundleID: "com.ivy.whisperer", AllowSandbox: allowSandbox, UIDSecret: []byte("test-secret"),
 		Now: func() time.Time { return clock },
 	}
 	a.Now = clock
-	s := server.New(cfg, a.Verifier, store, auth.NewSigner(priv, "k1"), del, nil)
-	return &rig{t: t, apple: a, srv: s, h: s.Handler(), store: store, del: del, clock: &clock}
+	signer := auth.NewSigner(priv, "k1")
+	s := server.New(cfg, a.Verifier, store, signer, nil)
+	return &rig{t: t, apple: a, srv: s, h: s.Handler(), store: store, clock: &clock, signer: signer}
 }
 
 func (r *rig) tx(overrides map[string]any) string {
@@ -240,27 +226,6 @@ func TestARenewalNotificationCreatesAMissingAccount(t *testing.T) {
 	}
 }
 
-func TestRetentionSweepDeletesOnlyThoseWhoseTimeIsUp(t *testing.T) {
-	r := newRig(t, false)
-	old := entitlement.FromTransaction(nil, "gone", entitlementTx("7000", now.Add(-300*24*time.Hour)), now)
-	live := entitlement.FromTransaction(nil, "live", entitlementTx("7001", now.Add(30*24*time.Hour)), now)
-	_ = r.store.Put(t.Context(), old)
-	_ = r.store.Put(t.Context(), live)
-	r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": notification(r, "DID_RENEW", "sw-1", r.tx(map[string]any{"originalTransactionId": "7002"}), now)}, "")
-	if len(r.del.deleted) != 1 || r.del.deleted[0] != "gone" {
-		t.Fatalf("deleted = %v", r.del.deleted)
-	}
-	got, _, _ := r.store.Get(t.Context(), "gone")
-	if got.DataDeletedAt.IsZero() {
-		t.Fatal("deletion not recorded")
-	}
-	r.del.deleted = nil
-	r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": notification(r, "DID_RENEW", "sw-2", r.tx(map[string]any{"originalTransactionId": "7002"}), now)}, "")
-	if len(r.del.deleted) != 0 {
-		t.Fatalf("a deleted user must not be deleted twice: %v", r.del.deleted)
-	}
-}
-
 func TestRateLimitBluntsARunawayClient(t *testing.T) {
 	r := newRig(t, false)
 	limited := 0
@@ -291,4 +256,10 @@ func TestAnUpgradeChangesThePlanOnTheNextSession(t *testing.T) {
 	if second["plan"].(map[string]any)["name"] != "large" {
 		t.Fatalf("after upgrade: %v", second["plan"])
 	}
+}
+
+// freshToken is a session token issued at the rig's current clock for the standard test subscription.
+func (r *rig) freshToken() string {
+	tok, _ := r.signer.Issue(r.srv.UID("1000"), "mac-1", false, *r.clock)
+	return tok
 }
