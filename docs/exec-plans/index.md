@@ -2,6 +2,7 @@
 
 ## Active Plans
 
+- [Whisperer Cloud — implementation plan (for approval)](cloud-sync-implementation.md) — the concrete build: cloud layout, API, Mac pieces, App Store Connect setup, milestones A–I
 - [Whisperer Cloud — paid, end-to-end encrypted history sync](cloud-sync.md) — plan: GCS + a small Go
   service on Cloud Run, StoreKit subscription, pricing and unit economics; nothing built yet
 - [Live transcript paragraphs](live-transcript-paragraphs.md) — implemented 2026-11-12 (timed words,
