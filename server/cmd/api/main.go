@@ -4,7 +4,7 @@
 //
 //	PORT                     listen port (Cloud Run sets it)
 //	BUNDLE_ID                the app's bundle id (default com.ivy.whisperer)
-//	PRODUCT_IDS              comma-separated subscription product ids that unlock Whisperer Cloud
+//	PRODUCT_PREFIX           product ids are <prefix><tier>.<monthly|yearly> (default com.ivy.whisperer.cloud.)
 //	ALLOW_SANDBOX            "1" accepts Sandbox/Xcode purchases (TestFlight, development)
 //	UID_SECRET               HMAC secret that turns an Apple subscription into an opaque user id
 //	SESSION_SIGNING_KEY      base64 32-byte Ed25519 seed for the 1-hour session tokens
@@ -24,13 +24,13 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
 	"github.com/mralexivy/whisperer/server/internal/apple"
 	"github.com/mralexivy/whisperer/server/internal/auth"
 	"github.com/mralexivy/whisperer/server/internal/entitlement"
+	"github.com/mralexivy/whisperer/server/internal/quota"
 	"github.com/mralexivy/whisperer/server/internal/server"
 )
 
@@ -73,19 +73,12 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("trusting Apple Root CA - G3", "sha256", apple.RootFingerprint())
 
-	products := map[string]bool{}
-	for _, p := range strings.Split(env("PRODUCT_IDS", "com.ivy.whisperer.cloud.monthly,com.ivy.whisperer.cloud.yearly"), ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			products[p] = true
-		}
-	}
-
 	// The Firestore store and the Cloud Storage deleter arrive with the storage milestone.
 	store := entitlement.NewMemory()
 	log.Warn("using the in-memory entitlement store: state is lost on restart")
 
 	srv := server.New(server.Config{
-		BundleID: env("BUNDLE_ID", "com.ivy.whisperer"), ProductIDs: products,
+		BundleID: env("BUNDLE_ID", "com.ivy.whisperer"), ProductPrefix: env("PRODUCT_PREFIX", quota.ProductPrefix),
 		AllowSandbox: os.Getenv("ALLOW_SANDBOX") == "1", UIDSecret: uidSecret,
 	}, verifier, store, signer, nil, log)
 

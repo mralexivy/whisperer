@@ -76,6 +76,44 @@ them goes through our server, which counts):
   AES-256-GCM. A full bucket leak exposes ciphertext only.
 - Logs carry ids and sizes, never content; deletion is real (no soft delete on the bucket).
 
+## Plans and margins (decided 2026-11-13: App Store only, four tiers)
+
+One subscription group, **"Whisperer Cloud"**, three launch tiers plus Max held back. A single group means Apple
+handles upgrades (immediately, pro-rated) and downgrades (at renewal) and nobody ever pays twice.
+
+| Plan | Stored | Downloads / month | Monthly | Yearly (2 months free) | Product ids |
+|---|---|---|---|---|---|
+| **Starter** | 5 GB | 2 GB | **$0.99** | **$9.99** | `com.ivy.whisperer.cloud.starter.monthly` / `.yearly` |
+| **Standard** | 25 GB | 6 GB | **$2.99** | **$29.99** | `…standard.monthly` / `.yearly` |
+| **Large** | 100 GB | 15 GB | **$7.99** | **$79.99** | `…large.monthly` / `.yearly` |
+| Max (not launched) | 500 GB | 35 GB | $24.99 | $249.99 | `…max.monthly` / `.yearly` |
+
+- Free month on **Starter only** (an Apple introductory offer, once per Apple ID per group): it costs us about
+  three cents; a free month of Large would cost more, so it has none. Upgrading after the trial is the funnel.
+- **Download allowance is the lever, not storage** (storage ≈ $0.013/GB-month blended; a downloaded GB costs
+  $0.12). The allowance can be tightened or loosened server-side any day without touching Apple's prices.
+
+Cost to serve at the **limit of every dimension** (storage full + whole allowance downloaded, every month) and at
+a typical user (20 % of storage, 5 % of the allowance), list prices, $0.01/month of operations:
+
+| Plan | Worst-case cost | Margin after Apple 15 % — monthly / yearly | Same at Apple 30 % | Typical cost → margin |
+|---|---|---|---|---|
+| Starter | $0.32 | 63 % / 55 % | 55 % / 46 % | $0.04 → 96 % |
+| Standard | $1.05 | 58 % / 50 % | 50 % / 40 % | $0.14 → 96 % |
+| Large | $3.11 | 54 % / 45 % | 44 % / 33 % | $0.42 → 95 % |
+| Max | $10.71 | 50 % / 40 % | 39 % / 27 % | $1.67 → 93 % |
+
+**Margin rules, enforced in code** (`server/internal/quota`, a test fails the build if any plan's worst-case
+margin at list prices drops under 30 % after Apple's 15 %): every tier is ≥ 40 % worst-case, ≥ 90 % typical.
+If the Small Business Program is not in effect Apple takes 30 % in year one and Max-yearly falls to 27 %: the
+fix is the allowance, not the price.
+
+- **Downgrade:** a user above the new plan's size keeps everything and can read, download and delete, but cannot
+  upload until they are under it. We never delete on a downgrade.
+- **Upgrade:** takes effect at the next session; the limits come from the product id in the verified transaction.
+- **Price changes:** new Apple price points apply to new subscribers; existing ones are asked to consent. Keep
+  the plan names, change the allowances first.
+
 ## 0. Recommendation in one page
 
 | Decision | Choice | Why |
@@ -85,7 +123,7 @@ them goes through our server, which counts):
 | Small server state | **Firestore (Native)**: entitlements + usage counters | Free tier (1 GiB, 50k reads / 20k writes a day) covers the first ~10k payers; no database to run |
 | Identity | **No accounts.** The user is the Apple subscription (`originalTransactionId`), proven by StoreKit's signed transaction | Keeps "there is no Whisperer account" (App Review 4.8 does not apply), works on every Mac signed into the same Apple ID, nothing to log in to |
 | Privacy | **End-to-end encrypted** with a key in iCloud Keychain | Voice recordings and meeting transcripts are the most sensitive data we hold. We cannot read it, so a breach, a subpoena or a rogue engineer exposes nothing. It is also the headline feature |
-| Pricing | **$1.99/mo or $14.99/yr**, one tier, 10 GB + 5 GB/mo restore traffic | ≥ 90 % gross margin for a typical user after Apple's 15 %; 57 % / 31 % in the worst case of a maxed-out user (§5) |
+| Pricing | **Four plans, each 5× the last** (5 / 25 / 100 / 500 GB) from **$0.99/mo**, one Apple subscription group | Starts at a few dollars and grows with the library; worst case (a user fills the plan *and* uses the whole download allowance every month) still leaves **≥ 40–55 % after Apple's 15 %**, typical users ≈ 95 % — see *Plans and margins* |
 | The real cost risk | **Egress** (downloads), not storage or compute | $0.12/GB: restoring 10 GB to a new Mac costs more than the user pays in a month. Controlled by lazy audio download and a monthly restore allowance (§5.3) |
 | Monorepo | `server/` (Go module) next to the app; deploy from GitHub Actions through Workload Identity Federation (no Cloud Build) | One repo, one review, API and client change together |
 
@@ -287,7 +325,7 @@ Four guards, all cheap to build:
 | $2.99/mo | 99 % | 97 % | 87 % | 39 % |
 | **$14.99/yr** (= $1.25/mo, net $1.06) | **98 %** | **93 %** | **68 %** | −45 % |
 
-Recommendation: **one plan, $1.99/mo or $14.99/yr** (annual = the Pro price point and
+Earlier single-plan sketch (superseded by *Plans and margins*): **one plan, $1.99/mo or $14.99/yr** (annual = the Pro price point and
 ~37 % off), **10 GB storage + 5 GB/month restore traffic included**. With those caps the
 worst possible user (10 GB stored, 5 GB downloaded every month) costs $0.73: a 57 % margin monthly,
 31 % annual. A typical user is 93–95 %. Reference points: iCloud sells 50 GB for $0.99 and 200 GB

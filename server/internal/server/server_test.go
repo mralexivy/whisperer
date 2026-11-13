@@ -52,8 +52,7 @@ func newRig(t *testing.T, allowSandbox bool) *rig {
 	del := &deleter{}
 	cfg := server.Config{
 		BundleID: "com.ivy.whisperer", AllowSandbox: allowSandbox, UIDSecret: []byte("test-secret"),
-		ProductIDs: map[string]bool{"cloud.monthly": true, "cloud.yearly": true},
-		Now:        func() time.Time { return clock },
+		Now: func() time.Time { return clock },
 	}
 	a.Now = clock
 	s := server.New(cfg, a.Verifier, store, auth.NewSigner(priv, "k1"), del, nil)
@@ -63,7 +62,7 @@ func newRig(t *testing.T, allowSandbox bool) *rig {
 func (r *rig) tx(overrides map[string]any) string {
 	p := map[string]any{
 		"originalTransactionId": "1000", "transactionId": "1001", "bundleId": "com.ivy.whisperer",
-		"productId": "cloud.monthly", "type": "Auto-Renewable Subscription", "environment": "Production",
+		"productId": "com.ivy.whisperer.cloud.standard.monthly", "type": "Auto-Renewable Subscription", "environment": "Production",
 		"expiresDate": now.Add(30 * 24 * time.Hour).UnixMilli(), "signedDate": now.UnixMilli(),
 	}
 	for k, v := range overrides {
@@ -104,7 +103,7 @@ func TestSessionThenAccount(t *testing.T) {
 	if code != 200 || acct["state"] != "active" {
 		t.Fatalf("account: %d %v", code, acct)
 	}
-	if plan := acct["plan"].(map[string]any); plan["storedBytes"].(float64) != 10*1024*1024*1024 {
+	if plan := acct["plan"].(map[string]any); plan["name"] != "standard" || plan["storedBytes"].(float64) != 25*1024*1024*1024 {
 		t.Fatalf("plan: %v", plan)
 	}
 }
@@ -279,5 +278,17 @@ func TestRateLimitBluntsARunawayClient(t *testing.T) {
 }
 
 func entitlementTx(id string, expires time.Time) apple.Transaction {
-	return apple.Transaction{OriginalTransactionID: id, ProductID: "cloud.monthly", Environment: "Production", ExpiresDate: expires.UnixMilli()}
+	return apple.Transaction{OriginalTransactionID: id, ProductID: "com.ivy.whisperer.cloud.standard.monthly", Environment: "Production", ExpiresDate: expires.UnixMilli()}
+}
+
+func TestAnUpgradeChangesThePlanOnTheNextSession(t *testing.T) {
+	r := newRig(t, false)
+	_, first := r.session(r.tx(map[string]any{"productId": "com.ivy.whisperer.cloud.starter.monthly"}), "d")
+	if first["plan"].(map[string]any)["name"] != "starter" {
+		t.Fatalf("first plan: %v", first["plan"])
+	}
+	_, second := r.session(r.tx(map[string]any{"productId": "com.ivy.whisperer.cloud.large.monthly", "transactionId": "1500"}), "d")
+	if second["plan"].(map[string]any)["name"] != "large" {
+		t.Fatalf("after upgrade: %v", second["plan"])
+	}
 }

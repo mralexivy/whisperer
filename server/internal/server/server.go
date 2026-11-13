@@ -26,11 +26,11 @@ import (
 )
 
 type Config struct {
-	BundleID     string
-	ProductIDs   map[string]bool
-	AllowSandbox bool // accept Sandbox / Xcode transactions (TestFlight, development); off in production
-	UIDSecret    []byte
-	Now          func() time.Time
+	BundleID      string
+	ProductPrefix string // product ids are <prefix><tier>.<monthly|yearly>; default quota.ProductPrefix
+	AllowSandbox  bool   // accept Sandbox / Xcode transactions (TestFlight, development); off in production
+	UIDSecret     []byte
+	Now           func() time.Time
 }
 
 // Deleter removes everything stored for a user. Cloud Storage in production.
@@ -52,6 +52,9 @@ type Server struct {
 func New(cfg Config, a *apple.Verifier, store entitlement.Store, signer *auth.Signer, deleter Deleter, log *slog.Logger) *Server {
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.ProductPrefix == "" {
+		cfg.ProductPrefix = quota.ProductPrefix
 	}
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -85,13 +88,18 @@ type sessionRequest struct {
 }
 
 type planInfo struct {
-	StoredBytes          int64 `json:"storedBytes"`
-	MonthlyDownloadBytes int64 `json:"monthlyDownloadBytes"`
-	MonthlyUploadGrants  int   `json:"monthlyUploadGrants"`
+	Name                 string `json:"name"`
+	StoredBytes          int64  `json:"storedBytes"`
+	MonthlyDownloadBytes int64  `json:"monthlyDownloadBytes"`
+	MonthlyUploadGrants  int    `json:"monthlyUploadGrants"`
 }
 
-func plan() planInfo {
-	return planInfo{quota.Plan.StoredBytes, quota.Plan.MonthlyDownloadBytes, quota.Plan.MonthlyUploadGrants}
+func planOf(p quota.Plan) planInfo {
+	return planInfo{p.Name, p.StoredBytes, p.MonthlyDownloadBytes, p.MonthlyUploadGrants}
+}
+
+func (s *Server) planFor(productID string) (quota.Plan, bool) {
+	return quota.ForProduct(s.cfg.ProductPrefix, productID)
 }
 
 type sessionResponse struct {
@@ -146,8 +154,9 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) {
 	if rand.IntN(20) == 0 {
 		s.sweep(r.Context(), 2)
 	}
+	pl, _ := s.planFor(e.ProductID)
 	writeJSON(w, 200, sessionResponse{Token: token, ExpiresAt: time.Unix(claims.Exp, 0).UTC(), State: state,
-		ReadOnly: readOnly, Plan: plan(), Subscribed: e.ExpiresAt})
+		ReadOnly: readOnly, Plan: planOf(pl), Subscribed: e.ExpiresAt})
 }
 
 // checkTransaction rejects a validly signed transaction that is not ours to serve.
@@ -155,7 +164,7 @@ func (s *Server) checkTransaction(tx apple.Transaction) (code, message string) {
 	switch {
 	case tx.BundleID != s.cfg.BundleID:
 		return "wrong_app", "this purchase belongs to another app"
-	case !s.cfg.ProductIDs[tx.ProductID]:
+	case !s.hasPlan(tx.ProductID):
 		return "wrong_product", "this purchase is not a Whisperer Cloud subscription"
 	case tx.Type != "" && tx.Type != "Auto-Renewable Subscription":
 		return "wrong_product", "this purchase is not a subscription"
@@ -164,6 +173,8 @@ func (s *Server) checkTransaction(tx apple.Transaction) (code, message string) {
 	}
 	return "", ""
 }
+
+func (s *Server) hasPlan(productID string) bool { _, ok := s.planFor(productID); return ok }
 
 // MARK: account
 
@@ -205,7 +216,8 @@ func (s *Server) handleAccount(w http.ResponseWriter, r *http.Request, c auth.Cl
 		return
 	}
 	now := s.cfg.Now()
-	resp := accountResponse{State: e.StateAt(now), PaidUntil: e.ExpiresAt, AutoRenew: e.AutoRenew, Plan: plan()}
+	pl, _ := s.planFor(e.ProductID)
+	resp := accountResponse{State: e.StateAt(now), PaidUntil: e.ExpiresAt, AutoRenew: e.AutoRenew, Plan: planOf(pl)}
 	if resp.State == entitlement.Lapsed {
 		resp.DeleteAfter = &e.DeleteAfter
 	}
