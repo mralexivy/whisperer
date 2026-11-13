@@ -84,6 +84,20 @@ When asked to debug app behavior, check what the app just did, or verify a chang
 - To verify a change yourself: `BuildProject` → `RunProject` → `GetConsoleOutput` (regex filter), or scoped `RunSomeTests`. Never `RunAllTests`.
 - HUD stuck / "Listening…" forever → use `stuck-dump-analyze` (see above) instead.
 
+## External accounts (read before touching Google Cloud or App Store Connect)
+
+- **Google Cloud project for Whisperer: `whisperer-491716`** (project number 933733507703, billing account
+  `014CFB-C8ABCF-52C29A`, no organization). The signed-in account `ialex.ivy@gmail.com` is Owner and Billing Admin.
+  **The `gcloud` default project on this Mac is `travel-12e28` — a different app.** Never rely on the default:
+  pass `--project whisperer-491716` (or `--billing-project`) on every command. The same Google account also owns
+  other apps' projects (Reelstrip, Lumen, Biteslog, …); touch only this one for Whisperer.
+- **App Store Connect:** app "Whisperer - Voice to Text", bundle id `com.ivy.whisperer`, app id `6758626671`, SKU
+  `whisperer-macos-1`. API access uses the **shared key for all apps** in `~/.appstoreconnect/` (`asc.py`,
+  `env`, `private_keys/`): `python3 ~/.appstoreconnect/asc.py GET /v1/apps/6758626671/...`. Never print, copy
+  into the repo, or paste the key or its IDs. (As of 2026-11-13 the app had no in-app purchases or subscription
+  groups in App Store Connect, and the Paid Apps agreement was being accepted.)
+- Server + sync plan: `docs/exec-plans/cloud-sync.md`.
+
 ## Documentation
 
 **Read these with the Read tool when the task calls for it — do NOT use `@` imports here.**
