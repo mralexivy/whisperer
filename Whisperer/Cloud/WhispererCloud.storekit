@@ -1,0 +1,22 @@
+{
+  "identifier" : "A1C0FFEE",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : { "_failTransactionsEnabled" : false, "_storeKitErrors" : [] },
+  "subscriptionGroups" : [
+    {
+      "id" : "21700001",
+      "localizations" : [],
+      "name" : "Whisperer Cloud",
+      "subscriptions" : [
+        { "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "0.99", "familyShareable" : false, "groupNumber" : 1, "internalID" : "6700000001", "introductoryOffer" : null, "localizations" : [ { "description" : "5 GB of encrypted history sync", "displayName" : "Cloud Starter", "locale" : "en_US" } ], "productID" : "com.ivy.whisperer.cloud.starter.monthly", "recurringSubscriptionPeriod" : "P1M", "referenceName" : "Starter monthly", "subscriptionGroupID" : "21700001", "type" : "RecurringSubscription" },
+        { "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "9.99", "familyShareable" : false, "groupNumber" : 1, "internalID" : "6700000002", "introductoryOffer" : null, "localizations" : [ { "description" : "5 GB of encrypted history sync", "displayName" : "Cloud Starter (yearly)", "locale" : "en_US" } ], "productID" : "com.ivy.whisperer.cloud.starter.yearly", "recurringSubscriptionPeriod" : "P1Y", "referenceName" : "Starter yearly", "subscriptionGroupID" : "21700001", "type" : "RecurringSubscription" },
+        { "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "2.99", "familyShareable" : false, "groupNumber" : 2, "internalID" : "6700000003", "introductoryOffer" : null, "localizations" : [ { "description" : "25 GB of encrypted history sync", "displayName" : "Cloud Standard", "locale" : "en_US" } ], "productID" : "com.ivy.whisperer.cloud.standard.monthly", "recurringSubscriptionPeriod" : "P1M", "referenceName" : "Standard monthly", "subscriptionGroupID" : "21700001", "type" : "RecurringSubscription" },
+        { "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "29.99", "familyShareable" : false, "groupNumber" : 2, "internalID" : "6700000004", "introductoryOffer" : null, "localizations" : [ { "description" : "25 GB of encrypted history sync", "displayName" : "Cloud Standard (yearly)", "locale" : "en_US" } ], "productID" : "com.ivy.whisperer.cloud.standard.yearly", "recurringSubscriptionPeriod" : "P1Y", "referenceName" : "Standard yearly", "subscriptionGroupID" : "21700001", "type" : "RecurringSubscription" },
+        { "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "7.99", "familyShareable" : false, "groupNumber" : 3, "internalID" : "6700000005", "introductoryOffer" : null, "localizations" : [ { "description" : "100 GB of encrypted history sync", "displayName" : "Cloud Large", "locale" : "en_US" } ], "productID" : "com.ivy.whisperer.cloud.large.monthly", "recurringSubscriptionPeriod" : "P1M", "referenceName" : "Large monthly", "subscriptionGroupID" : "21700001", "type" : "RecurringSubscription" },
+        { "adHocOffers" : [], "codeOffers" : [], "displayPrice" : "79.99", "familyShareable" : false, "groupNumber" : 3, "internalID" : "6700000006", "introductoryOffer" : null, "localizations" : [ { "description" : "100 GB of encrypted history sync", "displayName" : "Cloud Large (yearly)", "locale" : "en_US" } ], "productID" : "com.ivy.whisperer.cloud.large.yearly", "recurringSubscriptionPeriod" : "P1Y", "referenceName" : "Large yearly", "subscriptionGroupID" : "21700001", "type" : "RecurringSubscription" }
+      ]
+    }
+  ],
+  "version" : { "major" : 4, "minor" : 0 }
+}

@@ -71,7 +71,7 @@ final class HistoryArchiveSectionClickTests: XCTestCase {
     }
 
     func testTheCloudRowUnfoldsAnInertPanelAndNeverStartsAnything() throws {
-        guard HistoryArchiveModel.cloudRowVisible else { throw XCTSkip("the Cloud row is hidden in the App Store build") }
+        guard HistoryArchiveModel.cloudRowVisible else { throw XCTSkip("the Cloud row exists only in the App Store build once Cloud is live") }
         host(HistoryArchiveModel())
         try click("transfer.row.cloud", x: 0.3)
         XCTAssertEqual(model.panel, .cloud)

@@ -77,16 +77,9 @@ final class HistoryArchiveModel: ObservableObject {
         self.environment = environment ?? .app
     }
 
-    /// Whisperer Cloud (paid sync) is not live yet: the row is built and tested, and shown only where
-    /// the feature may be mentioned — never in the App Store build until it works (App Review rejects
-    /// placeholders). Flip when the service ships (docs/exec-plans/cloud-sync.md).
-    static var cloudRowVisible: Bool {
-        #if APP_STORE
-        return false
-        #else
-        return true
-        #endif
-    }
+    /// Whisperer Cloud is a StoreKit subscription: it exists only in the Mac App Store build, and only once
+    /// `CloudFeature.isLive` is flipped at release (App Review rejects placeholders, so nothing shows before).
+    static var cloudRowVisible: Bool { CloudFeature.isAvailable }
 
     var isBusy: Bool { if case .working = state { return true } else { return false } }
 
