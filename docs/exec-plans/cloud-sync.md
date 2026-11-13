@@ -8,25 +8,86 @@ format and merge rules already shipped).
 ## Provisioned (2026-11-13, project `whisperer-491716`, region `us-central1`)
 
 Created by hand with `gcloud`, nothing deployed and nothing billing beyond pennies yet:
-- APIs: Cloud Run, Cloud Build, Artifact Registry, Secret Manager, IAM (+ Credentials), Firestore, Scheduler, STS, Resource Manager, Billing Budgets.
+- APIs on (only these): Cloud Run, Artifact Registry, Secret Manager, IAM (+ Credentials), Firestore, Resource Manager, plus Storage. Cloud Scheduler, Cloud Build, STS and Billing Budgets were enabled for a moment and **switched off again** — see *Lean rules*.
 - Bucket `gs://whisperer-491716-user-data` — private (public access prevention enforced, uniform access), soft delete off (a deletion is a deletion), lifecycle: `*.pack` audio Standard → Nearline after 30 days.
 - Service account `whisperer-api@whisperer-491716.iam.gserviceaccount.com` (Cloud Run runtime): `storage.objectAdmin` on that bucket only, `datastore.user`, and `serviceAccountTokenCreator` on itself (for signed URLs). No key file exists or should.
 - Artifact Registry Docker repo `whisperer`; Firestore `(default)`, native mode.
 - Budget "Whisperer Cloud" on billing account `014CFB-C8ABCF-52C29A` (currency **ILS**): 700 ILS with alerts at 5 % / 25 % / 100 % ≈ $10 / $50 / $200.
 - Still to do: Workload Identity Federation for GitHub deploys, the Go service, Cloud Run, Secret Manager entries (Apple keys), the App Store Connect subscription group and products. App Store Connect has no in-app purchases yet (the Pro Pack in the app does not exist there either); **do not release — target is the next version.**
 
+## Lean rules — what we use, what we do not, and why (decided 2026-11-13)
+
+Money rule: **we pay for resources and traffic, not for enabled APIs** — but every extra service is also
+another bill line, another thing to secure, and another place a bug can spend money. So the platform is
+exactly **four things**, all scale-to-zero or pay-per-use:
+
+| Service | Role | Cost shape |
+|---|---|---|
+| **Cloud Run** (1 service, Go) | the control plane: verify Apple purchases, meter quotas, sign URLs | $0 idle; request-based CPU only while a request runs; free tier 2 M requests / 180k vCPU-s a month |
+| **Cloud Storage** (1 bucket) | all user data, end-to-end encrypted | $/GB-month + operations + egress (the only line that can grow with usage) |
+| **Firestore** (1 database) | entitlements + usage counters, a few KB per payer | inside the free tier (1 GiB, 50k reads / 20k writes a day) for the first ~10k payers |
+| **Secret Manager** (≤ 2 secrets) | Apple key, session-signing key | ~$0.06 per secret-version a month |
+
+(plus Artifact Registry for one 15 MB image — pennies — and IAM, which is free.)
+
+**Deliberately not used** — each would add cost, complexity or attack surface for no gain here:
+Cloud Scheduler, Cloud Build, Pub/Sub, Cloud Functions, Cloud Tasks, Load Balancer / Cloud Armor / CDN,
+VPC connectors / NAT, Cloud KMS (encryption is on the Mac), Memorystore, BigQuery, Storage Insights, Logging
+sinks, Storage Transfer, Workflows, API Gateway.
+
+What replaces them:
+- **No Scheduler / jobs.** Retention is enforced *opportunistically*: the entitlement doc carries a
+  `deleteAfter` date; any request the server handles (and every Apple webhook) sweeps at most a handful of due
+  accounts and deletes their prefix. A lapsed user's data costs about two cents a month, so "eventually" is fine.
+  An explicit admin sweep is one `curl` for the odd day it is needed.
+- **No Cloud Build.** GitHub Actions builds the image and pushes it to Artifact Registry through Workload
+  Identity Federation (free minutes, no keys), then `gcloud run deploy`.
+- **No STS / downscoped tokens.** Both directions use **V4 signed URLs** (15-minute lifetime) signed with the
+  service account through IAM Credentials `signBlob`; restore signs a batch of pack URLs, not thousands of files.
+- **No reconciliation job.** Usage is counted when a URL is granted; a mismatch is checked by hand with
+  `gcloud storage du`, not by running infrastructure.
+- **No dashboards we do not read.** Cost is watched through the budget alerts and the billing console.
+
+**Cost cannot run away by construction** (the real bankruptcy risks are egress and operations, so every path to
+them goes through our server, which counts):
+1. The bucket is private; the **only** way to read or write is a signed URL the server minted for a verified,
+   paying user. Public access prevention is enforced; no HMAC keys, no service-account keys.
+2. **Per-user caps** in Firestore: 10 GB stored, 5 GB/month of downloads, ~1,500 write grants a month. Over a cap
+   the server returns an error and the app says why. Upload URLs carry a `content-length-range`.
+3. **Cloud Run ceilings:** `max-instances=2`, `concurrency=80`, 256 MiB, request timeout 10 s, CPU only during
+   requests (no min instances, no always-on CPU). A bug or an attack hits the ceiling, not the card.
+4. **Batched writes** (a few hundred operations a month per user), **text before audio**, audio on demand — the
+   download-heavy actions are the ones users must ask for.
+5. **Budget alerts** (700 ILS ≈ $200, notifying at 5 % / 25 % / 100 %) as the tripwire, and a one-line **kill
+   switch**: `gcloud run services update whisperer-api --max-instances=0`.
+6. No free tier of the product, ever: only an Apple-verified payer can cost us anything. The trial is a one-month
+   Apple introductory offer on a real subscription.
+
+**Security baseline**
+- No long-lived secrets in the repo, the image or the app; the only secrets (Apple key, signing key) live in
+  Secret Manager and are mounted into Cloud Run. GitHub deploys with OIDC, no JSON keys.
+- The runtime service account has: `storage.objectAdmin` on this one bucket, `datastore.user`, `signBlob` on
+  itself. Nothing at project level beyond that. The deployer account can deploy and nothing else.
+- Every route is authenticated (Apple-signed notification, StoreKit JWS, or our 1-hour Ed25519 JWT); the
+  service is public on the network only because phones must reach it, so it rate-limits per device and per user.
+- Apple JWS chains verified to Apple's root, bundle id / environment / signed date checked, notifications
+  idempotent on `notificationUUID`.
+- The server never sees plaintext: the library key is in the user's iCloud Keychain; objects are
+  AES-256-GCM. A full bucket leak exposes ciphertext only.
+- Logs carry ids and sizes, never content; deletion is real (no soft delete on the bucket).
+
 ## 0. Recommendation in one page
 
 | Decision | Choice | Why |
 |---|---|---|
 | Data plane | **Client ↔ GCS directly.** The server never touches a byte of user data | Bandwidth and CPU are the cost of a sync service; a control plane that only mints credentials costs ~nothing |
-| Control plane | **One Go binary on Cloud Run**, scale-to-zero, ~15 MB image | Same IAM as GCS (downscoped tokens, no key files), Go static binary cold-starts in ~0.1–0.3 s, pay only while a request runs. Cloud Functions (2nd gen) *is* Cloud Run; Lambda is the same price class — compute is noise either way (§3) |
+| Control plane | **One Go binary on Cloud Run**, scale-to-zero, ~15 MB image | Same IAM as GCS (signed URLs through the service account, no key files), Go static binary cold-starts in ~0.1–0.3 s, pay only while a request runs. Cloud Functions (2nd gen) *is* Cloud Run; Lambda is the same price class — compute is noise either way (§3) |
 | Small server state | **Firestore (Native)**: entitlements + usage counters | Free tier (1 GiB, 50k reads / 20k writes a day) covers the first ~10k payers; no database to run |
 | Identity | **No accounts.** The user is the Apple subscription (`originalTransactionId`), proven by StoreKit's signed transaction | Keeps "there is no Whisperer account" (App Review 4.8 does not apply), works on every Mac signed into the same Apple ID, nothing to log in to |
 | Privacy | **End-to-end encrypted** with a key in iCloud Keychain | Voice recordings and meeting transcripts are the most sensitive data we hold. We cannot read it, so a breach, a subpoena or a rogue engineer exposes nothing. It is also the headline feature |
 | Pricing | **$1.99/mo or $14.99/yr**, one tier, 10 GB + 5 GB/mo restore traffic | ≥ 90 % gross margin for a typical user after Apple's 15 %; 57 % / 31 % in the worst case of a maxed-out user (§5) |
 | The real cost risk | **Egress** (downloads), not storage or compute | $0.12/GB: restoring 10 GB to a new Mac costs more than the user pays in a month. Controlled by lazy audio download and a monthly restore allowance (§5.3) |
-| Monorepo | `server/` (Go module) next to the app; deploy with Cloud Build / GitHub Actions + Workload Identity Federation | One repo, one review, API and client change together |
+| Monorepo | `server/` (Go module) next to the app; deploy from GitHub Actions through Workload Identity Federation (no Cloud Build) | One repo, one review, API and client change together |
 
 Fixed cost at zero users: **about $1.50 a month** (a domain, Secret Manager, an image). At 10,000
 typical payers: revenue $19.9k, Apple $3.0k, cloud **$0.8k**, profit ~$16k/month (§5).
@@ -59,7 +120,7 @@ typical payers: revenue $19.9k, Apple $3.0k, cloud **$0.8k**, profit ~$16k/month
  │        │◀─── short JWT ─────│  verify JWS · entitlement · quotas ·    │   │ entitle-  │
  │ Sync   │  POST /v1/sync/…   │  mint credentials                       │   │ ments,    │
  │ Engine │◀─ signed PUT URLs, └──────────────────┬──────────────────────┘   │ counters  │
- │        │   downscoped read token               │ IAM Credentials / STS     └───────────┘
+ │        │   signed GET URLs                     │ IAM Credentials (signBlob) └───────────┘
  │        │                                        ▼
  │        │══ encrypted objects (PUT / GET) ══▶ ┌────────────────────┐
  └────────┘      direct, resumable, HTTPS       │ GCS bucket         │  Nearline after 30 d
@@ -73,13 +134,13 @@ typical payers: revenue $19.9k, Apple $3.0k, cloud **$0.8k**, profit ~$16k/month
 |---|---|---|
 | `POST /v1/session` | Device sends a fresh StoreKit transaction JWS (+ device public key). Server verifies the chain to Apple's root, checks product + not revoked/expired, upserts the entitlement, returns a 1 h JWT bound to `uid` and the device | `uid = HMAC(serverSecret, originalTransactionId)` — stable across the user's Macs, not reversible to the Apple ID |
 | `POST /v1/sync/upload` | Body: object names + sizes. Returns V4 signed PUT URLs with `x-goog-content-length-range` (size enforced by GCS) | Server adds the sizes to the user's usage counter; refuses over quota (402-style error the UI can explain) |
-| `POST /v1/sync/download-token` | Returns a 1 h **downscoped OAuth token** (Credential Access Boundary) readable on `u/<uid>/` only | Rate-limited (a few a day); counts toward the restore allowance |
+| `POST /v1/sync/download` | Returns V4 **signed GET URLs** (15 min) for the packs/segments asked for, within `u/<uid>/` only | Rate-limited (a few a day); counts toward the restore allowance |
 | `GET /v1/account` | Plan, bytes used, restore allowance left, devices, grace/expiry state | Drives the Settings page |
 | `DELETE /v1/account/data` | Deletes the user's prefix and counters now | "Delete my cloud data" (and GDPR erasure) |
 | `POST /v1/apple/notifications` | App Store Server Notifications V2: `SUBSCRIBED`, `DID_RENEW`, `EXPIRED`, `GRACE_PERIOD_EXPIRED`, `REFUND`, `REVOKE`, `DID_CHANGE_RENEWAL_STATUS` | JWS-verified; idempotent on `notificationUUID`; this is the source of truth for state between app launches |
 | `GET /healthz` | For Cloud Run | |
 
-Uploads use signed URLs (the server must meter what is stored); downloads use downscoped tokens
+Uploads and downloads both use signed URLs (the server meters what is stored and what is read)
 (no per-object signing, resumable, one mint per hour of use). The server holds **no key file**:
 it runs as a service account with `roles/iam.serviceAccountTokenCreator` on itself and
 `roles/storage.objectAdmin` on the bucket only.
@@ -89,7 +150,7 @@ it runs as a service account with `roles/iam.serviceAccountTokenCreator` on itse
 `active → grace (billing retry, Apple's grace period) → lapsed (read-only 60 d) → deleted`
 - active / grace: read + write.
 - lapsed: read and export only — a user who stops paying can always take their data home.
-- Day 60 after lapse: a daily Cloud Run Job (Scheduler, free tier) deletes the prefix.
+- Day 60 after lapse: the prefix is deleted by the opportunistic sweep (see *Lean rules*) — no scheduled job.
   Re-subscribing before then restores write access with nothing lost.
 - Refund / revoke: immediately lapsed.
 
@@ -101,7 +162,7 @@ server/
   internal/apple/            // JWS (x5c → Apple root) verification, ASSN V2 decoding
   internal/auth/             // session JWT (Ed25519), device binding
   internal/entitlement/      // Firestore store + state machine (interface; in-memory fake for tests)
-  internal/gcs/              // signed URLs, downscoped tokens, prefix delete (interface; fake-gcs-server in tests)
+  internal/gcs/              // signed URLs, prefix delete (interface; fake-gcs-server in tests)
   internal/quota/            // counters, allowance, rate limits
   api/openapi.yaml           // the contract; the Swift client is checked against it
   Dockerfile                 // distroless static, ~15 MB
@@ -118,7 +179,7 @@ bundle id / environment / signed date). The decision is part of milestone 1.
 | Billing | CPU/memory while a request runs + $0.40/M requests, free 2M req / 180k vCPU-s / 360k GiB-s a month | Same (it is Cloud Run underneath) | $0.20/M + GB-s, free 1M |
 | 10 M requests/mo, 30 ms | ≈ $10 with 0.25 vCPU; ≈ $29 at 1 vCPU (my model) | same | ≈ $6 |
 | Cold start (Go, static) | ~0.1–0.3 s | similar | ~0.1 s |
-| Same-cloud IAM with GCS | yes — no keys, downscoped tokens | yes | no (cross-cloud) |
+| Same-cloud IAM with GCS | yes — no keys, signed URLs via signBlob | yes | no (cross-cloud) |
 | Local dev / test | `docker run` / `go run` | functions framework | SAM / emulators |
 | Concurrency | 80 requests share one instance — cheaper under load | per-instance | one request per instance |
 
@@ -255,10 +316,7 @@ Zero users: ≈ $1.50/month. Break-even on a $50/month ops budget: **31 payers**
 
 ## 6. Abuse, safety, operations
 
-- **Quota by uploading only through the server:** signed PUT URLs carry a content-length range and
-  every grant increments the user's counter; the user cannot store more than the plan allows.
-  An hourly Cloud Run Job reconciles counters against real bucket prefix sizes (Storage Insights
-  inventory, daily) and flags drift.
+- **Quota by granting only through the server:** signed URLs carry a content-length range and every grant increments the user's counter; the user cannot store or read more than the plan allows. Spot-check with `gcloud storage du`; no reconciliation job.
 - **Fraud / refunds:** `REFUND` and `REVOKE` notifications flip to lapsed immediately.
 - **Replay and theft:** session JWTs are 1 h and device-bound; StoreKit JWS has a signed date and
   the server rejects stale ones. App Attest is an optional add-on if sign-up abuse appears.
@@ -269,7 +327,7 @@ Zero users: ≈ $1.50/month. Break-even on a $50/month ops budget: **31 payers**
   EU bucket (and EU-only processing statement) can be added later without a protocol change. E2E
   encryption means what we hold is ciphertext.
 - **Observability:** structured logs (no payloads), request count/latency/errors, bucket bytes by
-  prefix class, cost per user per day in BigQuery (billing export is free to enable). Alert on cost
+  prefix class, cost per user from the billing console. Alert on cost
   per user outliers, not on averages.
 - **Privacy / App Store:** the privacy label changes from "Data Not Collected" to purchase
   identifiers (and nothing else); update the policy and the review notes (explain E2E and that no
@@ -280,8 +338,8 @@ Zero users: ≈ $1.50/month. Break-even on a $50/month ops budget: **31 payers**
 | # | Milestone | Contents | Est. |
 |---|---|---|---|
 | 0 | **Decisions + store setup** | Answer §8; enrol in the Small Business Program; Paid Apps agreement; create the subscription group, two products, 1-month intro offer, ASSN V2 URL (App Store Connect); enable GCP APIs; bucket + lifecycle + service account + budgets (`deploy/`) | 1–2 d |
-| 1 | **Server skeleton** | Go module, Cloud Build/Actions with Workload Identity Federation, `/healthz`, JWS verification + ASSN V2 with Apple's test certificates, entitlement state machine on a Firestore interface with an in-memory fake, `/v1/session`, `/v1/account` | 4–5 d |
-| 2 | **Storage grants** | Signed upload URLs with size ranges, downscoped download tokens, quota/allowance counters, prefix delete, lapse job; tested against fake-gcs-server and once against the real bucket | 3–4 d |
+| 1 | **Server skeleton** | Go module, GitHub Actions + Workload Identity Federation (no Cloud Build), `/healthz`, JWS verification + ASSN V2 with Apple's test certificates, entitlement state machine on a Firestore interface with an in-memory fake, `/v1/session`, `/v1/account` | 4–5 d |
+| 2 | **Storage grants** | Signed upload/download URLs with size ranges, quota/allowance counters, prefix delete, opportunistic retention sweep; tested against fake-gcs-server and once against the real bucket | 3–4 d |
 | 3 | **Client: purchase + account** | `SubscriptionStoreView` paywall, entitlement refresh, Settings → Cloud page (plan, usage, restore allowance, devices, pause, delete cloud data), UI-tested | 4 d |
 | 4 | **Client: sync, text** | Library key (Keychain + recovery key), change tracking, outbox, segments, merge with tombstones, status UI; two-Mac convergence tests (clock skew, duplicates, offline for a week, delete on one / edit on the other) | 8–10 d |
 | 5 | **Client: audio** | Packs, chunked encryption, lazy download, "Download all recordings", resumable background uploads, restore allowance | 5–6 d |
@@ -310,8 +368,7 @@ correctness, not cloud.
 
 - Current GCS and Cloud Run list prices in the pricing calculator (§5.1) and the egress tier the
   bucket's location gets.
-- That Credential Access Boundary downscoped tokens support everything the client needs on the
-  JSON API (resumable uploads are not needed for downloads; reads are all that is delegated).
+- That IAM Credentials `signBlob` latency/quota is fine for signing a few hundred URLs per restore (it is free; batch and cache).
 - App Review's view of a subscription whose main value is cloud sync for an app with a one-time
   Pro unlock (3.1.1 / 3.1.2); the privacy-label change; Family Sharing behaviour of
   `originalTransactionId`.
