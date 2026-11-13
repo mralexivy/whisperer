@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/mralexivy/whisperer/server/internal/account"
 	"github.com/mralexivy/whisperer/server/internal/auth"
 	"github.com/mralexivy/whisperer/server/internal/entitlement"
 	"github.com/mralexivy/whisperer/server/internal/quota"
@@ -29,26 +30,27 @@ func (s *Server) syncRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/sync/delete", s.limited(s.authed(s.handleDelete)))
 }
 
-// library resolves who is calling from the entitlement as it is now, not from the token: a refund or a
-// lapse takes effect on the very next write, whatever the token still says.
-func (s *Server) library(ctx context.Context, c auth.Claims) (lib syncplane.Library, state entitlement.State, err error) {
-	e, found, err := s.store.Get(ctx, c.UID)
+// library resolves who is calling from the account and entitlement as they are now, not from the token: a refund,
+// a lapse, a revoked device or a reset takes effect on the very next grant or commit, whatever the token still says.
+// Reads: account, device, entitlement (usage is the service's own read).
+func (s *Server) library(ctx context.Context, c auth.Claims) (lib syncplane.Library, state entitlement.State, acct account.Account, err error) {
+	if _, err = s.deviceOf(ctx, c); err != nil {
+		return lib, "", acct, err
+	}
+	acct, found, err := s.accounts.GetAccount(ctx, c.Acct)
 	if err != nil {
-		return lib, "", err
+		return lib, "", acct, err
 	}
-	if !found {
-		return lib, "", errNoAccount
+	e, efound, err := s.store.Get(ctx, c.Acct)
+	if err != nil {
+		return lib, "", acct, err
 	}
-	now := s.cfg.Now()
+	if !found || !efound {
+		return lib, "", acct, errNoAccount
+	}
 	pl, _ := s.planFor(e.ProductID)
-	heads, err := s.sync.Store.GetHeads(ctx, c.UID)
-	if err != nil {
-		return lib, "", err
-	}
-	return syncplane.Library{Account: c.UID, Epoch: heads.Epoch, Limits: pl.Limits}, e.StateAt(now), nil
+	return syncplane.Library{Account: acct.ID, Epoch: acct.Epoch, Limits: pl.Limits}, e.StateAt(s.cfg.Now()), acct, nil
 }
-
-var errNoAccount = errors.New("no account")
 
 func (s *Server) syncReady(w http.ResponseWriter) bool {
 	if s.sync == nil {
@@ -61,6 +63,10 @@ func (s *Server) syncReady(w http.ResponseWriter) bool {
 // syncFail maps a sync error to an HTTP answer. Quota errors are the user's to fix; the rest are ours.
 func (s *Server) syncFail(w http.ResponseWriter, what string, err error) {
 	switch {
+	case errors.Is(err, errDeviceRevoked):
+		fail(w, 403, "device_revoked", "this device was removed from the account")
+	case errors.Is(err, errDeviceNotAuthorized):
+		fail(w, 403, "device_not_authorized", "this device is not authorized for this account")
 	case errors.Is(err, errNoAccount):
 		fail(w, 404, "no_account", "no subscription found")
 	case errors.Is(err, syncplane.ErrReadOnly):
@@ -100,7 +106,7 @@ func (s *Server) handleHeads(w http.ResponseWriter, r *http.Request, c auth.Clai
 			since = since*10 + int64(ch-'0')
 		}
 	}
-	h, unchanged, err := s.sync.HeadsSince(r.Context(), syncplane.Library{Account: c.UID}, since)
+	h, unchanged, err := s.sync.HeadsSince(r.Context(), syncplane.Library{Account: c.Acct}, since)
 	if err != nil {
 		s.syncFail(w, "heads", err)
 		return
@@ -124,9 +130,13 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request, c auth.Cla
 	if !readJSON(w, r, &req) {
 		return
 	}
-	lib, state, err := s.library(r.Context(), c)
+	lib, state, acct, err := s.library(r.Context(), c)
 	if err != nil {
 		s.syncFail(w, "library", err)
+		return
+	}
+	if !acct.Library.Exists {
+		fail(w, 409, "library_required", "create the library key (POST /v1/library) before uploading")
 		return
 	}
 	grants, err := s.sync.Grant(r.Context(), lib, state != entitlement.Active && state != entitlement.Grace, req.Objects)
@@ -145,7 +155,7 @@ func (s *Server) handleCommit(w http.ResponseWriter, r *http.Request, c auth.Cla
 	if !readJSON(w, r, &req) {
 		return
 	}
-	lib, state, err := s.library(r.Context(), c)
+	lib, state, _, err := s.library(r.Context(), c)
 	if err != nil {
 		s.syncFail(w, "library", err)
 		return
@@ -173,7 +183,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request, c auth.C
 	if !readJSON(w, r, &req) {
 		return
 	}
-	lib, state, err := s.library(r.Context(), c)
+	lib, state, _, err := s.library(r.Context(), c)
 	if err != nil {
 		s.syncFail(w, "library", err)
 		return
@@ -216,7 +226,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request, c auth.Cla
 	if !readJSON(w, r, &req) {
 		return
 	}
-	lib, state, err := s.library(r.Context(), c)
+	lib, state, _, err := s.library(r.Context(), c)
 	if err != nil {
 		s.syncFail(w, "library", err)
 		return

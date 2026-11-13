@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/mralexivy/whisperer/server/internal/account"
 	"github.com/mralexivy/whisperer/server/internal/apple"
 	"github.com/mralexivy/whisperer/server/internal/entitlement"
 	"github.com/mralexivy/whisperer/server/internal/gcp"
@@ -17,6 +18,7 @@ import (
 // local development.
 type backends struct {
 	entitlements entitlement.Store
+	accounts     account.Store
 	sync         syncplane.Store
 	blobs        syncplane.Blobs
 	bucketRoot   string
@@ -29,7 +31,7 @@ func newBackends(ctx context.Context, log *slog.Logger, production bool) (*backe
 			return nil, errors.New("production needs GCP_PROJECT and DATA_BUCKET")
 		}
 		log.Warn("no GCP_PROJECT: using in-memory stores (development only; state is lost on restart)")
-		return &backends{entitlements: entitlement.NewMemory(), sync: syncplane.NewMemoryStore(), blobs: syncplane.NewMemoryBlobs(), bucketRoot: env("BUCKET_ROOT", "whisperer")}, nil
+		return &backends{entitlements: entitlement.NewMemory(), accounts: account.NewMemory(), sync: syncplane.NewMemoryStore(), blobs: syncplane.NewMemoryBlobs(), bucketRoot: env("BUCKET_ROOT", "whisperer")}, nil
 	}
 	bucket := os.Getenv("DATA_BUCKET")
 	if bucket == "" {
@@ -43,6 +45,7 @@ func newBackends(ctx context.Context, log *slog.Logger, production bool) (*backe
 	log.Info("using Firestore and Cloud Storage", "project", project, "bucket", bucket, "firestoreRoot", fs.Root)
 	return &backends{
 		entitlements: gcp.EntitlementStore{FS: fs},
+		accounts:     gcp.AccountStore{FS: fs},
 		sync:         gcp.SyncStore{FS: fs},
 		blobs:        &gcp.Storage{Bucket: bucket, Tokens: tokens},
 		bucketRoot:   env("BUCKET_ROOT", "whisperer"),
@@ -68,10 +71,13 @@ func (b *backends) sweeper(verifier *apple.Verifier, log *slog.Logger) *retentio
 		log.Warn("retention sweep is in DRY-RUN mode: it reports what it would delete and deletes nothing (set SWEEP_DRY_RUN=0 to enable)")
 	}
 	return &retention.Sweeper{
-		Entitlements: b.entitlements, Apple: retention.AppleServerAPI{API: api}, Blobs: b.blobs, Root: b.bucketRoot, Log: log, DryRun: dry,
+		Entitlements: b.entitlements, Accounts: b.accounts, Apple: retention.AppleServerAPI{API: api}, Blobs: b.blobs, Root: b.bucketRoot, Log: log, DryRun: dry,
 		Epoch: func(ctx context.Context, uid string) (int, error) {
-			h, err := b.sync.GetHeads(ctx, uid)
-			return h.Epoch, err
+			a, ok, err := b.accounts.GetAccount(ctx, uid)
+			if err == nil && !ok {
+				err = account.ErrNotFound // never guess an epoch: an unknown account is skipped, not deleted
+			}
+			return a.Epoch, err
 		},
 	}
 }

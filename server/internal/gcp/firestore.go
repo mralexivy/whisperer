@@ -329,3 +329,37 @@ func FromMap(m map[string]any, into any) error {
 	}
 	return json.Unmarshal(b, into)
 }
+
+// ErrExists is a create-if-absent that found the document already there.
+var ErrExists = errors.New("gcp: document already exists")
+
+// Write is one document write of an atomic Commit.
+type Write struct {
+	Path string
+	Doc  any
+	// MustNotExist makes the whole Commit fail with ErrExists when the document is already there.
+	MustNotExist bool
+}
+
+// Commit applies several writes atomically (all or none); with MustNotExist it is also the way to claim a
+// name exactly once. Nothing is written when any precondition fails.
+func (f *Firestore) Commit(ctx context.Context, writes []Write) error {
+	var out []any
+	for _, w := range writes {
+		fields, err := toFields(w.Doc)
+		if err != nil {
+			return err
+		}
+		wr := map[string]any{"update": map[string]any{"name": f.docName(w.Path), "fields": fields}}
+		if w.MustNotExist {
+			wr["currentDocument"] = map[string]any{"exists": false}
+		}
+		out = append(out, wr)
+	}
+	_, err := do(ctx, f.client(), f.Tokens, "POST", f.docsURL()+":commit", map[string]any{"writes": out}, nil)
+	var api *APIError
+	if errors.As(err, &api) && (strings.Contains(api.Body, "ALREADY_EXISTS") || strings.Contains(api.Body, "FAILED_PRECONDITION")) {
+		return ErrExists
+	}
+	return err
+}

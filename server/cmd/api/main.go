@@ -6,7 +6,7 @@
 //	BUNDLE_ID                the app's bundle id (default com.ivy.whisperer)
 //	PRODUCT_PREFIX           product ids are <prefix><tier>.<monthly|yearly> (default com.ivy.whisperer.cloud.)
 //	ALLOW_SANDBOX            "1" accepts Sandbox/Xcode purchases (TestFlight, development)
-//	UID_SECRET               HMAC secret that turns an Apple subscription into an opaque user id
+//	UID_SECRET               HMAC secret: names Apple subscriptions in the mapping collection (subKey) and keys the stateless device nonces
 //	SESSION_SIGNING_KEY      base64 32-byte Ed25519 seed for the 1-hour session tokens
 //	ENV                      "production" refuses to start without the secrets and the GCP settings below
 //	GCP_PROJECT              Google Cloud project; with it the service uses Firestore + Cloud Storage (else in-memory, dev only)
@@ -89,7 +89,7 @@ func run(log *slog.Logger) error {
 	srv := server.New(server.Config{
 		BundleID: env("BUNDLE_ID", "com.ivy.whisperer"), ProductPrefix: env("PRODUCT_PREFIX", quota.ProductPrefix),
 		AllowSandbox: os.Getenv("ALLOW_SANDBOX") == "1", UIDSecret: uidSecret,
-	}, verifier, store, signer, log)
+	}, verifier, store, backends.accounts, signer, log)
 	srv.WithSync(&syncplane.Service{Store: backends.sync, Blobs: backends.blobs, Root: backends.bucketRoot})
 	if sweeper := backends.sweeper(verifier, log); sweeper != nil {
 		srv.WithSweeper(sweeper)

@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/mralexivy/whisperer/server/internal/account"
 	"github.com/mralexivy/whisperer/server/internal/entitlement"
 	"github.com/mralexivy/whisperer/server/internal/syncplane"
 )
@@ -41,9 +42,11 @@ type Apple interface {
 
 type Sweeper struct {
 	Entitlements entitlement.Store
-	Apple        Apple
-	Blobs        syncplane.Blobs
-	Root         string
+	// Accounts, when set, adds the second job: deleting the old epochs a library reset left behind.
+	Accounts account.Store
+	Apple    Apple
+	Blobs    syncplane.Blobs
+	Root     string
 	// Epoch is the library epoch whose objects belong to the account (the heads document in production).
 	Epoch func(ctx context.Context, uid string) (int, error)
 	Now   func() time.Time
@@ -54,6 +57,9 @@ type Sweeper struct {
 	PageSize     int           // objects listed/deleted per page
 	MaxPages     int           // pages per account per run (a run is time-bounded)
 	StragglerGap time.Duration // wait between pass one and pass two: longer than any upload URL lives
+	// EpochHold is how long a replaced library epoch is kept untouched after a reset before any byte is deleted:
+	// a reset can be a mistake (or someone else's), and the old ciphertext is the only way back. Default 7 days.
+	EpochHold time.Duration
 	// DryRun reports what would be deleted and deletes nothing. The default for a new deployment's first month.
 	DryRun bool
 }
@@ -66,6 +72,9 @@ type Report struct {
 	Reactivated []string // Apple says the subscription is alive: the delete is cancelled
 	Skipped     map[string]string
 	Tripped     bool // the circuit breaker stopped the run
+	// EpochsDeleted are "account/epoch" pairs whose old-epoch objects are now fully gone; EpochsDryRun would have been.
+	EpochsDeleted []string
+	EpochsDryRun  []string
 }
 
 func (s *Sweeper) now() time.Time {
@@ -95,6 +104,9 @@ func (s *Sweeper) defaults() {
 	if s.MaxPages == 0 {
 		s.MaxPages = 20
 	}
+	if s.EpochHold == 0 {
+		s.EpochHold = 7 * 24 * time.Hour
+	}
 	if s.StragglerGap == 0 {
 		s.StragglerGap = 25 * time.Minute
 	}
@@ -106,6 +118,7 @@ func (s *Sweeper) Run(ctx context.Context) Report {
 	s.defaults()
 	rep := Report{Skipped: map[string]string{}}
 	now := s.now()
+	s.sweepEpochs(ctx, now, &rep) // user-requested and independent of the lapse guards below
 	due, err := s.Entitlements.Due(ctx, now, s.Breaker+1)
 	if err != nil {
 		s.log().Error("retention: listing due", "err", err)

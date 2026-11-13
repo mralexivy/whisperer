@@ -1,90 +1,17 @@
 package server_test
 
 import (
-	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/mralexivy/whisperer/server/internal/apple"
-	"github.com/mralexivy/whisperer/server/internal/auth"
-	"github.com/mralexivy/whisperer/server/internal/entitlement"
-	"github.com/mralexivy/whisperer/server/internal/server"
 	"github.com/mralexivy/whisperer/server/internal/testkit"
 )
 
-var now = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
-
-type rig struct {
-	t      *testing.T
-	apple  *testkit.Apple
-	srv    *server.Server
-	h      http.Handler
-	store  *entitlement.Memory
-	clock  *time.Time
-	signer *auth.Signer
-}
-
-func newRig(t *testing.T, allowSandbox bool) *rig {
-	a := testkit.New(t, now)
-	clock := now
-	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	_ = pub
-	store := entitlement.NewMemory()
-	cfg := server.Config{
-		BundleID: "com.ivy.whisperer", AllowSandbox: allowSandbox, UIDSecret: []byte("test-secret"),
-		Now: func() time.Time { return clock },
-	}
-	a.Now = clock
-	signer := auth.NewSigner(priv, "k1")
-	s := server.New(cfg, a.Verifier, store, signer, nil)
-	return &rig{t: t, apple: a, srv: s, h: s.Handler(), store: store, clock: &clock, signer: signer}
-}
-
-func (r *rig) tx(overrides map[string]any) string {
-	p := map[string]any{
-		"originalTransactionId": "1000", "transactionId": "1001", "bundleId": "com.ivy.whisperer",
-		"productId": "com.ivy.whisperer.cloud.standard.monthly", "type": "Auto-Renewable Subscription", "environment": "Production",
-		"expiresDate": now.Add(30 * 24 * time.Hour).UnixMilli(), "signedDate": now.UnixMilli(),
-	}
-	for k, v := range overrides {
-		p[k] = v
-	}
-	return r.apple.JWS(r.t, p)
-}
-
-func (r *rig) do(method, path string, body any, token string) (int, map[string]any) {
-	var buf bytes.Buffer
-	if body != nil {
-		_ = json.NewEncoder(&buf).Encode(body)
-	}
-	req := httptest.NewRequest(method, path, &buf)
-	req.RemoteAddr = "203.0.113.7:4000"
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-	rec := httptest.NewRecorder()
-	r.h.ServeHTTP(rec, req)
-	out := map[string]any{}
-	_ = json.Unmarshal(rec.Body.Bytes(), &out)
-	return rec.Code, out
-}
-
-func (r *rig) session(jws, device string) (int, map[string]any) {
-	return r.do("POST", "/v1/session", map[string]string{"transactionJWS": jws, "deviceID": device}, "")
-}
-
-func TestSessionThenAccount(t *testing.T) {
+func TestAccountCreationThenSessionThenAccount(t *testing.T) {
 	r := newRig(t, false)
-	code, body := r.session(r.tx(nil), "mac-1")
-	if code != 200 || body["state"] != "active" || body["readOnly"] != false {
-		t.Fatalf("session: %d %v", code, body)
-	}
-	token := body["token"].(string)
+	m, token := r.signup()
 	code, acct := r.do("GET", "/v1/account", nil, token)
 	if code != 200 || acct["state"] != "active" {
 		t.Fatalf("account: %d %v", code, acct)
@@ -92,34 +19,52 @@ func TestSessionThenAccount(t *testing.T) {
 	if plan := acct["plan"].(map[string]any); plan["name"] != "standard" || plan["storedBytes"].(float64) != 25*1024*1024*1024 {
 		t.Fatalf("plan: %v", plan)
 	}
+	code, body := r.session(m, "")
+	if code != 200 || body["state"] != "active" || body["readOnly"] != false || body["accountId"] != acct["accountId"] {
+		t.Fatalf("session: %d %v", code, body)
+	}
 }
 
-func TestTheSameSubscriptionIsTheSameUserOnEveryMac(t *testing.T) {
+func TestTheSameSubscriptionIsTheSameAccountOnEveryMac(t *testing.T) {
 	r := newRig(t, false)
-	_, a := r.session(r.tx(nil), "mac-1")
-	_, b := r.session(r.tx(map[string]any{"transactionId": "1002"}), "mac-2")
-	uid := r.srv.UID("1000")
-	if uid == "" || uid == "1000" || len(uid) != 32 {
-		t.Fatalf("uid should be an opaque 128-bit id, got %q", uid)
+	m1, tok1 := r.signup()
+	r.withLibrary(tok1)
+	m2, tok2 := r.enrolConfirmed()
+	id1, id2 := r.accountID(m1), r.accountID(m2)
+	if id1 != id2 {
+		t.Fatalf("two Macs, one subscription, two accounts: %s %s", id1, id2)
 	}
-	e, ok, _ := r.store.ByOriginalTransactionID(t.Context(), "1000")
-	if !ok || e.UID != uid {
-		t.Fatalf("the subscriber record is keyed by %q, want %q", e.UID, uid)
+	if len(id1) != 32 || strings.Contains(id1, "1000") || id1 == r.srv.SubKey("1000") {
+		t.Fatalf("the account id must be a random 128-bit id, not derived from the transaction id: %q", id1)
 	}
-	for _, tok := range []string{a["token"].(string), b["token"].(string)} {
-		if code, acct := r.do("GET", "/v1/account", nil, tok); code != 200 || acct["state"] != "active" {
+	if len(r.srv.SubKey("1000")) != 64 || r.srv.SubKey("1000") == "1000" {
+		t.Fatal("subKey must be an HMAC, never the raw transaction id")
+	}
+	for _, tok := range []string{tok1, tok2} {
+		if code, acct := r.do("GET", "/v1/account", nil, tok); code != 200 || acct["accountId"] != id1 {
 			t.Fatalf("both Macs see the one account: %d %v", code, acct)
 		}
 	}
-	if newRig(t, false).srv.UID("1000") != uid {
-		t.Fatal("the uid must be deterministic for a given secret")
+	e, ok, _ := r.store.ByOriginalTransactionID(t.Context(), "1000")
+	if !ok || e.UID != id1 {
+		t.Fatalf("the entitlement is keyed by the account id, got %q", e.UID)
+	}
+	other := newRig(t, false)
+	if other.srv.SubKey("1000") != r.srv.SubKey("1000") {
+		t.Fatal("the subKey must be deterministic for a given secret")
+	}
+	if id, ok, _ := r.accounts.ResolveSub(t.Context(), r.srv.SubKey("1000")); !ok || id != id1 {
+		t.Fatalf("subscriptions/{subKey} -> %q", id)
+	}
+	if id, ok, _ := r.accounts.ResolveToken(t.Context(), "6f1c2d3e-0000-4000-8000-000000000001"); !ok || id != id1 {
+		t.Fatalf("tokens/{appAccountToken} -> %q", id)
 	}
 }
 
 func TestRefusesAForgedPurchase(t *testing.T) {
 	r := newRig(t, false)
 	forged := r.apple.JWSWith(t, map[string]any{"originalTransactionId": "1", "signedDate": now.UnixMilli()}, testkit.OtherKey(t), true)
-	if code, _ := r.session(forged, "d"); code != 401 {
+	if code, _ := r.createAccount(r.newMac(), forged); code != 401 {
 		t.Fatalf("forged purchase: %d", code)
 	}
 }
@@ -132,13 +77,13 @@ func TestRefusesOtherAppsProductsAndTestPurchases(t *testing.T) {
 		"wrong_environment": {"environment": "Sandbox"},
 	}
 	for want, o := range cases {
-		code, body := r.session(r.tx(o), "d")
+		code, body := r.createAccount(r.newMac(), r.tx(o))
 		if code != 403 || body["error"] != want {
 			t.Errorf("%s: %d %v", want, code, body)
 		}
 	}
 	sb := newRig(t, true)
-	if code, _ := sb.session(sb.tx(map[string]any{"environment": "Sandbox"}), "d"); code != 200 {
+	if code, _ := sb.createAccount(sb.newMac(), sb.tx(map[string]any{"environment": "Sandbox"})); code != 201 {
 		t.Errorf("sandbox purchases must be accepted when configured (code %d)", code)
 	}
 }
@@ -146,12 +91,12 @@ func TestRefusesOtherAppsProductsAndTestPurchases(t *testing.T) {
 func TestLapsedUsersGetAReadOnlySessionAndEndedOnesNone(t *testing.T) {
 	r := newRig(t, false)
 	lapsed := r.tx(map[string]any{"expiresDate": now.Add(-10 * 24 * time.Hour).UnixMilli()})
-	code, body := r.session(lapsed, "d")
-	if code != 200 || body["state"] != "lapsed" || body["readOnly"] != true {
+	code, body := r.createAccount(r.newMac(), lapsed)
+	if code != 201 || body["state"] != "lapsed" || body["readOnly"] != true {
 		t.Fatalf("lapsed: %d %v", code, body)
 	}
-	gone := r.tx(map[string]any{"originalTransactionId": "2000", "expiresDate": now.Add(-200 * 24 * time.Hour).UnixMilli()})
-	if code, body := r.session(gone, "d"); code != 402 || body["error"] != "subscription_expired" {
+	gone := r.tx(map[string]any{"originalTransactionId": "2000", "appAccountToken": "6f1c2d3e-0000-4000-8000-000000000002", "expiresDate": now.Add(-200 * 24 * time.Hour).UnixMilli()})
+	if code, body := r.createAccount(r.newMac(), gone); code != 402 || body["error"] != "subscription_expired" {
 		t.Fatalf("ended: %d %v", code, body)
 	}
 }
@@ -174,8 +119,7 @@ func notification(r *rig, kind, uuid string, tx string, signed time.Time) string
 
 func TestARefundNotificationLapsesTheAccount(t *testing.T) {
 	r := newRig(t, false)
-	_, body := r.session(r.tx(nil), "d")
-	token := body["token"].(string)
+	m, token := r.signup()
 	refund := notification(r, "REFUND", "n-1", r.tx(map[string]any{"revocationDate": now.UnixMilli()}), now)
 	if code, out := r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": refund}, ""); code != 200 || out["applied"] != true {
 		t.Fatalf("notification: %d %v", code, out)
@@ -188,7 +132,7 @@ func TestARefundNotificationLapsesTheAccount(t *testing.T) {
 		t.Fatalf("replay applied again: %v", out)
 	}
 	// A new session cannot buy the refund back.
-	if _, again := r.session(r.tx(nil), "d"); again["readOnly"] != true {
+	if _, again := r.session(m, r.tx(nil)); again["readOnly"] != true {
 		t.Fatalf("refunded subscription got write access: %v", again)
 	}
 }
@@ -215,30 +159,42 @@ func TestNotificationsForOtherAppsAreAcknowledgedAndIgnored(t *testing.T) {
 	}
 }
 
-func TestARenewalNotificationCreatesAMissingAccount(t *testing.T) {
+func TestANotificationNeverCreatesOrBindsAnAccount(t *testing.T) {
 	r := newRig(t, false)
 	n := notification(r, "SUBSCRIBED", "s-1", r.tx(map[string]any{"originalTransactionId": "5000"}), now)
-	if code, _ := r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": n}, ""); code != 200 {
-		t.Fatal("subscribe notification failed")
+	code, out := r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": n}, "")
+	if code != 200 || out["ignored"] != "unbound_subscription" {
+		t.Fatalf("unbound subscription: %d %v", code, out)
 	}
-	if _, ok, _ := r.store.Get(t.Context(), r.srv.UID("5000")); !ok {
-		t.Fatal("subscriber was not recorded")
+	if _, ok, _ := r.accounts.ResolveSub(t.Context(), r.srv.SubKey("5000")); ok {
+		t.Fatal("a notification bound a subscription")
+	}
+	// A bound account's older subscription is ignored once a newer one is the entitlement.
+	m, token := r.signup()
+	_ = token
+	_, _ = r.session(m, r.tx(map[string]any{"originalTransactionId": "1500", "transactionId": "1501"}))
+	old := notification(r, "DID_RENEW", "s-2", r.tx(nil), now)
+	if _, out := r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": old}, ""); out["ignored"] != "superseded_subscription" {
+		t.Fatalf("older chain: %v", out)
 	}
 }
 
 func TestRateLimitBluntsARunawayClient(t *testing.T) {
-	r := newRig(t, false)
+	r2 := newLimitedRig(t, 30)
 	limited := 0
 	for i := 0; i < 60; i++ {
-		if code, _ := r.do("GET", "/v1/account", nil, ""); code == 429 {
+		if code, _ := r2.do("GET", "/v1/account", nil, ""); code == 429 {
 			limited++
 		}
 	}
 	if limited == 0 {
 		t.Fatal("60 requests in a minute from one address were all served")
 	}
-	if code, _ := r.do("GET", "/healthz", nil, ""); code != 200 {
+	if code, _ := r2.do("GET", "/healthz", nil, ""); code != 200 {
 		t.Fatal("health checks must never be limited")
+	}
+	if code, _ := r2.do("POST", "/v1/auth/challenge", map[string]string{"deviceId": "0123456789abcdef0123456789abcdef"}, ""); code != 429 {
+		t.Fatal("the challenge endpoint is IP-limited too")
 	}
 }
 
@@ -248,18 +204,13 @@ func entitlementTx(id string, expires time.Time) apple.Transaction {
 
 func TestAnUpgradeChangesThePlanOnTheNextSession(t *testing.T) {
 	r := newRig(t, false)
-	_, first := r.session(r.tx(map[string]any{"productId": "com.ivy.whisperer.cloud.starter.monthly"}), "d")
+	m := r.newMac()
+	_, first := r.createAccount(m, r.tx(map[string]any{"productId": "com.ivy.whisperer.cloud.starter.monthly"}))
 	if first["plan"].(map[string]any)["name"] != "starter" {
 		t.Fatalf("first plan: %v", first["plan"])
 	}
-	_, second := r.session(r.tx(map[string]any{"productId": "com.ivy.whisperer.cloud.large.monthly", "transactionId": "1500"}), "d")
+	_, second := r.session(m, r.tx(map[string]any{"productId": "com.ivy.whisperer.cloud.large.monthly", "transactionId": "1500"}))
 	if second["plan"].(map[string]any)["name"] != "large" {
 		t.Fatalf("after upgrade: %v", second["plan"])
 	}
-}
-
-// freshToken is a session token issued at the rig's current clock for the standard test subscription.
-func (r *rig) freshToken() string {
-	tok, _ := r.signer.Issue(r.srv.UID("1000"), "mac-1", false, *r.clock)
-	return tok
 }

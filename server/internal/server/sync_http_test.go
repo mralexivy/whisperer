@@ -16,6 +16,8 @@ type syncRig struct {
 	*rig
 	blobs *syncplane.MemoryBlobs
 	sp    *syncplane.MemoryStore
+	mac   *mac
+	acct  string
 	token string
 }
 
@@ -27,11 +29,9 @@ func newSyncRig(t *testing.T) *syncRig {
 	r := newRig(t, false)
 	blobs, sp := syncplane.NewMemoryBlobs(), syncplane.NewMemoryStore()
 	r.srv.WithSync(&syncplane.Service{Store: sp, Blobs: blobs, Root: "whisperer", Now: func() time.Time { return *r.clock }})
-	code, body := r.session(r.tx(nil), "mac-1")
-	if code != 200 {
-		t.Fatalf("session: %d %v", code, body)
-	}
-	return &syncRig{rig: r, blobs: blobs, sp: sp, token: body["token"].(string)}
+	m, token := r.signup()
+	r.withLibrary(token)
+	return &syncRig{rig: r, blobs: blobs, sp: sp, mac: m, acct: r.accountID(m), token: token}
 }
 
 func objs(kind string, seq int, size int) map[string]any {
@@ -65,6 +65,16 @@ func TestUploadCommitHeadsOverHTTP(t *testing.T) {
 	}
 }
 
+func TestSyncObjectsLiveUnderTheAccountIdNotTheTransaction(t *testing.T) {
+	r := newSyncRig(t)
+	_, body := r.do("POST", "/v1/sync/upload", objs("changes", 1, 10), r.token)
+	name := body["grants"].([]any)[0].(map[string]any)["name"].(string)
+	want := syncplane.Prefix("whisperer", r.acct, 1) + "changes/" + device + "/000000000001"
+	if name != want {
+		t.Fatalf("object name %q, want %q", name, want)
+	}
+}
+
 func TestSyncRoutesNeedASessionAndRefuseForeignNames(t *testing.T) {
 	r := newSyncRig(t)
 	if code, _ := r.do("POST", "/v1/sync/upload", objs("changes", 1, 10), ""); code != 401 {
@@ -76,6 +86,43 @@ func TestSyncRoutesNeedASessionAndRefuseForeignNames(t *testing.T) {
 	}
 }
 
+func TestUploadNeedsALibrary(t *testing.T) {
+	r := newRig(t, false)
+	r.srv.WithSync(&syncplane.Service{Store: syncplane.NewMemoryStore(), Blobs: syncplane.NewMemoryBlobs(), Root: "whisperer"})
+	_, token := r.signup()
+	if code, body := r.do("POST", "/v1/sync/upload", objs("changes", 1, 10), token); code != 409 || body["error"] != "library_required" {
+		t.Fatalf("no library: %d %v", code, body)
+	}
+}
+
+func TestARevokedDeviceLosesSyncAtTheNextGrantAndCommit(t *testing.T) {
+	r := newSyncRig(t)
+	other, otherTok := r.enrolConfirmed()
+	if code, _ := r.do("POST", "/v1/sync/upload", objs("changes", 1, 10), otherTok); code != 200 {
+		t.Fatal("authorized second device should sync")
+	}
+	if code, _ := r.do("DELETE", "/v1/devices/"+other.id, nil, r.token); code != 204 {
+		t.Fatalf("revoke: %d", code)
+	}
+	for _, p := range []struct{ method, path string }{{"POST", "/v1/sync/upload"}, {"POST", "/v1/sync/commit"}, {"POST", "/v1/sync/download"}, {"POST", "/v1/sync/delete"}} {
+		code, body := r.do(p.method, p.path, objs("changes", 1, 10), otherTok)
+		if code != 403 || body["error"] != "device_revoked" {
+			t.Errorf("%s with a revoked device (token still valid): %d %v", p.path, code, body)
+		}
+	}
+	if code, _ := r.do("POST", "/v1/sync/upload", objs("changes", 1, 10), r.token); code != 200 {
+		t.Fatal("the other device must be unaffected")
+	}
+}
+
+func TestATokenForAnotherAccountsDeviceIsRefused(t *testing.T) {
+	r := newSyncRig(t)
+	forged, _ := r.signer.Issue(r.acct, "ffffffffffffffffffffffffffffffff", 1, "active", false, *r.clock) // a device id that is not enrolled
+	if code, body := r.do("POST", "/v1/sync/upload", objs("changes", 1, 10), forged); code != 403 || body["error"] != "device_not_authorized" {
+		t.Fatalf("unenrolled device in a validly signed token: %d %v", code, body)
+	}
+}
+
 func TestALapsedSubscriberCanReadAndDeleteButNotWrite(t *testing.T) {
 	r := newSyncRig(t)
 	_, up := r.do("POST", "/v1/sync/upload", objs("changes", 1, 100), r.token)
@@ -83,7 +130,7 @@ func TestALapsedSubscriberCanReadAndDeleteButNotWrite(t *testing.T) {
 	r.do("POST", "/v1/sync/commit", map[string]any{"device": device, "seq": 1, "crc": 5}, r.token)
 
 	*r.clock = r.clock.Add(31 * 24 * time.Hour) // the month is paid up; now it has lapsed
-	r.token = r.freshToken()
+	r.token = r.tokenFor(r.acct, r.mac.id)
 	if code, body := r.do("POST", "/v1/sync/upload", objs("changes", 2, 100), r.token); code != 403 || body["error"] != "read_only" {
 		t.Fatalf("lapsed write: %d %v", code, body)
 	}
@@ -97,7 +144,7 @@ func TestALapsedSubscriberCanReadAndDeleteButNotWrite(t *testing.T) {
 
 func TestSealedAccountsExportTextButNotAudio(t *testing.T) {
 	r := newSyncRig(t)
-	pre := syncplane.Prefix("whisperer", r.srv.UID("1000"), 1)
+	pre := syncplane.Prefix("whisperer", r.acct, 1)
 	r.blobs.Put(pre+"audio/00000000000000000000000000000001", 10, 0)
 	r.blobs.Put(pre+"changes/"+device+"/000000000001", 10, 0)
 	*r.clock = r.clock.Add(93 * 24 * time.Hour)
@@ -105,12 +152,12 @@ func TestSealedAccountsExportTextButNotAudio(t *testing.T) {
 	text := map[string]any{"objects": []map[string]any{{"kind": "changes", "device": device, "seq": 1}}}
 	// Paid to day 30; the standard plan's read-only window runs to day 150 and the seal to day 164.
 	// Day 93 is inside the window — audio still works.
-	r.token = r.freshToken()
+	r.token = r.tokenFor(r.acct, r.mac.id)
 	if code, _ := r.do("POST", "/v1/sync/download", audio, r.token); code != 200 {
 		t.Fatalf("read-only window audio: %d", code)
 	}
 	*r.clock = r.clock.Add(60 * 24 * time.Hour) // day 153: three days into the seal
-	r.token = r.freshToken()
+	r.token = r.tokenFor(r.acct, r.mac.id)
 	if code, body := r.do("POST", "/v1/sync/download", audio, r.token); code != 403 || body["error"] != "sealed" {
 		t.Fatalf("sealed audio: %d %v", code, body)
 	}
@@ -129,7 +176,7 @@ func TestAnAppleNotificationRunsTheGuardedSweep(t *testing.T) {
 	sw := &retention.Sweeper{Entitlements: r.store, Apple: staticApple{}, Blobs: r.blobs, Root: "whisperer",
 		Epoch: func(context.Context, string) (int, error) { return 1, nil }, Now: func() time.Time { return later }}
 	r.srv.WithSweeper(sw)
-	n := notification(r.rig, "DID_RENEW", "sweep-1", r.tx(map[string]any{"originalTransactionId": "9100"}), *r.clock)
+	n := notification(r.rig, "DID_RENEW", "sweep-1", r.tx(nil), *r.clock)
 	if code, _ := r.do("POST", "/v1/apple/notifications", map[string]string{"signedPayload": n}, ""); code != 200 {
 		t.Fatalf("notification: %d", code)
 	}

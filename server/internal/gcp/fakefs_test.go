@@ -99,6 +99,15 @@ func (f *fakeFirestore) commit(w http.ResponseWriter, body map[string]any) {
 			}
 		}
 	}
+	for _, wr := range writes { // preconditions first: the commit is all-or-nothing
+		m := wr.(map[string]any)
+		if cd, ok := m["currentDocument"].(map[string]any); ok && cd["exists"] == false {
+			if _, present := f.docs[m["update"].(map[string]any)["name"].(string)]; present {
+				f.reply(w, 409, map[string]any{"error": map[string]any{"status": "ALREADY_EXISTS"}})
+				return
+			}
+		}
+	}
 	for _, wr := range writes {
 		m := wr.(map[string]any)
 		if upd, ok := m["update"].(map[string]any); ok {
