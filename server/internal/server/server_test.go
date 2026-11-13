@@ -190,7 +190,7 @@ func TestRateLimitBluntsARunawayClient(t *testing.T) {
 	if limited == 0 {
 		t.Fatal("60 requests in a minute from one address were all served")
 	}
-	if code, _ := r2.do("GET", "/healthz", nil, ""); code != 200 {
+	if code, _ := r2.do("GET", "/v1/health", nil, ""); code != 200 {
 		t.Fatal("health checks must never be limited")
 	}
 	if code, _ := r2.do("POST", "/v1/auth/challenge", map[string]string{"deviceId": "0123456789abcdef0123456789abcdef"}, ""); code != 429 {

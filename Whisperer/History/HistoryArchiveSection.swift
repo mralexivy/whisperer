@@ -313,12 +313,15 @@ final class HistoryArchiveModel: ObservableObject {
 struct HistoryArchiveSection: View {
     let colorScheme: ColorScheme
     @StateObject private var model: HistoryArchiveModel
+    /// The Cloud panel binds to this; nil builds the live one the first time the Cloud row is opened.
+    private let cloudModel: CloudPanelModel?
     @State private var dropTargeted = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @MainActor
-    init(colorScheme: ColorScheme, model: HistoryArchiveModel? = nil) {
+    init(colorScheme: ColorScheme, model: HistoryArchiveModel? = nil, cloudModel: CloudPanelModel? = nil) {
         self.colorScheme = colorScheme
+        self.cloudModel = cloudModel
         _model = StateObject(wrappedValue: model ?? HistoryArchiveModel())
     }
 
@@ -345,8 +348,7 @@ struct HistoryArchiveSection: View {
 
                 if HistoryArchiveModel.cloudRowVisible {
                     choiceRow(.cloud, icon: "icloud.and.arrow.up", tint: .purple,
-                              title: "Whisperer Cloud", subtitle: "Keep your history in sync across your Macs, automatically",
-                              pill: "Coming soon")
+                              title: "Whisperer Cloud", subtitle: "Keep your history in sync across your Macs, automatically")
                     if model.panel == .cloud { cloudPanel.transition(.move(edge: .top).combined(with: .opacity)) }
                 }
 
@@ -438,33 +440,11 @@ struct HistoryArchiveSection: View {
 
     // MARK: Cloud panel
 
-    /// The shape of the paid sync offer, ready for the service (docs/exec-plans/cloud-sync.md). Nothing
-    /// here can be bought or started yet, so the one action says so rather than doing nothing.
+    /// The real panel (Whisperer/Cloud/UI). "Export my history" in its read-only screen unfolds the Export panel.
     private var cloudPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            ForEach([("lock.shield.fill", "End-to-end encrypted", "Your recordings and transcripts are encrypted on your Mac before they leave it. We cannot read them."),
-                     ("arrow.triangle.2.circlepath", "Seamless sync", "New dictations and meetings appear on your other Macs in the background — nothing to export or copy."),
-                     ("macbook.and.iphone", "A new Mac, instantly", "Sign in to the same Apple ID and your history is there, text first, recordings as you play them.")],
-                    id: \.1) { icon, title, text in
-                HStack(alignment: .top, spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 7).fill(Color.purple.opacity(0.15)).frame(width: 28, height: 28)
-                        Image(systemName: icon).font(.system(size: 12, weight: .semibold)).foregroundColor(.purple)
-                    }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title).font(.system(size: 13, weight: .semibold)).foregroundColor(primary)
-                        Text(text).font(.system(size: 12)).foregroundColor(secondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            HStack(spacing: 12) {
-                Text("Whisperer Cloud is a subscription and is not available yet. Until then, Export and Import move your history by file.")
-                    .font(.system(size: 12)).foregroundColor(secondary).fixedSize(horizontal: false, vertical: true)
-                Spacer()
-                actionButton("Not available yet", icon: "icloud.and.arrow.up", id: "transfer.cloud.subscribe", enabled: false) { }
-            }
+        CloudPanelView(colorScheme: colorScheme, model: cloudModel) { [model] in
+            if model.panel != .export { model.toggle(.export) }
         }
-        .padding(.leading, 50)
     }
 
     // MARK: Export panel

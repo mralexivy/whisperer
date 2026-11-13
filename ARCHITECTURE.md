@@ -930,6 +930,22 @@ Opt-in rewrite of pre-Opus `.wav` / `.caf` library audio, offered as a row in Se
 
 Record-driven, not directory-driven: only files a CoreData row points at are converted, because the conversion is only safe if the row can be repointed. The ordering is the whole design — transcode to a sibling `.compacting.opus` → verify it opens and its duration matches **in seconds** (source reports 16 kHz, output reports 48 kHz) → move to a unique `.opus` → commit the filename through the owning manager → *only then* unlink the original. A failed commit deletes the **new** file and keeps the original, so a row never points at nothing. It shares `AudioRetentionService.currentBlocker` and re-checks it per file, stopping at a file boundary if a recording starts.
 
+## Whisperer Cloud (App Store build)
+
+Paid, end-to-end-encrypted history sync. Server in `server/` (Go; Cloud Run + Firestore + Cloud Storage + Secret Manager), client in `Whisperer/Cloud/`. Everything is behind `CloudFeature` (App Store build only; `isLive` is the release switch).
+
+| Piece | Where |
+|---|---|
+| Purchase (StoreKit 2, `appAccountToken`) | `CloudSubscriptionStore`, `CloudSubscriptionView`, `CloudPlan`, `CloudAccess` |
+| Keys & encryption (AES-256-GCM, HKDF, recovery key, device key) | `CloudCrypto`, `CloudKeys`, `CloudDeviceKey` |
+| Account state machine | `CloudAccountController` over `CloudClient` / `CloudHTTP` |
+| Network contract and transport | `CloudTransport`, `CloudHTTPTransport` (signed URLs, resumable) |
+| Sync engine (ledger sidecar, HLC, batches, snapshots, audio) | `Whisperer/Cloud/Sync/` |
+| Runtime wiring and service selection | `CloudRuntime`, `CloudConfig` |
+| UI | `Whisperer/Cloud/UI/` (the Cloud panel in Move History) |
+
+See `docs/exec-plans/cloud-sync-implementation.md` and `docs/knowledge/cloud/knowledge.md`.
+
 ## Common Pitfalls
 
 1. **WhisperBridge.transcribe() is blocking** — NEVER call from main thread. Always use `transcribeAsync()` or call from background DispatchQueue.

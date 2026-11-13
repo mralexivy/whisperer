@@ -24,5 +24,16 @@ nonisolated enum CloudFeature {
     static let isLive = false
 
     /// Whether the app may show, start or sync anything Cloud. Overridable in tests.
-    static var isAvailable: Bool { isStoreBuild && isLive }
+    static var isAvailable: Bool {
+        #if DEBUG
+        if let forced = testOverride { return forced }
+        #endif
+        return isStoreBuild && isLive
+    }
+
+    #if DEBUG
+    /// Lets click and render tests put the Cloud UI on screen. Compiled out of Release builds, so the
+    /// shipped app cannot be switched on this way.
+    nonisolated(unsafe) static var testOverride: Bool?
+    #endif
 }

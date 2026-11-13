@@ -255,3 +255,67 @@ func TestHeadsPollIsUnchangedWhenTheVersionMatches(t *testing.T) {
 		t.Fatal("an up-to-date poll must report unchanged")
 	}
 }
+
+const snapA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const snapB = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+func (r *rig) commitWithSnapshot(t *testing.T, seq int64, snap *syncplane.SnapshotCommit) (syncplane.CommitResult, error) {
+	t.Helper()
+	r.upload(t, change(seq), 10, uint32(seq))
+	if snap != nil {
+		r.upload(t, syncplane.Ref{Kind: syncplane.KindSnapshot, ID: snap.ID}, 20, 1)
+	}
+	return r.svc.Commit(context.Background(), r.lib, false, syncplane.CommitRequest{Device: dev, Seq: seq, CRC: uint32(seq), Snapshot: snap})
+}
+
+func TestSnapshotCommitRecordsTheSnapshotAndEnforcesCoversAndVersion(t *testing.T) {
+	r := newRig(big)
+	if _, err := r.commitWithSnapshot(t, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	// Claims more than the library has committed: refused, and the batch does not advance.
+	_, err := r.commitWithSnapshot(t, 2, &syncplane.SnapshotCommit{ID: snapA, Covers: map[string]int64{dev: 9}, Version: 1})
+	if !errors.Is(err, syncplane.ErrBadSnapshot) || !errors.Is(err, syncplane.ErrBadRequest) {
+		t.Fatalf("covers beyond heads: %v", err)
+	}
+	h, _ := r.store.GetHeads(context.Background(), "acct")
+	if h.Heads[dev].Seq != 1 || h.Snapshot != nil {
+		t.Fatalf("a refused snapshot must not move the heads: %+v", h)
+	}
+	// Covers up to this very batch is fine.
+	res, err := r.commitWithSnapshot(t, 2, &syncplane.SnapshotCommit{ID: snapA, Covers: map[string]int64{dev: 2}, Version: 1})
+	if err != nil || res.Head.Seq != 2 {
+		t.Fatalf("valid snapshot: %+v %v", res, err)
+	}
+	h, _ = r.store.GetHeads(context.Background(), "acct")
+	if h.Snapshot == nil || h.Snapshot.ID != snapA || h.Snapshot.Covers[dev] != 2 || h.Snapshot.Version != 1 {
+		t.Fatalf("snapshot not recorded: %+v", h.Snapshot)
+	}
+	// An identical retry (lost reply) is accepted and changes nothing.
+	again, err := r.svc.Commit(context.Background(), r.lib, false, syncplane.CommitRequest{Device: dev, Seq: 2, CRC: 2,
+		Snapshot: &syncplane.SnapshotCommit{ID: snapA, Covers: map[string]int64{dev: 2}, Version: 1}})
+	if err != nil || again.Version != res.Version {
+		t.Fatalf("retry: %+v %v", again, err)
+	}
+	// Compare-and-set: a second writer still at version 1 loses, version 2 wins.
+	if _, err := r.commitWithSnapshot(t, 3, &syncplane.SnapshotCommit{ID: snapB, Covers: map[string]int64{dev: 3}, Version: 1}); !errors.Is(err, syncplane.ErrBadSnapshot) {
+		t.Fatalf("stale version must lose: %v", err)
+	}
+	if _, err := r.commitWithSnapshot(t, 3, &syncplane.SnapshotCommit{ID: snapB, Covers: map[string]int64{dev: 3}, Version: 2}); err != nil {
+		t.Fatalf("next version: %v", err)
+	}
+	h, _ = r.store.GetHeads(context.Background(), "acct")
+	if h.Snapshot.ID != snapB || h.Snapshot.Version != 2 {
+		t.Fatalf("snapshot after CAS: %+v", h.Snapshot)
+	}
+}
+
+func TestSnapshotMustHaveBeenUploaded(t *testing.T) {
+	r := newRig(big)
+	r.upload(t, change(1), 10, 1)
+	_, err := r.svc.Commit(context.Background(), r.lib, false, syncplane.CommitRequest{Device: dev, Seq: 1, CRC: 1,
+		Snapshot: &syncplane.SnapshotCommit{ID: snapA, Covers: map[string]int64{dev: 1}, Version: 1}})
+	if !errors.Is(err, syncplane.ErrNotUploaded) {
+		t.Fatalf("missing snapshot object: %v", err)
+	}
+}

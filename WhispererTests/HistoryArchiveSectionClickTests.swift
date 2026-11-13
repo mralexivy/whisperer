@@ -24,8 +24,8 @@ final class HistoryArchiveSectionClickTests: XCTestCase {
         while Date() < until { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.02)) }
     }
 
-    private func host(_ model: HistoryArchiveModel) {
-        let hosting = NSHostingView(rootView: HistoryArchiveSection(colorScheme: .dark, model: model).padding(24).frame(width: 800))
+    private func host(_ model: HistoryArchiveModel, cloud: CloudPanelModel? = nil) {
+        let hosting = NSHostingView(rootView: HistoryArchiveSection(colorScheme: .dark, model: model, cloudModel: cloud).padding(24).frame(width: 800))
         let window = NSWindow(contentRect: CGRect(x: 40, y: 40, width: 800, height: 1800), styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = hosting
         window.makeKeyAndOrderFront(nil)
@@ -70,16 +70,46 @@ final class HistoryArchiveSectionClickTests: XCTestCase {
         XCTAssertEqual(model.panel, .none, "clicking the open row folds it")
     }
 
-    func testTheCloudRowUnfoldsAnInertPanelAndNeverStartsAnything() throws {
-        guard HistoryArchiveModel.cloudRowVisible else { throw XCTSkip("the Cloud row exists only in the App Store build once Cloud is live") }
-        host(HistoryArchiveModel())
+    /// The Cloud row and its real panel, with the debug override on and a stub account (no network, no StoreKit).
+    private func hostWithCloud(_ state: CloudAccountState, info: CloudAccountInfo? = nil) -> (account: StubCloudAccount, recorder: PanelRecorder) {
+        CloudFeature.testOverride = true
+        addTeardownBlock { CloudFeature.testOverride = nil }
+        let account = StubCloudAccount(state: state, info: info)
+        let recorder = PanelRecorder()
+        let cloud = CloudPanelModel(account: account, environment: recorder.environment(for: account))
+        Self.keepAlive += [account, recorder, cloud]
+        host(HistoryArchiveModel(), cloud: cloud)
+        return (account, recorder)
+    }
+
+    func testTheCloudRowIsHiddenUntilCloudIsAvailable() {
+        XCTAssertNil(CloudFeature.testOverride)
+        XCTAssertFalse(HistoryArchiveModel.cloudRowVisible, "no Cloud row while CloudFeature.isLive is false")
+    }
+
+    func testTheCloudRowUnfoldsTheRealPanelAndItsControlsWork() throws {
+        let (account, _) = hostWithCloud(.notSubscribed)
+        XCTAssertTrue(HistoryArchiveModel.cloudRowVisible)
         try click("transfer.row.cloud", x: 0.3)
         XCTAssertEqual(model.panel, .cloud)
-        XCTAssertNotNil(frame("transfer.cloud.subscribe"))
-        try click("transfer.cloud.subscribe")
-        XCTAssertEqual(model.state, .idle, "a disabled button does nothing")
+        XCTAssertNotNil(frame("cloud.plans"), "Apple's plans sit in the unfolded panel")
+        XCTAssertNil(frame("cloud.subscribe"), "the old placeholder button is gone")
+        try click("cloud.restore")
+        XCTAssertEqual(account.restoreCount, 1)
+        try click("cloud.stub.subscribe")
+        XCTAssertEqual(account.purchases.count, 1)
+        XCTAssertEqual(model.state, .idle, "the Cloud panel never starts an export or import")
         try click("transfer.row.export", x: 0.3)
         XCTAssertEqual(model.panel, .export, "one panel at a time")
+    }
+
+    func testExportMyHistoryFromTheReadOnlyScreenOpensTheExportPanel() throws {
+        _ = hostWithCloud(.readOnly(.expired), info: CloudPanelFixtures.info(state: .lapsed))
+        try click("transfer.row.cloud", x: 0.3)
+        XCTAssertEqual(model.panel, .cloud)
+        try click("cloud.readonly.export")
+        XCTAssertEqual(model.panel, .export)
+        XCTAssertNotNil(frame("transfer.export.run"))
     }
 
     func testClickingTheChipsChangesTheScope() throws {

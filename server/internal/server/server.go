@@ -74,7 +74,10 @@ func New(cfg Config, a *apple.Verifier, store entitlement.Store, accounts accoun
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]string{"ok": "true"}) })
+	health := func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]string{"ok": "true"}) }
+	mux.HandleFunc("GET /healthz", health)
+	// Cloud Run's front end reserves /healthz and answers it itself with a 404, so the service is probed here.
+	mux.HandleFunc("GET /v1/health", health)
 	s.identityRoutes(mux)
 	s.libraryRoutes(mux)
 	mux.HandleFunc("POST /v1/apple/notifications", s.handleNotification)

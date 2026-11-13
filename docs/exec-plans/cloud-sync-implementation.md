@@ -9,12 +9,15 @@ Artifact Registry (one 6 MB image), Cloud Logging/Monitoring (defaults), Resourc
 
 | Stage | State |
 |---|---|
-| A — identity, Apple, store | **Partly done.** Apple JWS + Notifications V2 + **Server API client** (ES256 JWT, sandbox fallback, never reads uncertainty as expiry), entitlement states incl. sealed/soft-deleted, **Firestore store**. *Not yet:* random `accountId` + device keypairs + key-proof enrolment (the server still derives the id as HMAC(originalTransactionId)) |
-| B — storage control plane | **Done:** grants, quota reservations, commit/heads, download, delete, V4 signed URLs via IAM `signBlob` (incl. resumable start), Firestore transactions, guarded retention sweeper (no Scheduler) |
-| C — deploy | not started (each command needs approval) |
-| D — App Store Connect | not started |
-| E — Mac purchase code | **Done** (StoreKit 2, App Store build only, `CloudFeature.isLive` off). *Not yet:* keys, crypto, enrolment |
-| F–H — Mac sync engine, audio, UI | not started |
+| A — identity, Apple, store | **Done and tested.** Random `accountId`, device keys, stateless nonces, enrolment with key proof, recovery blob, reset (old epoch held 7 days), Apple JWS + Notifications V2 + Server API client, sealed/soft-deleted retention stages |
+| B — storage control plane | **Done and tested** (incl. real Firestore): grants, reservations, commit/heads/snapshots, download, delete, V4 signed URLs via `signBlob` incl. resumable, guarded sweeper (no Scheduler) |
+| C — deploy | **Sandbox service live** (`whisperer-api-sandbox`, Cloud Run + Firestore + Storage + 2 secrets). Production service, In-App Purchase key and real signed-URL check pending |
+| D — App Store Connect | Group, 16-day grace period, sandbox notification URL done. **Products blocked** until the Paid Apps agreement/banking/tax are active (`SUBSCRIPTION_CREATION_NOT_ALLOWED`) |
+| E — Mac purchase, keys, crypto, account flows | **Done and tested** (wire formats pinned by Go-generated vectors) |
+| F — sync engine | **Done and tested** (4,050 fuzz seeds, history-safety proof) |
+| G — audio, large objects | **Done** (resumable upload, ranged download, bounded memory) |
+| H — UI | **Done** (every state, click + render tests) |
+| Wiring | `CloudRuntime` + `CloudConfig` (service by App Store environment); `CloudFeature.isLive` still **off** |
 
 ## 0. Decision log (alternatives → trade-offs → selected)
 

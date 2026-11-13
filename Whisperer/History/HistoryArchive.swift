@@ -884,7 +884,7 @@ nonisolated enum HistoryArchive {
         }
     }
 
-    private static func formKey(_ incorrect: String?, _ correct: String?) -> String {
+    static func formKey(_ incorrect: String?, _ correct: String?) -> String {
         "\((incorrect ?? "").lowercased())\u{1}\((correct ?? "").lowercased())"
     }
 
@@ -940,7 +940,7 @@ nonisolated enum HistoryArchive {
 
     /// Every attribute of the entity as JSON-safe values. Dates are seconds since 1970 (lossless),
     /// binary data is base64, UUIDs are strings; nil attributes are omitted.
-    private static func encodeRow(_ object: NSManagedObject) -> [String: Any] {
+    static func encodeRow(_ object: NSManagedObject) -> [String: Any] {
         var row: [String: Any] = [:]
         for (name, attribute) in object.entity.attributesByName {
             guard let value = object.value(forKey: name) else { continue }
@@ -962,7 +962,7 @@ nonisolated enum HistoryArchive {
         return row
     }
 
-    private static func decodeRow(_ row: [String: Any], into object: NSManagedObject, description: NSEntityDescription) {
+    static func decodeRow(_ row: [String: Any], into object: NSManagedObject, description: NSEntityDescription) {
         for (name, attribute) in description.attributesByName {
             guard let raw = row[name], !(raw is NSNull) else { continue }
             switch attribute.attributeType {

@@ -13,16 +13,22 @@ import StoreKit
 
 struct CloudSubscriptionView: View {
     @ObservedObject var store: CloudSubscriptionStore = .shared
+    /// The Cloud panel explains the offer itself, so it hides this marketing header.
+    var showsHeader = true
+    /// Runs after a completed purchase, so the account state machine can carry on (create the account).
+    var onPurchased: (@MainActor () async -> Void)?
 
     var body: some View {
         SubscriptionStoreView(productIDs: CloudProduct.launchIDs) {
-            VStack(spacing: 8) {
-                Image(systemName: "icloud.and.arrow.up.fill").font(.system(size: 34)).foregroundColor(.purple)
-                Text("Whisperer Cloud").font(.system(size: 22, weight: .light))
-                Text("End-to-end encrypted history, synced across your Macs.")
-                    .font(.system(size: 13)).multilineTextAlignment(.center).foregroundColor(.white.opacity(0.7))
+            if showsHeader {
+                VStack(spacing: 8) {
+                    Image(systemName: "icloud.and.arrow.up.fill").font(.system(size: 34)).foregroundColor(.purple)
+                    Text("Whisperer Cloud").font(.system(size: 22, weight: .light))
+                    Text("End-to-end encrypted history, synced across your Macs.")
+                        .font(.system(size: 13)).multilineTextAlignment(.center).foregroundColor(.white.opacity(0.7))
+                }
+                .padding(.vertical, 12)
             }
-            .padding(.vertical, 12)
         }
         .subscriptionStoreControlStyle(.picker)
         .subscriptionStoreButtonLabel(.multiline)
@@ -38,6 +44,7 @@ struct CloudSubscriptionView: View {
                 await transaction.finish()
             }
             await store.refreshStatus()
+            await onPurchased?()
         }
         .task { await store.refreshStatus() }
     }

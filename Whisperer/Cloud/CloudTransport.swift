@@ -93,4 +93,25 @@ protocol CloudTransport: Sendable {
     func requestDownloads(_ refs: [CloudObjectRef]) async throws -> [CloudGrant]
     func download(with grant: CloudGrant) async throws -> Data
     func delete(_ refs: [CloudObjectRef]) async throws -> Int
+    /// File-based variants for large objects (audio); defaults below read/write through `Data`.
+    func upload(fileAt url: URL, size: Int64, with grant: CloudGrant) async throws
+    func download(with grant: CloudGrant, to url: URL) async throws
+}
+
+// MARK: - File-based transfers (additive, used by the sync engine for audio)
+
+/// Large objects (meeting audio) must not be loaded into memory. The engine hands the transport a file; a
+/// transport that streams (the HTTP one, with its resumable sessions for objects >= 8 MB) overrides these.
+/// The defaults go through `Data`, which is correct for every transport and fine for the small objects the
+/// in-memory simulator carries.
+extension CloudTransport {
+    func upload(fileAt url: URL, size: Int64, with grant: CloudGrant) async throws {
+        try await upload(try Data(contentsOf: url), with: grant)
+    }
+
+    /// Downloads the object behind `grant` into `url` (replacing it). A partial file is never left behind on failure.
+    func download(with grant: CloudGrant, to url: URL) async throws {
+        let data = try await download(with: grant)
+        try data.write(to: url, options: .atomic)
+    }
 }

@@ -3,6 +3,7 @@ package syncplane
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/mralexivy/whisperer/server/internal/quota"
@@ -14,6 +15,7 @@ var (
 	ErrNotUploaded   = errors.New("syncplane: object was not uploaded")
 	ErrCRCMismatch   = errors.New("syncplane: object does not match what was announced")
 	ErrSeqConflict   = errors.New("syncplane: sequence conflict")
+	ErrBadSnapshot   = fmt.Errorf("%w: snapshot claim refused", ErrBadRequest)
 	ErrTooManyNames  = errors.New("syncplane: too many names in one request")
 	ErrNothingGrants = errors.New("syncplane: no such upload was granted")
 )
@@ -189,6 +191,18 @@ type CommitRequest struct {
 	CRC    uint32 `json:"crc"`
 	// Extra names (audio, snapshots) uploaded alongside the batch, committed with it.
 	Extra []Ref `json:"extra,omitempty"`
+	// Snapshot optionally announces a compaction snapshot uploaded alongside the batch (see SnapshotCommit).
+	Snapshot *SnapshotCommit `json:"snapshot,omitempty"`
+}
+
+// SnapshotCommit announces that object snapshots/{ID} holds the merged state up to Covers (device -> highest
+// change seq included). The server accepts it only when the object exists, no cover exceeds what the library has
+// committed (a snapshot never claims more than exists) and Version is exactly one above the current snapshot
+// (compare-and-set: two devices compacting at once cannot both win).
+type SnapshotCommit struct {
+	ID      string           `json:"id"`
+	Covers  map[string]int64 `json:"covers"`
+	Version int64            `json:"version"`
 }
 
 type CommitResult struct {
@@ -209,6 +223,13 @@ func (s *Service) Commit(ctx context.Context, l Library, readOnly bool, c Commit
 		return CommitResult{}, ErrBadRequest
 	}
 	names := []string{mainName}
+	if c.Snapshot != nil {
+		n, err := (Ref{Kind: KindSnapshot, ID: c.Snapshot.ID}).Name(prefix)
+		if err != nil || len(c.Snapshot.Covers) == 0 || c.Snapshot.Version < 1 {
+			return CommitResult{}, ErrBadRequest
+		}
+		names = append(names, n)
+	}
 	for _, e := range c.Extra {
 		n, err := e.Name(prefix)
 		if err != nil || e.Kind == KindChange {
@@ -237,15 +258,50 @@ func (s *Service) Commit(ctx context.Context, l Library, readOnly bool, c Commit
 	// step below then fails, the caller's retry is the identical (seq, crc), which the head accepts again.
 	err = s.Store.UpdateHeads(ctx, l.Account, func(h *Heads) error {
 		cur := h.Heads[c.Device]
+		advance := false
 		switch {
 		case c.Seq == cur.Seq && c.CRC == cur.CRC:
 			// identical retry
 		case c.Seq == cur.Seq+1:
-			h.Heads[c.Device] = Head{Seq: c.Seq, CRC: c.CRC}
-			h.Version++
+			advance = true
 		default:
 			result.Head = cur
 			return ErrSeqConflict
+		}
+		setSnapshot := false
+		if c.Snapshot != nil && !(h.Snapshot != nil && h.Snapshot.ID == c.Snapshot.ID) {
+			// Judged against the heads as they will be after this commit; any failure leaves the heads untouched.
+			for d, seq := range c.Snapshot.Covers {
+				have := h.Heads[d].Seq
+				if d == c.Device && advance {
+					have = c.Seq
+				}
+				if !isHex(d, 32) || seq < 0 || seq > have {
+					return ErrBadSnapshot
+				}
+			}
+			var curVersion int64
+			if h.Snapshot != nil {
+				curVersion = h.Snapshot.Version
+			}
+			if c.Snapshot.Version != curVersion+1 {
+				return ErrBadSnapshot
+			}
+			setSnapshot = true
+		}
+		if advance {
+			h.Heads[c.Device] = Head{Seq: c.Seq, CRC: c.CRC}
+			h.Version++
+		}
+		if setSnapshot {
+			covers := make(map[string]int64, len(c.Snapshot.Covers))
+			for d, seq := range c.Snapshot.Covers {
+				covers[d] = seq
+			}
+			h.Snapshot = &Snapshot{ID: c.Snapshot.ID, Covers: covers, Version: c.Snapshot.Version}
+			if !advance {
+				h.Version++
+			}
 		}
 		result = CommitResult{Version: h.Version, Head: h.Heads[c.Device]}
 		return nil

@@ -13,11 +13,17 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math/big"
-	"testing"
 	"time"
 
 	"github.com/mralexivy/whisperer/server/internal/apple"
 )
+
+// TB is the part of testing.TB the kit uses, so a development binary can build an Apple without importing
+// "testing". *testing.T and *testing.B satisfy it.
+type TB interface {
+	Helper()
+	Fatal(args ...any)
+}
 
 type Apple struct {
 	Root     *x509.Certificate
@@ -31,7 +37,7 @@ type Apple struct {
 	interDER []byte
 }
 
-func New(t testing.TB, now time.Time) *Apple {
+func New(t TB, now time.Time) *Apple {
 	t.Helper()
 	a := &Apple{Now: now}
 	rootKey := key(t)
@@ -69,7 +75,7 @@ func New(t testing.TB, now time.Time) *Apple {
 	return a
 }
 
-func key(t testing.TB) *ecdsa.PrivateKey {
+func key(t TB) *ecdsa.PrivateKey {
 	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +83,7 @@ func key(t testing.TB) *ecdsa.PrivateKey {
 	return k
 }
 
-func sign(t testing.TB, tpl, parent *x509.Certificate, pub *ecdsa.PublicKey, signer *ecdsa.PrivateKey) []byte {
+func sign(t TB, tpl, parent *x509.Certificate, pub *ecdsa.PublicKey, signer *ecdsa.PrivateKey) []byte {
 	der, err := x509.CreateCertificate(rand.Reader, tpl, parent, pub, signer)
 	if err != nil {
 		t.Fatal(err)
@@ -86,10 +92,10 @@ func sign(t testing.TB, tpl, parent *x509.Certificate, pub *ecdsa.PublicKey, sig
 }
 
 // JWS signs `payload` (any JSON-able value) the way Apple does.
-func (a *Apple) JWS(t testing.TB, payload any) string { return a.JWSWith(t, payload, a.LeafKey, true) }
+func (a *Apple) JWS(t TB, payload any) string { return a.JWSWith(t, payload, a.LeafKey, true) }
 
 // JWSWith lets a test sign with the wrong key or leave the chain out.
-func (a *Apple) JWSWith(t testing.TB, payload any, signer *ecdsa.PrivateKey, withChain bool) string {
+func (a *Apple) JWSWith(t TB, payload any, signer *ecdsa.PrivateKey, withChain bool) string {
 	t.Helper()
 	chain := []string{base64.StdEncoding.EncodeToString(a.leafDER), base64.StdEncoding.EncodeToString(a.interDER)}
 	if !withChain {
@@ -110,4 +116,4 @@ func (a *Apple) JWSWith(t testing.TB, payload any, signer *ecdsa.PrivateKey, wit
 }
 
 // OtherKey is a key that is not Apple's, for forgery tests.
-func OtherKey(t testing.TB) *ecdsa.PrivateKey { return key(t) }
+func OtherKey(t TB) *ecdsa.PrivateKey { return key(t) }

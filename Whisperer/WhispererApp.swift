@@ -58,7 +58,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
         // Whisperer Cloud (App Store build, once live): the transaction listener must run from launch.
-        if CloudFeature.isAvailable { CloudSubscriptionStore.shared.start() }
+        if CloudFeature.isAvailable {
+            CloudSubscriptionStore.shared.start()
+            Task { await CloudRuntime.shared.start() }
+        }
         // Suppress false-positive stall alerts during model loading (Metal GPU queue pressure
         // from MLX/whisper.cpp eval() is expected during startup, not an actual hang).
         HealthManager.shared.suppressForStartup(seconds: 20)
