@@ -100,6 +100,10 @@ only relevant to a fraction of tasks. The Critical Rules above are the always-on
 | Editing `WhisperBridge` or anything calling whisper.cpp C APIs | `docs/references/whisper-cpp-integration.md` |
 | Editing `LanguageRouter`, `ModelPool`, `ModelRouter`, `ScriptAnalyzer` | `docs/references/language-routing.md` |
 | Preparing a submission or touching `#if APP_STORE` paths | `docs/exec-plans/app-store-submission.md` |
+| Privacy Shield, voice reshaping, the transcription jammer | `docs/design-docs/2026-11-voice-privacy-proposed-implementation.md`, `docs/design-docs/2026-11-transcription-jammer-research-brief.md`, then `docs/knowledge/privacy/` |
+| Cloud sync / a paid subscription / a server | `docs/exec-plans/cloud-sync.md` |
+| Paragraph breaks in live meeting text | `docs/exec-plans/live-transcript-paragraphs.md` |
+| Moving history between Macs (export / import) | `ARCHITECTURE.md` → Data Persistence, `Whisperer/History/HistoryArchive.swift` header |
 
 `ARCHITECTURE.md` is 900+ lines — jump to the relevant `##` section rather than reading it whole.
 

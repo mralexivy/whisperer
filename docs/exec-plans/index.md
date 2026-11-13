@@ -2,6 +2,11 @@
 
 ## Active Plans
 
+- [Whisperer Cloud — paid, end-to-end encrypted history sync](cloud-sync.md) — plan: GCS + a small Go
+  service on Cloud Run, StoreKit subscription, pricing and unit economics; nothing built yet
+- [Live transcript paragraphs](live-transcript-paragraphs.md) — implemented 2026-11-12 (timed words,
+  segmenter, post-meeting pass); notes on what was measured
+
 - [Connected AI providers](connected-ai-providers.md) — proposed: meeting notes + Ask AI on the
   user's own AI (Codex / Claude Code / Antigravity CLIs, ChatGPT OAuth, API keys), local default
 
