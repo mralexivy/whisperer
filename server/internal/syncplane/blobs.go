@@ -15,8 +15,10 @@ type Blobs interface {
 	Delete(ctx context.Context, name string) error // a missing object is not an error
 	// List returns up to n names under prefix after `after`, and whether more remain.
 	List(ctx context.Context, prefix, after string, n int) (names []string, more bool, err error)
-	// SignPut: a URL that creates `name` only if it does not exist (ifGenerationMatch=0) and no larger than maxSize.
-	SignPut(name string, maxSize int64, ttl time.Duration) (string, error)
+	// SignPut: a URL that creates `name` only if it does not exist (ifGenerationMatch=0) and no larger than maxSize,
+	// and the headers the client must send (they are part of the signature). `resumable` signs the POST that
+	// starts a resumable session, for large objects.
+	SignPut(name string, maxSize int64, ttl time.Duration, resumable bool) (string, map[string]string, error)
 	SignGet(name string, ttl time.Duration) (string, error)
 }
 
@@ -89,8 +91,8 @@ func (m *MemoryBlobs) List(_ context.Context, prefix, after string, n int) ([]st
 	return all, false, nil
 }
 
-func (m *MemoryBlobs) SignPut(name string, maxSize int64, ttl time.Duration) (string, error) {
-	return "https://storage.invalid/put/" + name, nil
+func (m *MemoryBlobs) SignPut(name string, maxSize int64, ttl time.Duration, resumable bool) (string, map[string]string, error) {
+	return "https://storage.invalid/put/" + name, map[string]string{"x-goog-if-generation-match": "0"}, nil
 }
 
 func (m *MemoryBlobs) SignGet(name string, ttl time.Duration) (string, error) {

@@ -5,6 +5,17 @@ Baseline services (unchanged): **Cloud Run · Cloud Storage · Firestore · Secr
 No Cloud Scheduler: deletion rides on requests the server already handles (revised 2026-11-13 — see D10). Platform capabilities used without being application services: IAM, IAM Credentials (`signBlob`),
 Artifact Registry (one 6 MB image), Cloud Logging/Monitoring (defaults), Resource Manager. Nothing else is enabled or planned.
 
+## Implementation status (2026-11-13)
+
+| Stage | State |
+|---|---|
+| A — identity, Apple, store | **Partly done.** Apple JWS + Notifications V2 + **Server API client** (ES256 JWT, sandbox fallback, never reads uncertainty as expiry), entitlement states incl. sealed/soft-deleted, **Firestore store**. *Not yet:* random `accountId` + device keypairs + key-proof enrolment (the server still derives the id as HMAC(originalTransactionId)) |
+| B — storage control plane | **Done:** grants, quota reservations, commit/heads, download, delete, V4 signed URLs via IAM `signBlob` (incl. resumable start), Firestore transactions, guarded retention sweeper (no Scheduler) |
+| C — deploy | not started (each command needs approval) |
+| D — App Store Connect | not started |
+| E — Mac purchase code | **Done** (StoreKit 2, App Store build only, `CloudFeature.isLive` off). *Not yet:* keys, crypto, enrolment |
+| F–H — Mac sync engine, audio, UI | not started |
+
 ## 0. Decision log (alternatives → trade-offs → selected)
 
 | # | Decision | Alternatives | Why selected / trade-off |

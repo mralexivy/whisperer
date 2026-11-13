@@ -8,7 +8,14 @@
 //	ALLOW_SANDBOX            "1" accepts Sandbox/Xcode purchases (TestFlight, development)
 //	UID_SECRET               HMAC secret that turns an Apple subscription into an opaque user id
 //	SESSION_SIGNING_KEY      base64 32-byte Ed25519 seed for the 1-hour session tokens
-//	ENV                      "production" refuses to start without the two secrets above
+//	ENV                      "production" refuses to start without the secrets and the GCP settings below
+//	GCP_PROJECT              Google Cloud project; with it the service uses Firestore + Cloud Storage (else in-memory, dev only)
+//	DATA_BUCKET              Cloud Storage bucket for encrypted user data (required with GCP_PROJECT)
+//	FIRESTORE_ROOT           document root, "envs/prod" (default) or "envs/sandbox"
+//	BUCKET_ROOT              object prefix, "whisperer" (default) or "whisperer-sandbox"
+//	APPLE_IAP_KEY            the In-App Purchase key (.p8 PEM) — from Secret Manager
+//	APPLE_KEY_ID, APPLE_ISSUER_ID   that key's ids; with the key they enable the retention sweep
+//	SWEEP_DRY_RUN            the sweep only reports what it would delete, until set to "0" (default: dry run)
 //
 // With no secrets and ENV unset the service runs for local development with ephemeral keys and an
 // in-memory store — nothing is persisted.
@@ -29,7 +36,6 @@ import (
 
 	"github.com/mralexivy/whisperer/server/internal/apple"
 	"github.com/mralexivy/whisperer/server/internal/auth"
-	"github.com/mralexivy/whisperer/server/internal/entitlement"
 	"github.com/mralexivy/whisperer/server/internal/quota"
 	"github.com/mralexivy/whisperer/server/internal/server"
 	"github.com/mralexivy/whisperer/server/internal/syncplane"
@@ -74,16 +80,20 @@ func run(log *slog.Logger) error {
 	}
 	log.Info("trusting Apple Root CA - G3", "sha256", apple.RootFingerprint())
 
-	// The Firestore store and the Cloud Storage deleter arrive with the storage milestone.
-	store := entitlement.NewMemory()
-	log.Warn("using the in-memory entitlement store: state is lost on restart")
+	backends, err := newBackends(context.Background(), log, production)
+	if err != nil {
+		return err
+	}
+	store := backends.entitlements
 
 	srv := server.New(server.Config{
 		BundleID: env("BUNDLE_ID", "com.ivy.whisperer"), ProductPrefix: env("PRODUCT_PREFIX", quota.ProductPrefix),
 		AllowSandbox: os.Getenv("ALLOW_SANDBOX") == "1", UIDSecret: uidSecret,
 	}, verifier, store, signer, log)
-	srv.WithSync(&syncplane.Service{Store: syncplane.NewMemoryStore(), Blobs: syncplane.NewMemoryBlobs(), Root: "whisperer"})
-	log.Warn("sync runs on in-memory fakes until the Firestore and Cloud Storage backends are configured")
+	srv.WithSync(&syncplane.Service{Store: backends.sync, Blobs: backends.blobs, Root: backends.bucketRoot})
+	if sweeper := backends.sweeper(verifier, log); sweeper != nil {
+		srv.WithSweeper(sweeper)
+	}
 
 	httpSrv := &http.Server{
 		Addr: ":" + env("PORT", "8080"), Handler: srv.Handler(),

@@ -22,3 +22,21 @@ PORT=8080 go run ./cmd/api        # local dev: in-memory store, ephemeral keys, 
 Packages: `apple` (JWS + Apple Root CA G3, embedded), `entitlement` (the state machine: active → grace →
 lapsed → deleted), `auth` (EdDSA session tokens), `quota` (plan limits), `server` (HTTP), `testkit`
 (a private "Apple" for tests). Nothing in `internal/testkit` ships in the binary.
+
+## Running on Google Cloud (Cloud Run + Firestore + Cloud Storage + Secret Manager)
+
+Nothing else is used. The service reads its configuration from environment variables (secrets are mounted from
+Secret Manager); see the header of `cmd/api/main.go` for the full list.
+
+| Variable | Purpose |
+|---|---|
+| `GCP_PROJECT`, `DATA_BUCKET` | switch from in-memory fakes to Firestore + Cloud Storage |
+| `FIRESTORE_ROOT`, `BUCKET_ROOT` | `envs/prod` + `whisperer`, or `envs/sandbox` + `whisperer-sandbox` for a sandbox deployment |
+| `UID_SECRET`, `SESSION_SIGNING_KEY` | secrets |
+| `APPLE_IAP_KEY`, `APPLE_KEY_ID`, `APPLE_ISSUER_ID` | App Store Server API; without them the retention sweep is off and **nothing is ever deleted** |
+| `SWEEP_DRY_RUN` | the sweep only reports until set to `0` |
+
+The runtime service account needs: `roles/datastore.user`, `roles/storage.objectAdmin` on the bucket,
+`roles/iam.serviceAccountTokenCreator` on itself (to sign URLs through IAM Credentials — there is no key file),
+and `roles/secretmanager.secretAccessor` on its secrets. No Cloud Scheduler: the retention sweep runs inside
+Apple notifications and sessions.

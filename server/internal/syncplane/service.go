@@ -61,6 +61,8 @@ type Grant struct {
 	URL       string    `json:"url"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	Resumable bool      `json:"resumable,omitempty"`
+	// Headers must accompany the request exactly as given: they are part of the URL's signature.
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 func monthKey(t time.Time) string { return t.UTC().Format("2006-01") }
@@ -154,11 +156,12 @@ func (s *Service) Grant(ctx context.Context, l Library, readOnly bool, reqs []Gr
 	}
 	out := make([]Grant, 0, len(items))
 	for _, it := range items {
-		url, err := s.Blobs.SignPut(it.name, it.size, it.ttl)
+		resumable := it.size >= largeBytes
+		url, headers, err := s.Blobs.SignPut(it.name, it.size, it.ttl, resumable)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, Grant{Name: it.name, URL: url, ExpiresAt: now.Add(it.ttl), Resumable: it.size >= largeBytes})
+		out = append(out, Grant{Name: it.name, URL: url, ExpiresAt: now.Add(it.ttl), Resumable: resumable, Headers: headers})
 	}
 	return out, nil
 }
