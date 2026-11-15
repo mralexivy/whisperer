@@ -120,8 +120,69 @@ final class AudioProcessMonitor {
     /// Teams play a call through helper processes, so tapping only the app's own pid would hear
     /// nothing. Input-only processes are kept too: Zoom and Chrome's audio service do both.
     func processObjects(ownedBy bundleID: String) -> [AudioObjectID] {
-        processObjectIDs().filter { owningBundleID(of: $0) == bundleID }
+        let appPaths = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).compactMap { $0.bundleURL?.path }
+        return processObjectIDs().filter { object in
+            Self.belongs(rawBundleID: rawBundleID(of: object), owner: owningBundleID(of: object), to: bundleID)
+                || Self.belongs(executablePath: pid(of: object).flatMap(Self.executablePath(ofPID:)), insideAppAt: appPaths)
+        }
     }
+
+    /// A helper's executable lives inside the call app's bundle (`/Applications/Slack.app/Contents/Frameworks/Slack
+    /// Helper.app/…`). That holds whatever the helper's bundle ID is and whoever its parent became, so it is the
+    /// attribution that cannot miss the process that actually plays the call.
+    nonisolated static func belongs(executablePath: String?, insideAppAt appPaths: [String]) -> Bool {
+        guard let executablePath else { return false }
+        return appPaths.contains { !$0.isEmpty && executablePath.hasPrefix($0.hasSuffix("/") ? $0 : $0 + "/") }
+    }
+
+    nonisolated static func executablePath(ofPID pid: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4 * 1024)
+        let length = proc_pidpath(pid, &buffer, UInt32(buffer.count))
+        return length > 0 ? String(cString: buffer) : nil
+    }
+
+    /// Whether a process object is part of the call app. The process-tree walk is the primary answer; the helper's
+    /// own bundle ID is the backstop, so a helper whose parent chain does not resolve (an XPC service, a re-parented
+    /// audio process) still counts — the call's audio is played by exactly those helpers, and a tap that misses
+    /// the one that plays hears nothing at all.
+    nonisolated static func belongs(rawBundleID: String?, owner: String?, to bundleID: String) -> Bool {
+        if owner == bundleID { return true }
+        guard let raw = rawBundleID else { return false }
+        return raw == bundleID || strippingHelperSuffix(raw) == bundleID
+    }
+
+    // MARK: - Snapshots (diagnostics)
+
+    /// What one process object is doing right now — for the log when a call's audio goes missing, so the next report
+    /// says which process was playing and whether the tap was listening to it.
+    struct ProcessSnapshot: Equatable {
+        let objectID: AudioObjectID
+        let pid: pid_t?
+        let rawBundleID: String?
+        let owner: String?
+        let runningInput: Bool
+        let runningOutput: Bool
+
+        var summary: String {
+            "pid=\(pid.map(String.init) ?? "?") \(rawBundleID ?? "-")→\(owner ?? "-") in=\(runningInput ? 1 : 0) out=\(runningOutput ? 1 : 0)"
+        }
+    }
+
+    func snapshots(of ids: [AudioObjectID]) -> [ProcessSnapshot] {
+        ids.map { object in
+            ProcessSnapshot(objectID: object, pid: pid(of: object), rawBundleID: rawBundleID(of: object),
+                            owner: owningBundleID(of: object), runningInput: isRunningInput(object),
+                            runningOutput: isRunningOutput(object))
+        }
+    }
+
+    /// Every process object that is playing or recording right now (idle ones are noise).
+    func activeProcessSnapshots() -> [ProcessSnapshot] {
+        snapshots(of: processObjectIDs()).filter { $0.runningInput || $0.runningOutput }
+    }
+
+    /// Whether any of `ids` is playing audio right now.
+    func isAnyRunningOutput(_ ids: [AudioObjectID]) -> Bool { ids.contains { isRunningOutput($0) } }
 
     /// Whisperer's own process object(s), excluded from a system-wide tap so the meeting never
     /// records Whisperer's own sounds.
@@ -174,6 +235,18 @@ final class AudioProcessMonitor {
     private func isRunningInput(_ processObject: AudioObjectID) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioProcessPropertyIsRunningInput,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioObjectGetPropertyData(processObject, &address, 0, nil, &size, &value)
+        return status == noErr && value != 0
+    }
+
+    private func isRunningOutput(_ processObject: AudioObjectID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioProcessPropertyIsRunningOutput,
             mScope: kAudioObjectPropertyScopeGlobal,
             mElement: kAudioObjectPropertyElementMain
         )
@@ -252,7 +325,7 @@ final class AudioProcessMonitor {
     }
 
     /// `com.google.Chrome.helper.Renderer` → `com.google.Chrome`
-    static func strippingHelperSuffix(_ bundleID: String) -> String {
+    nonisolated static func strippingHelperSuffix(_ bundleID: String) -> String {
         guard let range = bundleID.range(of: ".helper", options: [.caseInsensitive]) else {
             return bundleID
         }

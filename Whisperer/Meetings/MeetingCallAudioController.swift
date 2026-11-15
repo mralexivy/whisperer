@@ -31,6 +31,10 @@ final class MeetingCallAudioController {
 
     static let unavailableNote = "Recording your microphone only — call audio isn't available right now."
 
+    /// Shown only after the tap has been rebuilt as often as the policy allows and the call is still live and silent.
+    /// Without it a meeting whose far end was never recorded just looks like a one-speaker meeting.
+    static let silentNote = "The other participants can't be heard. If they are speaking, check Whisperer is allowed under Privacy & Security → Screen & System Audio Recording."
+
     private var capture: SystemAudioCapture?
     private var mixer: SystemAudioMixer?
     private weak var session: MeetingSession?
@@ -41,6 +45,11 @@ final class MeetingCallAudioController {
     private var startedAt: Date?
     private var reportedSilence = false
     private var reportedSoundAfterSilence = false
+    /// Rebuilds a tap that goes silent while the call is live, and says why when it stays silent.
+    private var healer: CallAudioSilenceHealer?
+    /// The output device's nominal rate, to notice a profile switch that keeps the same device (AirPods into the
+    /// headset profile when the microphone opens): the aggregate built before the switch is stale after it.
+    private var outputRate: Double?
     private let processMonitor = AudioProcessMonitor()
     /// The output device the tap's aggregate is clocked by. Switching to AirPods mid-call (Zoom
     /// has to be told by hand; Meet and Teams follow the system) leaves the old aggregate on a
@@ -89,6 +98,8 @@ final class MeetingCallAudioController {
         // past `stop()` so the final naming at the end of the meeting can still read them.
         session.sourceActivity = { mixer.sourceActivity }
         startedAt = Date()
+        healer = CallAudioSilenceHealer(startedAt: Date())
+        outputRate = outputDeviceID.flatMap { SystemAudioCapture.nominalSampleRate($0) }
         reportedSilence = false
         reportedSoundAfterSilence = false
         recorder.systemAudioMixer = mixer
@@ -128,6 +139,8 @@ final class MeetingCallAudioController {
         recorder = nil
         session = nil
         startedAt = nil
+        healer = nil
+        outputRate = nil
     }
 
     // MARK: - Periodic upkeep
@@ -135,10 +148,83 @@ final class MeetingCallAudioController {
     private func tick() {
         guard capture != nil else { return }
         rebindIfOutputChanged()
+        rebindIfOutputRateChanged()
         narrowToCallApp()
         applyRoute()
         refreshProcesses()
+        healSilentTap()
         checkForDigitalSilence()
+    }
+
+    /// AirPods keep their device ID but change profile (48 kHz music → 24 kHz headset) the moment a meeting opens
+    /// their microphone; the aggregate built on the old profile can go on delivering zeros. Rebuild on the new one.
+    private func rebindIfOutputRateChanged() {
+        guard let device = SystemAudioCapture.defaultOutputDeviceID(),
+              let rate = SystemAudioCapture.nominalSampleRate(device) else { return }
+        let previous = outputRate
+        outputRate = rate
+        guard let previous, previous != rate, device == outputDeviceID, let target else { return }
+        if restartCapture(target: target) {
+            Logger.info("Meeting call audio: the output switched \(Int(previous)) → \(Int(rate)) Hz — call capture rebuilt on it", subsystem: .audio)
+        }
+    }
+
+    /// Whether someone is expected to be talking to us: the call app is using the microphone.
+    private func callIsLive() -> Bool {
+        let own = Bundle.main.bundleIdentifier ?? "com.ivy.whisperer"
+        let capturing = processMonitor.capturingBundleIDs().subtracting([own])
+        switch target {
+        case .app(let bundleID, _)?: return capturing.contains(bundleID)
+        case .allExcept?: return !capturing.isEmpty
+        case nil: return false
+        }
+    }
+
+    /// A tap that delivers exact zeros while the call is live is rebuilt (fresh process list, fresh aggregate on the
+    /// current output) and, if it stays silent, the log says which processes exist and which are playing — the
+    /// difference between "the other side is quiet" and "the tap is deaf" that the one-line warning could not make.
+    private func healSilentTap() {
+        guard var healer, let mixer, let target else { return }
+        let action = healer.evaluate(now: Date(), peak: mixer.stats.peak, callIsLive: callIsLive())
+        self.healer = healer
+        switch action {
+        case .none:
+            return
+        case .rebuild(let attempt):
+            let refreshed: CallAudioTapTarget
+            switch target {
+            case .app(let bundleID, _):
+                let processes = processMonitor.processObjects(ownedBy: bundleID)
+                refreshed = processes.isEmpty ? target : .app(bundleID: bundleID, processes: processes)
+            case .allExcept:
+                refreshed = .allExcept(processes: processMonitor.ownProcessObjects())
+            }
+            let ok = restartCapture(target: refreshed)
+            Logger.info("Meeting call audio: silent for \(Int(CallAudioSilenceHealer.firstRebuildAfter))s+ while the call is live — tap rebuilt on \(refreshed.logLabel) (attempt \(attempt)\(ok ? "" : ", could not")))", subsystem: .audio)
+            if attempt >= CallAudioSilenceHealer.maxRebuilds, session?.callAudioNote == nil {
+                session?.callAudioNote = Self.silentNote
+            }
+        case .diagnose:
+            logSilenceDiagnostics()
+        case .recovered(let silentFor, let rebuilds):
+            Logger.info(String(format: "Meeting call audio: sound is back after %.0fs of silence (%d rebuild(s))", silentFor, rebuilds), subsystem: .audio)
+            if session?.callAudioNote == Self.silentNote { session?.callAudioNote = nil }
+        }
+    }
+
+    private func logSilenceDiagnostics() {
+        guard let target else { return }
+        let tapped: [AudioObjectID]
+        switch target {
+        case .app(_, let processes): tapped = processes
+        case .allExcept: tapped = []
+        }
+        let own = getpid()
+        let active = processMonitor.activeProcessSnapshots().filter { $0.pid != own }
+        let listening = processMonitor.snapshots(of: tapped).map(\.summary).joined(separator: "; ")
+        let playing = active.filter(\.runningOutput).map { ($0.objectID, $0.summary) }
+            .map { tapped.contains($0.0) ? "\($0.1) [tapped]" : "\($0.1) [NOT tapped]" }.joined(separator: "; ")
+        Logger.warning("Meeting call audio: silent for 30s while the call is live. tap=\(target.logLabel) listening to [\(listening)]; processes playing audio: [\(playing.isEmpty ? "none" : playing)]", subsystem: .audio)
     }
 
     /// Headphones plugged in or pulled out mid-call change whether the far end is already in the
