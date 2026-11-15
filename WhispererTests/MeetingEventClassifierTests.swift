@@ -63,6 +63,16 @@ final class MeetingEventClassifierTests: XCTestCase {
 
     // MARK: - Rule 4: solo, unlinked blocks only on request
 
+    func testAnUnlinkedEventWithOnlyOneAttendeeIsAPlaceholderAndNeverPrompts() {
+        // One attendee (the user, or a single entry) and no link: a block on their own calendar, not a meeting.
+        XCTAssertNil(MeetingEventClassifier.meeting(from: event(attendees: 1)))
+        XCTAssertNil(MeetingEventClassifier.meeting(from: event(location: "Cafe", attendees: 1)))
+        // Two people and no link is a real in-person 1:1 and still qualifies.
+        XCTAssertNotNil(MeetingEventClassifier.meeting(from: event(attendees: 2)))
+        // A link always qualifies, even with one attendee.
+        XCTAssertNotNil(MeetingEventClassifier.meeting(from: event(notes: "https://meet.google.com/abc-defg-hij", attendees: 1)))
+    }
+
     func testSoloUnlinkedBlockIsExcludedUnlessOptedIn() {
         let block = event(title: "Focus time", attendees: nil, solo: true)
         XCTAssertNil(MeetingEventClassifier.meeting(from: block))

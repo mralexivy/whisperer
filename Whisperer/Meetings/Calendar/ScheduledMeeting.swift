@@ -191,10 +191,11 @@ nonisolated enum MeetingEventClassifier {
         let hasOthers: Bool? = event.attendeeCount.map { _ in !event.isSoloEvent }
 
         // Rule 2: a recognized conference link always qualifies, 1:1s included.
-        // Rule 3: attendees and a plausible duration qualify without a link (record, no join).
+        // Rule 3: another person on the invite and a plausible duration qualify without a link (record, no join).
+        //         `attendeeCount` includes the user, so one attendee is a placeholder on their own calendar.
         // Rule 4: a solo, unlinked block qualifies only when the user asked for those.
         if primary == nil {
-            let hasAttendees = (event.attendeeCount ?? 0) > 0 && !event.isSoloEvent
+            let hasAttendees = (event.attendeeCount ?? 0) >= 2 && !event.isSoloEvent
             guard hasAttendees || includeUnlinkedSolo else { return nil }
         }
 
