@@ -7,6 +7,7 @@
 
 import AppKit
 import SwiftUI
+import Combine
 
 /// Tabs of the floating window. A parallel enum rather than a `notes` case bolted onto
 /// `MeetingDetailView.DetailTab`: that enum drives the workspace's tab bar through
@@ -23,10 +24,22 @@ enum MeetingLiveTab: String, CaseIterable, Identifiable {
     }
 }
 
+///
+/// **Energy.** The window observes `MeetingSessionChanges`, not the session: the session publishes on every live
+/// update (about three a second), and observing it re-evaluated the header, tab bar, footer and transcript pane each
+/// time. `MeetingSessionChanges` republishes everything except the live text, which only `MeetingLiveBubble` draws.
 struct MeetingLiveWindowView: View {
-    @ObservedObject var session: MeetingSession
+    let session: MeetingSession
     var onClose: () -> Void
     var onCollapseChanged: (Bool) -> Void
+    @StateObject private var changes: MeetingSessionChanges
+
+    init(session: MeetingSession, onClose: @escaping () -> Void, onCollapseChanged: @escaping (Bool) -> Void) {
+        self.session = session
+        self.onClose = onClose
+        self.onCollapseChanged = onCollapseChanged
+        _changes = StateObject(wrappedValue: MeetingSessionChanges(session: session))
+    }
 
     @StateObject private var detailVM = MeetingDetailViewModel()
     @ObservedObject private var manager = MeetingManager.shared
@@ -494,5 +507,37 @@ struct MeetingLiveWindowView: View {
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             await MainActor.run { didCopy = false }
         }
+    }
+}
+
+/// A session's changes without its live text. `MeetingSession` publishes on every property, including the open
+/// paragraph and the preview tail that change several times a second while someone talks; a view that merely
+/// needs to know about recording state, speakers, notes or the clock should not be re-evaluated for those.
+@MainActor
+final class MeetingSessionChanges: ObservableObject {
+    private var bag = Set<AnyCancellable>()
+
+    init(session: MeetingSession) {
+        let changes: [AnyPublisher<Void, Never>] = [
+            session.$meetingID.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$segments.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$notes.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$isRecording.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$isPausedForDictation.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$elapsedSeconds.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$currentSegmentStartTimestamp.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$currentSpeakerIndex.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$currentSpeakerName.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$liveSpeakerIndex.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$liveSpeakerName.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$hasSpeakerSignal.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$sourceBundleID.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$sourceAppName.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.$callAudioNote.dropFirst().map { _ in }.eraseToAnyPublisher(),
+            session.liveTailPresence.dropFirst().map { _ in }.eraseToAnyPublisher(), // the bubble appearing or going away
+        ]
+        Publishers.MergeMany(changes)
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &bag)
     }
 }

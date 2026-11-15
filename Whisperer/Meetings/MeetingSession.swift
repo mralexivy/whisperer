@@ -44,6 +44,17 @@ class MeetingSession: ObservableObject {
     /// read the computed property.
     @Published private var livePreviewStorage: String = ""
 
+    /// Whether there is any live text — an open paragraph or a preview tail. Publishes only when that flips, so a view
+    /// that needs just "is there a live bubble" is not re-evaluated by every word (see `MeetingLiveEdge`).
+    var liveTailPresence: AnyPublisher<Bool, Never> {
+        Publishers.CombineLatest($currentSegmentText, $livePreviewStorage)
+            .map { !$0.isEmpty || !$1.isEmpty }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
+
+    var hasLiveTail: Bool { !currentSegmentText.isEmpty || !livePreviewStorage.isEmpty }
+
     /// The not-yet-committed tail, written by `AppState`'s preview callbacks at the transcriber's
     /// ~300–500 ms cadence and rendered under the open card.
     ///

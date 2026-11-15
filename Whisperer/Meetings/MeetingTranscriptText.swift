@@ -137,9 +137,18 @@ enum MeetingTranscriptText {
         mutating func count(_ text: String, limit: Int) {
             for scalar in text.unicodeScalars {
                 guard letters < limit else { return }
-                guard scalar.properties.isAlphabetic else { continue }
-                letters += 1
                 let v = scalar.value
+                // ASCII, Cyrillic and Hebrew letters are decided by range: `properties.isAlphabetic` is a table
+                // lookup per scalar and was the hottest thing in a live meeting (2026-11-15). Everything else
+                // (marks, other scripts) still asks the Unicode tables.
+                let isLetter: Bool
+                switch v {
+                case 0x41...0x5A, 0x61...0x7A, 0x0410...0x044F, 0x0401, 0x0451, 0x05D0...0x05EA: isLetter = true
+                case 0..<0x80: isLetter = false
+                default: isLetter = scalar.properties.isAlphabetic
+                }
+                guard isLetter else { continue }
+                letters += 1
                 if (v >= 0x0590 && v <= 0x05FF) || (v >= 0x0600 && v <= 0x06FF) ||
                    (v >= 0x0700 && v <= 0x074F) || (v >= 0xFB50 && v <= 0xFDFF) ||
                    (v >= 0xFE70 && v <= 0xFEFF) { rtl += 1 }
@@ -158,5 +167,40 @@ enum MeetingTranscriptText {
     private static func timestamp(_ seconds: Double) -> String {
         let total = Int(max(0, seconds))
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+/// Remembers a transcript's reading direction so a view does not re-scan its text on every render.
+///
+/// `isRightToLeft` samples up to 2,000 letters. A SwiftUI view that asks for the direction from a computed
+/// property asks once per card per render, and a live meeting renders several times a second: with 119 cards that
+/// was ~240,000 letter checks per update and the biggest cost in a live meeting's profile. The direction only changes
+/// when the transcript does, so it is computed once per change.
+@MainActor
+final class TranscriptDirectionCache {
+    private struct Key: Equatable {
+        var count: Int
+        var first: UUID?
+        var last: UUID?
+        var lastLength: Int
+        var fallback: TranscriptionLanguage?
+        var tailBucket: Int
+    }
+
+    private var key: Key?
+    private var value = false
+    private(set) var computations = 0
+
+    func isRightToLeft(segments: [MeetingSegment], liveTail: String, fallback: TranscriptionLanguage?) -> Bool {
+        // The live tail only matters while the segments cannot decide on their own; it changes every update, so it
+        // is bucketed — the direction is re-judged every ~128 bytes of tail, not every word.
+        let k = Key(count: segments.count, first: segments.first?.id, last: segments.last?.id,
+                    lastLength: segments.last?.text.utf8.count ?? 0, fallback: fallback,
+                    tailBucket: liveTail.isEmpty ? 0 : liveTail.utf8.count / 128 + 1)
+        if k == key { return value }
+        computations += 1
+        value = MeetingTranscriptText.isRightToLeft(segments: segments, liveTail: liveTail, fallback: fallback)
+        key = k
+        return value
     }
 }

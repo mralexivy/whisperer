@@ -59,12 +59,14 @@ struct MeetingTranscriptView: View {
         session.isRecording && session.meetingID == meeting?.id
     }
 
+    @State private var direction = TranscriptDirectionCache()
+
     private var isRTL: Bool {
         // Content wins over the configured language: `meeting.language` is the shortlist
         // entry the session started with, not what was actually spoken. Judged over the whole
         // transcript — see the note on `isRightToLeft(segments:)`; sampling the opening put a
         // Hebrew meeting with three mis-decoded English cards entirely left-to-right.
-        MeetingTranscriptText.isRightToLeft(
+        direction.isRightToLeft(
             segments: segments,
             liveTail: isLive ? session.currentSegmentText + " " + session.livePreviewText : "",
             fallback: TranscriptionLanguage(rawValue: meeting?.language ?? ""))
@@ -563,7 +565,9 @@ struct MeetingTranscriptView: View {
 
     private func scrollToLive(_ proxy: ScrollViewProxy) {
         guard isLive else { return }
-        withAnimation { proxy.scrollTo("livePreview", anchor: .bottom) }
+        // Not animated: this runs on every live update (several a second), and an animated scroll each time made the
+        // whole transcript drift under the reader's eye and kept the window redrawing.
+        proxy.scrollTo("livePreview", anchor: .bottom)
     }
 
     private func formatTimestamp(_ seconds: Double) -> String {

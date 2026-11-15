@@ -953,6 +953,8 @@ class AppState: ObservableObject {
     private var meetingVolatileTail = ""
     /// Words the built-in engine has settled (timed path) — the live tail starts after them.
     private var meetingSettledWordCount = 0
+    /// Finds the words after the settled ones without re-splitting the whole accumulated text on every update.
+    private var meetingVolatileTracker = VolatileTailTracker()
     /// The ASR backend a meeting borrowed and must hand back, or nil when no meeting holds one.
     ///
     /// Meetings need a backend whose live output is the **growing accumulated transcript** that
@@ -3872,6 +3874,7 @@ class AppState: ObservableObject {
                     meetingPendingTail = ""
                     meetingVolatileTail = ""
                     meetingSettledWordCount = 0
+                    meetingVolatileTracker.reset()
                     // Signal to MeetingSession that livePreviewText is now owned by the
                     // coordinator's onPendingTail callback — accumulate() must not clear it.
                     meetingSession.coordinatorOwnsTail = true
@@ -4056,7 +4059,7 @@ class AppState: ObservableObject {
                         }
                         if coordinatorFeed == .accumulatedPartials, self.meetingSpeakerCoordinator != nil {
                             let committedCount = self.meetingSettledWordCount
-                            self.meetingVolatileTail = SystemLivePreviewBridge.words(tail).dropFirst(committedCount).joined(separator: " ")
+                            self.meetingVolatileTail = self.meetingVolatileTracker.tail(of: tail, settled: committedCount)
                             self.activeMeetingSession?.livePreviewText = SystemLivePreviewBridge.join(self.meetingPendingTail, self.meetingVolatileTail)
                             return
                         }
