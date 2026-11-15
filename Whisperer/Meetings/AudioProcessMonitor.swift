@@ -306,7 +306,10 @@ final class AudioProcessMonitor {
             if let app = NSRunningApplication(processIdentifier: current),
                let bundleID = app.bundleIdentifier,
                !bundleID.isEmpty {
-                return bundleID
+                // macOS knows some helpers as apps of their own (observed on 2026-11-15: a Chrome audio helper
+                // resolved to `com.google.Chrome.helper`, not Chrome). Left like that, the helper that plays the
+                // call is attributed to nobody, falls out of the call app's tap, and the far end records as silence.
+                return Self.strippingHelperSuffix(bundleID)
             }
             guard let parent = parentPID(of: current), parent > 1, parent != current else { return nil }
             current = parent

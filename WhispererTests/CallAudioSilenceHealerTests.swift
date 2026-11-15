@@ -93,6 +93,10 @@ final class CallAudioSilenceHealerTests: XCTestCase {
         XCTAssertTrue(AudioProcessMonitor.belongs(rawBundleID: "com.tinyspeck.slackmacgap.helper", owner: nil, to: "com.tinyspeck.slackmacgap"))
         XCTAssertTrue(AudioProcessMonitor.belongs(rawBundleID: "com.google.Chrome.helper.Renderer", owner: nil, to: "com.google.Chrome"))
         XCTAssertTrue(AudioProcessMonitor.belongs(rawBundleID: "com.tinyspeck.slackmacgap", owner: nil, to: "com.tinyspeck.slackmacgap"))
+        // Seen on a real Mac: a Chrome audio helper that NSRunningApplication knows as an app of its own resolved
+        // its owner to the helper's bundle ID. It must still be the call app's process.
+        XCTAssertTrue(AudioProcessMonitor.belongs(rawBundleID: "com.google.Chrome.helper", owner: "com.google.Chrome.helper", to: "com.google.Chrome"))
+        XCTAssertTrue(AudioProcessMonitor.belongs(rawBundleID: "com.tinyspeck.slackmacgap.helper", owner: "com.tinyspeck.slackmacgap.helper", to: "com.tinyspeck.slackmacgap"))
         // Other apps that merely share a prefix are not the call app.
         XCTAssertFalse(AudioProcessMonitor.belongs(rawBundleID: "com.google.Chrome.canary", owner: nil, to: "com.google.Chrome"))
         XCTAssertFalse(AudioProcessMonitor.belongs(rawBundleID: "com.apple.Safari", owner: "com.apple.Safari", to: "com.google.Chrome"))
