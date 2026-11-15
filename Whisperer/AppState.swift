@@ -3019,9 +3019,12 @@ class AppState: ObservableObject {
             let terms = Set(DictionaryManager.shared.entries.map(\.correctForm))
             livePreviewProtectedCasingWords = MidSentenceCaseNormalizer.protectedWords(in: terms)
         }
-        return MidSentenceCaseNormalizer.normalize(
-            text: text,
-            protectedWords: livePreviewProtectedCasingWords ?? [])
+        // Bounded to the recent window like the meeting preview: this runs on the main actor for every
+        // hypothesis, and a long dictation must not make each update slower than the last.
+        let protected = livePreviewProtectedCasingWords ?? []
+        return LivePreviewWindow.apply(to: text) {
+            MidSentenceCaseNormalizer.normalize(text: $0, protectedWords: protected)
+        }
     }
 
     /// Apply LLM post-processing to transcribed text if enabled.

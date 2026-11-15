@@ -212,19 +212,24 @@ class MeetingSession: ObservableObject {
     /// casing repair is always on: it fixes a decoder display artifact and changes no wording.
     private func polishUtterance(_ text: String) -> String {
         if utteranceEditor == nil { makeEditors() }
-        let polished: String
-        if PolishFeatureFlags.isFastPolishEnabled, let editor = utteranceEditor {
-            polished = editor.polish(text: text).text
-        } else {
-            // Preview casing is a display repair, not the optional full polish feature. Meetings
-            // with Fast Polish disabled must not keep the decoder's random interior capitals.
-            polished = MidSentenceCaseNormalizer.normalize(
-                text: text,
-                protectedWords: utteranceEditor?.casingProtectedWords ?? [])
+        // Runs on the main actor for every live update, so the work is bounded to the recent window: a tail
+        // that keeps growing (languages flipping, nothing committing) once pinned the main thread at 100%
+        // for fifty minutes. Older text passes through untouched — see `LivePreviewWindow`.
+        return LivePreviewWindow.apply(to: text) { window in
+            let polished: String
+            if PolishFeatureFlags.isFastPolishEnabled, let editor = utteranceEditor {
+                polished = editor.polish(text: window).text
+            } else {
+                // Preview casing is a display repair, not the optional full polish feature. Meetings
+                // with Fast Polish disabled must not keep the decoder's random interior capitals.
+                polished = MidSentenceCaseNormalizer.normalize(
+                    text: window,
+                    protectedWords: utteranceEditor?.casingProtectedWords ?? [])
+            }
+            // An empty render would mean the editor deleted an entire utterance — it has no rule that
+            // can, but dropping speech is the one failure worth a guard rather than a test.
+            return polished.isEmpty ? window : polished
         }
-        // An empty render would mean the editor deleted an entire utterance — it has no rule that
-        // can, but dropping speech is the one failure worth a guard rather than a test.
-        return polished.isEmpty ? text : polished
     }
 
     /// Authoritative pass: once per card, at the endpoint, with list reflow on.

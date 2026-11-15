@@ -124,6 +124,8 @@ final class HealthManager {
     private var mainThreadPendingSince: ContinuousClock.Instant?
     private var lastMainThreadResponse: ContinuousClock.Instant = .now
     private var mainThreadAlertFired: Bool = false
+    // Chronic-stall detection — touched only from the monitor poll (monitorQueue).
+    private var chronicStalls = ChronicStallTracker(window: .seconds(120), count: 4, dumpInterval: .seconds(15 * 60))
     // Startup suppression: model loading causes expected GPU-queue stalls that are not real hangs.
     private var suppressStallUntil: ContinuousClock.Instant?
 
@@ -142,6 +144,9 @@ final class HealthManager {
     private static let mainThreadWarnThreshold: Duration = .milliseconds(1500)
     /// Write a full dump only past 3s — see the comment at the call site.
     private static let mainThreadDumpThreshold: Duration = .seconds(3)
+    /// A main thread that is saturated rather than blocked answers every ping between bursts of work, so no
+    /// single stall ever crosses the dump threshold — yet the app is unusable (2026-11-15: 131 stalls of ~2s in
+    /// 50 minutes, no dump). Repeated stalls inside this window count as one chronic stall.
 
     private init() {}
 
@@ -490,7 +495,8 @@ final class HealthManager {
                         Logger.error("Main thread stack unavailable: \(failure)", subsystem: .app)
                     } else {
                         let top = report.frames.prefix(12).joined(separator: "\n  ")
-                        Logger.error("Main thread stack (top 12):\n  \(top)", subsystem: .app)
+                        // The image slide and build UUID make the app's own frames symbolicatable offline.
+                        Logger.error("Main thread stack (top 12) [\(BuildIdentity.symbolicationNote)]:\n  \(top)", subsystem: .app)
                     }
                 }
                 EventRingBuffer.shared.record(
@@ -508,6 +514,8 @@ final class HealthManager {
                 // and always runs.
                 if elapsed > Self.mainThreadDumpThreshold {
                     triggerDump(reason: "Main thread unresponsive for \(elapsedStr)s")
+                } else if chronicStalls.note(at: now) {
+                    triggerDump(reason: "Main thread repeatedly unresponsive: \(chronicStalls.recentCount) stalls in \(Int(chronicStalls.window.components.seconds))s")
                 }
             }
         }
@@ -571,5 +579,33 @@ final class HealthManager {
 extension HealthManager {
     static func durationSeconds(_ d: Duration) -> Double {
         Double(d.components.seconds) + Double(d.components.attoseconds) * 1e-18
+    }
+}
+
+/// Counts main-thread stalls inside a sliding window. A saturated main thread answers every liveness ping between
+/// bursts of work, so each stall is short and none ever crosses the single-stall dump threshold; a run of them is the
+/// signal. Dumps at most once per `dumpInterval`.
+nonisolated struct ChronicStallTracker {
+    let window: Duration
+    let count: Int
+    let dumpInterval: Duration
+    private var stalls: [ContinuousClock.Instant] = []
+    private var lastDump: ContinuousClock.Instant?
+
+    init(window: Duration, count: Int, dumpInterval: Duration) {
+        self.window = window; self.count = count; self.dumpInterval = dumpInterval
+    }
+
+    var recentCount: Int { stalls.count }
+
+    /// Records a stall; true when this one completes a chronic run and a dump is due.
+    mutating func note(at now: ContinuousClock.Instant) -> Bool {
+        stalls.append(now)
+        let window = window
+        stalls.removeAll { now - $0 > window }
+        guard stalls.count >= count else { return false }
+        if let lastDump, now - lastDump < dumpInterval { return false }
+        lastDump = now
+        return true
     }
 }
