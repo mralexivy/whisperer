@@ -17,7 +17,7 @@ struct RecordingsListView: View {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: model.items) { calendar.startOfDay(for: $0.date) }
         return grouped.keys.sorted(by: >).map { day in
-            (Self.dayTitle(day), grouped[day]!.sorted { ($0.isPinned ? 1 : 0, $0.date) > ($1.isPinned ? 1 : 0, $1.date) })
+            (Self.dayTitle(day), grouped[day]!)
         }
     }
 
@@ -43,7 +43,7 @@ struct RecordingsListView: View {
     private var header: some View {
         HStack(spacing: 10) {
             Text("Recordings").font(.system(size: 24, weight: .semibold)).foregroundColor(.white)
-            Text("\(model.items.count)")
+            Text("\(model.totalCount)")
                 .font(.system(size: 11, weight: .semibold)).foregroundColor(Color.white.opacity(0.6))
                 .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(WhispererColors.cardBackground(.dark)))
             Spacer()
@@ -134,7 +134,8 @@ struct RecordingsListView: View {
                                 Text("\(group.items.count)").font(.system(size: 10)).foregroundColor(Color.white.opacity(0.25))
                             }.padding(.horizontal, 22).padding(.top, 12).padding(.bottom, 2)
                             ForEach(group.items) { item in
-                                RecordingRow(item: item, isSelected: model.selectedID == item.id && !model.isImporting)
+                                RecordingRow(item: item, isSelected: model.selectedID == item.id && !model.isImporting,
+                                             query: model.searchText.trimmingCharacters(in: .whitespaces))
                                     .onTapGesture { model.open(item.id) }
                                     .contextMenu { menu(for: item) }
                                     .onAppear { model.loadMoreIfNeeded(after: item) }
@@ -167,30 +168,27 @@ struct RecordingsListView: View {
 private struct RecordingRow: View {
     let item: RecordingListItem
     let isSelected: Bool
+    var query: String? = nil
     @State private var hovering = false
 
     @AppStorage("timeFormat") private var timeFormat = "12h"
 
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
-            Image(systemName: item.kind.outlineIcon)
-                .font(.system(size: 12, weight: .regular)).foregroundColor(tint)
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.10)))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(tint.opacity(0.32), lineWidth: 1))
+            RecordingKindBadge(kind: item.kind, size: 36, selected: isSelected)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white).lineLimit(1)
+                    Text(RecordingSnippet.highlighted(item.title, query: query)).font(.system(size: 14, weight: .semibold)).foregroundColor(.white).lineLimit(1)
                     Spacer(minLength: 0)
                     if item.isPinned { Image(systemName: "pin.fill").font(.system(size: 9)).foregroundColor(WhispererColors.accent) }
                     if item.isFlagged { Image(systemName: "flag.fill").font(.system(size: 9)).foregroundColor(.orange) }
                     if item.isInProgress { Circle().fill(Color.red).frame(width: 6, height: 6) }
                 }
                 if !item.preview.isEmpty {
-                    Text(item.preview).font(.system(size: 13)).foregroundColor(Color.white.opacity(0.5)).lineLimit(1)
+                    Text(RecordingSnippet.highlighted(item.preview, query: query)).font(.system(size: 13)).foregroundColor(Color.white.opacity(0.5)).lineLimit(1)
                 }
                 HStack(spacing: 6) {
-                    Text(item.kind.label)
+                    Text(item.kind.plural).foregroundColor(item.kind.tint.opacity(0.9))
                     Text("·")
                     Text(RecordingTimeFormat.string(item.date, setting: timeFormat))
                     Spacer()
@@ -212,13 +210,5 @@ private struct RecordingRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .uiTestFrame("recordings.row.\(item.id.uuid.uuidString)")
-    }
-
-    private var tint: Color {
-        switch item.kind {
-        case .dictation: return WhispererColors.accent
-        case .meeting: return Color(hex: "06B6D4")
-        case .file: return Color(hex: "F59E0B")
-        }
     }
 }

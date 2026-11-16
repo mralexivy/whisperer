@@ -862,15 +862,53 @@ extension MeetingManager {
 // MARK: - Search (shared Recordings list)
 
 extension MeetingManager {
-    /// Meetings whose title or transcript contains `query`. The list rows carry no text, so the
-    /// match is made in the store.
-    func searchIDs(_ query: String) async -> Set<UUID> {
+    /// Meetings whose title, transcript text or notes contain `query`, each with the passage that matched (nil when only
+    /// the title did).
+    ///
+    /// The transcript lives in the row as JSON, so the store can only narrow the candidates. It matches the raw JSON, which
+    /// holds field names ("text", "speakerName") and escapes (`\/`, `\"`) — searching "speaker" would otherwise find every
+    /// meeting. So candidates are decoded and the *text* is checked, case- and diacritic-insensitively.
+    func search(_ query: String) async -> [UUID: String?] {
+        let ctx = database.newBackgroundContext()
+        let spellings = RecordingSnippet.jsonSpellings(of: query)
+        return await ctx.perform {
+            var clauses = [NSPredicate(format: "title CONTAINS[cd] %@", query)]
+            for spelling in spellings {
+                clauses.append(NSPredicate(format: "segmentsJSON CONTAINS[cd] %@", spelling))
+                clauses.append(NSPredicate(format: "notesJSON CONTAINS[cd] %@", spelling))
+            }
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSCompoundPredicate(orPredicateWithSubpredicates: clauses)
+            let decoder = JSONDecoder()
+            var hits: [UUID: String?] = [:]
+            for entity in (try? ctx.fetch(req)) ?? [] {
+                if RecordingSnippet.contains(entity.title, query) { hits[entity.id] = .some(nil); continue }
+                if let data = entity.segmentsJSON?.data(using: .utf8),
+                   let segments = try? decoder.decode([MeetingSegment].self, from: data),
+                   let match = segments.first(where: { RecordingSnippet.contains($0.text, query) }) {
+                    hits[entity.id] = .some(RecordingSnippet.around(query, in: match.text)); continue
+                }
+                if let data = entity.notesJSON?.data(using: .utf8),
+                   let notes = try? decoder.decode([MeetingNote].self, from: data),
+                   let match = notes.first(where: { RecordingSnippet.contains($0.text, query) }) {
+                    hits[entity.id] = .some(RecordingSnippet.around(query, in: match.text))
+                }
+            }
+            return hits
+        }
+    }
+
+    /// How many meetings exist in total (optionally only the pinned or flagged ones).
+    func count(mark: RecordingMarkFilter) async -> Int {
         let ctx = database.newBackgroundContext()
         return await ctx.perform {
             let req = MeetingEntity.fetchRequest()
-            req.predicate = NSPredicate(format: "title CONTAINS[cd] %@ OR segmentsJSON CONTAINS[cd] %@", query, query)
-            req.propertiesToFetch = ["id"]
-            return Set(((try? ctx.fetch(req)) ?? []).map(\.id))
+            switch mark {
+            case .none: break
+            case .pinned: req.predicate = NSPredicate(format: "isPinned == YES")
+            case .flagged: req.predicate = NSPredicate(format: "isFlagged == YES")
+            }
+            return (try? ctx.count(for: req)) ?? 0
         }
     }
 }

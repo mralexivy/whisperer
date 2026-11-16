@@ -341,14 +341,3 @@ extension TranscriptDocument {
         return hasher.finalize()
     }
 }
-
-extension RecordingKind {
-    /// The thin line icons the list uses.
-    var outlineIcon: String {
-        switch self {
-        case .dictation: return "mic"
-        case .meeting: return "video"
-        case .file: return "doc.text"
-        }
-    }
-}

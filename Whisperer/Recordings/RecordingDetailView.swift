@@ -194,7 +194,7 @@ struct RecordingDetailView: View {
     private func metaRow(_ document: TranscriptDocument) -> some View {
         HStack(spacing: 10) {
             HStack(spacing: 7) {
-                Image(systemName: document.kind == .meeting ? "video" : document.kind == .file ? "doc.text" : "mic").font(.system(size: 12))
+                RecordingKindBadge(kind: document.kind, size: 22)
                 Text(sourceLabel(document))
             }
             dot

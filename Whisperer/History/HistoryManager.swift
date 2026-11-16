@@ -243,42 +243,10 @@ class HistoryManager: ObservableObject {
         let generation = loadGeneration
 
         let fetchRequest: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
-        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
+        // The id breaks ties, so rows with the same timestamp (an archive import writes many) keep one order across pages.
+        fetchRequest.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false), NSSortDescriptor(key: "id", ascending: true)]
 
-        var predicates: [NSPredicate] = []
-
-        // A dictation that is still being written has no text yet — it is not a recording to list. (A crashed
-        // session that did keep text stays visible.)
-        predicates.append(NSPredicate(format: "NOT (isInProgress == YES AND transcription == %@)", ""))
-
-        switch currentFilter {
-        case .all:
-            break
-        case .pinned:
-            predicates.append(NSPredicate(format: "isPinned == YES"))
-        case .flagged:
-            predicates.append(NSPredicate(format: "isFlagged == YES"))
-        }
-
-        switch currentKindScope {
-        case .any: break
-        case .files: predicates.append(NSPredicate(format: "sourceKind == %@ OR targetAppName == %@", "file", "File Import"))
-        case .dictation: predicates.append(NSPredicate(format: "(sourceKind == nil OR sourceKind != %@) AND (targetAppName == nil OR targetAppName != %@)", "file", "File Import"))
-        }
-
-        if let query = currentSearchQuery, !query.isEmpty {
-            predicates.append(NSPredicate(format: "transcription CONTAINS[cd] %@ OR editedTranscription CONTAINS[cd] %@ OR aiEnhancedText CONTAINS[cd] %@ OR notes CONTAINS[cd] %@", query, query, query, query))
-        }
-
-        if let range = currentDateRange {
-            predicates.append(NSPredicate(format: "timestamp >= %@", range.start as NSDate))
-            let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: range.end) ?? range.end
-            predicates.append(NSPredicate(format: "timestamp < %@", endOfDay as NSDate))
-        }
-
-        if !predicates.isEmpty {
-            fetchRequest.predicate = NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
-        }
+        fetchRequest.predicate = Self.predicate(filter: currentFilter, kind: currentKindScope, query: currentSearchQuery, range: currentDateRange)
 
         fetchRequest.fetchOffset = currentOffset
         fetchRequest.fetchLimit = pageSize
@@ -788,4 +756,55 @@ extension HistoryManager {
         request.propertiesToFetch = ["id"]
         return Set((try? context.fetch(request))?.map(\.id) ?? [])
     }
+}
+
+// MARK: - Query building and counts
+
+extension HistoryManager {
+    /// The one place a list query is described, so the page fetch and the count agree.
+    nonisolated static func predicate(filter: TranscriptionFilter, kind: HistoryKindScope, query: String?,
+                                      range: (start: Date, end: Date)?) -> NSPredicate {
+        var predicates: [NSPredicate] = []
+
+        // A dictation that is still being written has no text yet — it is not a recording to list. (A crashed
+        // session that did keep text stays visible.)
+        predicates.append(NSPredicate(format: "NOT (isInProgress == YES AND transcription == %@)", ""))
+
+        switch filter {
+        case .all: break
+        case .pinned: predicates.append(NSPredicate(format: "isPinned == YES"))
+        case .flagged: predicates.append(NSPredicate(format: "isFlagged == YES"))
+        }
+
+        switch kind {
+        case .any: break
+        case .files: predicates.append(NSPredicate(format: "sourceKind == %@ OR targetAppName == %@", "file", "File Import"))
+        case .dictation: predicates.append(NSPredicate(format: "(sourceKind == nil OR sourceKind != %@) AND (targetAppName == nil OR targetAppName != %@)", "file", "File Import"))
+        }
+
+        // What a person remembers about a recording: its words (original, edited, enhanced), its notes, its title,
+        // the file it came from and the app it was dictated into.
+        if let query, !query.isEmpty {
+            let fields = ["transcription", "editedTranscription", "aiEnhancedText", "notes", "title", "sourceFileName", "targetAppName"]
+            predicates.append(NSCompoundPredicate(orPredicateWithSubpredicates: fields.map {
+                NSPredicate(format: "\($0) CONTAINS[cd] %@", query)
+            }))
+        }
+
+        if let range {
+            predicates.append(NSPredicate(format: "timestamp >= %@", range.start as NSDate))
+            let endOfDay = Calendar.current.date(byAdding: .day, value: 1, to: range.end) ?? range.end
+            predicates.append(NSPredicate(format: "timestamp < %@", endOfDay as NSDate))
+        }
+        return NSCompoundPredicate(andPredicateWithSubpredicates: predicates)
+    }
+
+    /// How many rows the current kind / mark / search would list in total — not just what is loaded.
+    func count(filter: TranscriptionFilter, kind: HistoryKindScope, query: String?) -> Int {
+        let request: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        request.predicate = Self.predicate(filter: filter, kind: kind, query: query, range: nil)
+        return (try? viewContext.count(for: request)) ?? 0
+    }
+
+    private var viewContext: NSManagedObjectContext { database.viewContext }
 }

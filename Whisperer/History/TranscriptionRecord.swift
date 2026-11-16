@@ -10,7 +10,7 @@ import Foundation
 
 struct TranscriptionRecord: Identifiable {
     let id: UUID
-    let timestamp: Date
+    var timestamp: Date
     let transcription: String
     /// `var` because library compaction rewrites the recording to Opus under a new name and
     /// patches the loaded page in place rather than forcing a full reload.
@@ -19,7 +19,7 @@ struct TranscriptionRecord: Identifiable {
     let wordCount: Int
     let language: String
     let modelUsed: String
-    let isPinned: Bool
+    var isPinned: Bool
     let isFlagged: Bool
     var editedTranscription: String?
     var notes: String?

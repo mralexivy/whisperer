@@ -36,6 +36,10 @@ final class RecordingsWorkspaceSnapshotTests: XCTestCase {
         try shot("2-dictation", kind: .dictation)
         try shot("3-meeting", kind: .meeting, wait: 6)
         try shot("4-file", kind: .file)
+        model.searchText = "the"
+        try shot("8-search", kind: nil, wait: 4)
+        model.searchText = ""
+        pump(2)
         UserDefaults.standard.set(false, forKey: "recordings.sidebarVisible")
         try shot("5-compact", kind: .dictation, wait: 3)
         UserDefaults.standard.removeObject(forKey: "recordings.sidebarVisible")

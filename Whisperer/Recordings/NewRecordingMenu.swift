@@ -81,19 +81,19 @@ struct NewRecordingMenu: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("NEW").font(.system(size: 10, weight: .bold)).tracking(1.0)
                 .foregroundColor(Color.white.opacity(0.35)).padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
-            row(icon: "video", tint: Color(hex: "06B6D4"), title: "Meeting or call",
+            row(kind: .meeting, title: "Meeting or call",
                 subtitle: "Records your mic and the call, with speakers.",
                 blocker: RecordingStarter.meetingBlocker(session: session), id: "meeting") {
                 dismiss()
                 RecordingStarter.startMeeting(session: session)
             }
-            row(icon: "mic", tint: WhispererColors.accent, title: "Dictation",
+            row(kind: .dictation, title: "Dictation",
                 subtitle: "Speak hands-free; the text is saved here.",
                 blocker: RecordingStarter.dictationBlocker(session: session), id: "dictation") {
                 dismiss()
                 RecordingStarter.startDictation(session: session)
             }
-            row(icon: "doc.text", tint: Color(hex: "F59E0B"), title: "Audio or video file",
+            row(kind: .file, title: "Audio or video file",
                 subtitle: "Transcribe a recording from your Mac.",
                 blocker: nil, id: "file") {
                 dismiss()
@@ -106,16 +106,15 @@ struct NewRecordingMenu: View {
         .environment(\.colorScheme, .dark)
     }
 
-    private func row(icon: String, tint: Color, title: String, subtitle: String, blocker: String?, id: String,
+    private func row(kind: RecordingKind, title: String, subtitle: String, blocker: String?, id: String,
                      action: @escaping () -> Void) -> some View {
-        NewRecordingRow(icon: icon, tint: tint, title: title, subtitle: blocker ?? subtitle, blocked: blocker != nil, action: action)
+        NewRecordingRow(kind: kind, title: title, subtitle: blocker ?? subtitle, blocked: blocker != nil, action: action)
             .uiTestFrame("recordings.new.\(id)")
     }
 }
 
 private struct NewRecordingRow: View {
-    let icon: String
-    let tint: Color
+    let kind: RecordingKind
     let title: String
     let subtitle: String
     let blocked: Bool
@@ -125,10 +124,7 @@ private struct NewRecordingRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Image(systemName: icon).font(.system(size: 14, weight: .regular)).foregroundColor(tint)
-                    .frame(width: 34, height: 34)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint.opacity(0.12)))
-                    .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(tint.opacity(0.3), lineWidth: 1))
+                RecordingKindBadge(kind: kind, size: 38)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 13.5, weight: .semibold)).foregroundColor(.white)
                     Text(subtitle).font(.system(size: 12)).foregroundColor(blocked ? Color.orange.opacity(0.9) : Color.white.opacity(0.5))

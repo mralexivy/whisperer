@@ -13,6 +13,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 nonisolated enum RecordingKindFilter: String, CaseIterable, Identifiable, Sendable {
     case all = "All", meetings = "Meetings", dictation = "Dictation", files = "Files"
@@ -46,7 +47,10 @@ nonisolated enum RecordingListBuilder {
         var kind: RecordingKindFilter = .all
         var mark: RecordingMarkFilter = .none
         /// Meeting ids matching the current search; nil when there is no search.
-        var meetingMatches: Set<UUID>? = nil
+        /// Meetings matching the current search (id → the passage that matched); nil when there is no search.
+        var meetingHits: [UUID: String?]? = nil
+        /// The search text, so a dictation row can show the passage that matched.
+        var query: String? = nil
     }
 
     struct Output: Equatable {
@@ -69,8 +73,7 @@ nonisolated enum RecordingListBuilder {
                 let item = RecordingListItem(
                     id: .dictation(record.id), kind: kind,
                     title: record.title ?? TranscriptDocument.derivedTitle(from: text),
-                    preview: String((record.title == nil ? TranscriptDocument.previewAfterTitle(text) : text).prefix(140))
-                        .replacingOccurrences(of: "\n", with: " "),
+                    preview: Self.preview(text: text, title: record.title, query: input.query),
                     date: record.timestamp, duration: record.duration, isPinned: record.isPinned, isFlagged: record.isFlagged,
                     isInProgress: false, sourceName: kind == .file ? record.sourceFileName : record.targetAppName,
                     sourceBundleID: record.targetAppBundleID)
@@ -80,7 +83,7 @@ nonisolated enum RecordingListBuilder {
 
         if input.kind.usesMeetingStore {
             for meeting in input.meetings {
-                if let matches = input.meetingMatches, !matches.contains(meeting.id) { continue }
+                if let hits = input.meetingHits, hits[meeting.id] == nil { continue }
                 switch input.mark {
                 case .pinned where !meeting.isPinned: continue
                 case .flagged where !meeting.isFlagged: continue
@@ -88,7 +91,7 @@ nonisolated enum RecordingListBuilder {
                 }
                 let item = RecordingListItem(
                     id: .meeting(meeting.id), kind: .meeting, title: meeting.title,
-                    preview: meeting.captureFailed ? "No audio was captured" : "\(meeting.wordCount) words",
+                    preview: (input.meetingHits?[meeting.id] ?? nil) ?? (meeting.captureFailed ? "No audio was captured" : "\(meeting.wordCount) words"),
                     date: meeting.createdAt, duration: meeting.duration, isPinned: meeting.isPinned, isFlagged: meeting.isFlagged,
                     isInProgress: meeting.isInProgress, sourceName: meeting.sourceAppName, sourceBundleID: meeting.sourceBundleID)
                 if seen.insert(item.id).inserted { merged.append(item) }
@@ -111,7 +114,76 @@ nonisolated enum RecordingListBuilder {
             merged = merged.filter { $0.date >= cutoff }
         }
 
-        merged.sort { $0.date > $1.date }
+        // Strictly newest first; equal dates keep one order between rebuilds.
+        merged.sort { $0.date != $1.date ? $0.date > $1.date : $0.id.key < $1.id.key }
         return Output(items: merged, cutoff: cutoff, limiting: limiting)
+    }
+}
+
+/// Finding and showing where a search matched. Pure.
+nonisolated enum RecordingSnippet {
+    private static let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+
+    static func contains(_ text: String, _ query: String) -> Bool {
+        !query.isEmpty && text.range(of: query, options: options) != nil
+    }
+
+    /// The query as it appears inside JSON: `/`, `"` and `\` are escaped there, so a transcript saying "TCP/IP" is
+    /// stored as `TCP\/IP`.
+    static func jsonSpellings(of query: String) -> [String] {
+        var escaped = query.replacingOccurrences(of: "\\", with: "\\\\")
+        escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
+        escaped = escaped.replacingOccurrences(of: "/", with: "\\/")
+        return escaped == query ? [query] : [query, escaped]
+    }
+
+    /// A short passage with the match in the middle: "… the quarterly budget is approved by …".
+    static func around(_ query: String, in text: String, radius: Int = 46) -> String {
+        let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+        guard let range = flat.range(of: query, options: options) else { return String(flat.prefix(radius * 2)) }
+        let lower = flat.distance(from: flat.startIndex, to: range.lowerBound)
+        let upper = flat.distance(from: flat.startIndex, to: range.upperBound)
+        let startOffset = max(0, lower - radius), endOffset = min(flat.count, upper + radius)
+        var piece = String(flat[flat.index(flat.startIndex, offsetBy: startOffset)..<flat.index(flat.startIndex, offsetBy: endOffset)])
+        piece = piece.trimmingCharacters(in: .whitespaces)
+        return (startOffset > 0 ? "…" : "") + piece + (endOffset < flat.count ? "…" : "")
+    }
+
+    /// `text` as an attributed string with every match of `query` marked.
+    static func highlighted(_ text: String, query: String?) -> AttributedString {
+        var attributed = AttributedString(text)
+        guard let query, !query.isEmpty else { return attributed }
+        var from = text.startIndex
+        while let range = text.range(of: query, options: options, range: from..<text.endIndex),
+              let target = Range(range, in: attributed) {
+            attributed[target].backgroundColor = Color.yellow.opacity(0.35)
+            attributed[target].foregroundColor = .white
+            from = range.upperBound
+        }
+        return attributed
+    }
+}
+
+extension RecordingListBuilder {
+    /// A dictation's second line: the passage that matched the search when there is one, otherwise the rest of
+    /// the text after the words its derived title already shows.
+    static func preview(text: String, title: String?, query: String?) -> String {
+        if let query, !query.isEmpty, RecordingSnippet.contains(text, query) {
+            return RecordingSnippet.around(query, in: text)
+        }
+        let rest = title == nil ? TranscriptDocument.previewAfterTitle(text) : text
+        return String(rest.prefix(140)).replacingOccurrences(of: "\n", with: " ")
+    }
+}
+
+extension RecordingKindFilter {
+    /// The kind a tab stands for (nil for All).
+    var kind: RecordingKind? {
+        switch self {
+        case .all: return nil
+        case .meetings: return .meeting
+        case .dictation: return .dictation
+        case .files: return .file
+        }
     }
 }

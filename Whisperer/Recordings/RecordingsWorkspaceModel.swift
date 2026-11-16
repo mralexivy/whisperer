@@ -40,6 +40,8 @@ final class RecordingsWorkspaceModel: ObservableObject {
     @Published var isImporting = false
     /// Hides the list and the sidebar so the reader has the window.
     @Published var focusMode = false
+    /// How many recordings the current kind, pin/flag filter and search match in total — not just the loaded pages.
+    @Published private(set) var totalCount = 0
 
     /// Rows to keep on screen before asking a store for another page, so a short list never looks finished.
     static let wantedRows = 30
@@ -47,7 +49,10 @@ final class RecordingsWorkspaceModel: ObservableObject {
     private let history: HistoryManager
     private let meetingStore: MeetingManager
     private var bag = Set<AnyCancellable>()
-    private var meetingMatches: Set<UUID>?
+    private var meetingHits: [UUID: String?]?
+    /// Bumped on every new search or filter, so a slow older one can never overwrite a newer one's results.
+    private var filterGeneration = 0
+    private var meetingTotal = 0
     private var searchTask: Task<Void, Never>?
     private var rebuildScheduled = false
     private var limiting: RecordingStoreSource?
@@ -181,9 +186,10 @@ final class RecordingsWorkspaceModel: ObservableObject {
         let output = RecordingListBuilder.build(.init(
             transcriptions: history.transcriptions, meetings: meetingStore.meetings,
             historyHasMore: history.hasMorePages, meetingsHaveMore: meetingStore.hasMorePages,
-            kind: kindFilter, mark: markFilter, meetingMatches: meetingMatches))
+            kind: kindFilter, mark: markFilter, meetingHits: meetingHits, query: wantedQuery))
         limiting = output.limiting
         if items != output.items { items = output.items }
+        updateTotal()
         // A selection that was deleted elsewhere moves to a neighbour; one that is merely filtered out
         // stays open, so typing in search never blanks the reader.
         if let selected = selectedID, !isStillStored(selected) { selectedID = output.items.first?.id }
@@ -226,14 +232,41 @@ final class RecordingsWorkspaceModel: ObservableObject {
         }
     }
 
-    /// Re-runs both stores' queries for the current search and mark filter.
+    /// Re-runs both stores' queries for the current search and mark filter. A newer call makes an older one stand down
+    /// at its next step, so rapid typing cannot leave the meetings of one query beside the dictations of another.
     private func applyFilters() async {
+        filterGeneration += 1
+        let generation = filterGeneration
+        let query = wantedQuery
         // Meetings are filtered here, on what is loaded, so a search or a mark filter needs all of them
         // (there are far fewer than dictations); the matches themselves come from the store.
-        if wantedQuery != nil || markFilter != .none { await loadAllMeetings() }
-        meetingMatches = wantedQuery == nil ? nil : await meetingStore.searchIDs(wantedQuery!)
+        if query != nil || markFilter != .none { await loadAllMeetings() }
+        guard generation == filterGeneration else { return }
+        let hits = query == nil ? nil : await meetingStore.search(query!)
+        guard generation == filterGeneration else { return }
+        meetingHits = hits
         await reloadHistory()
+        guard generation == filterGeneration else { return }
+        meetingTotal = await meetingStore.count(mark: markFilter)
+        guard generation == filterGeneration else { return }
         rebuild()
+    }
+
+    private func updateTotal() {
+        var total = 0
+        if kindFilter.usesHistoryStore {
+            total += history.count(filter: wantedHistoryFilter, kind: wantedKindScope, query: wantedQuery)
+        }
+        if kindFilter.usesMeetingStore {
+            if let hits = meetingHits {
+                total += markFilter == .none ? hits.count : items.filter { $0.kind == .meeting }.count
+            } else if !meetingStore.hasMorePages {
+                total += meetingStore.meetings.filter { markFilter == .none || (markFilter == .pinned ? $0.isPinned : $0.isFlagged) }.count
+            } else {
+                total += meetingTotal
+            }
+        }
+        if totalCount != total { totalCount = total }
     }
 
     private func loadAllMeetings() async {
