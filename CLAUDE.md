@@ -39,7 +39,7 @@ test-built objects alive for the process, or make the class `nonisolated`.
 
 ## Key Paths
 
-- Source: `Whisperer/` (Audio/, Core/, Dictionary/, History/, KeyListener/, Licensing/, Permissions/, Store/, TextInjection/, Transcription/, UI/)
+- Source: `Whisperer/` (Audio/, Core/, Dictionary/, History/, KeyListener/, Licensing/, Permissions/, Recordings/, Store/, TextInjection/, Transcription/, UI/)
 - Xcode project: `Whisperer.xcodeproj`
 - whisper.cpp: `whisper.cpp/` (vendored, not a submodule)
 - Bundle ID: `com.ivy.whisperer`
@@ -108,6 +108,7 @@ only relevant to a fraction of tasks. The Critical Rules above are the always-on
 |---|---|
 | Writing/editing any Swift — naming, error handling, logging, memory | `AGENTS.md` |
 | Touching audio capture, the state machine, meetings, MCP, or storage | `ARCHITECTURE.md` |
+| The Recordings workspace (list, reader, sidebar, player, shared AI over both stores) | `ARCHITECTURE.md` → Recordings workspace |
 | Touching any SwiftUI/AppKit view, color, or font — and **before designing or redesigning any screen** | `DESIGN.md` (DESIGN.md format: tokens in front matter; Overview = screen principles; Components = Choice List, Connect Flow, Provider Identity, Motion, Testability) |
 | Deciding what a feature should do or how it should feel | `PRODUCT_SENSE.md` |
 | Picking up planned work or logging tech debt | `PLANS.md` |

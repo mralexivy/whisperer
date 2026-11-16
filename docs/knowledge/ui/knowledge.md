@@ -297,3 +297,18 @@ it across launches would have to be per-display anyway. Drag/resize still holds 
 - Any never-ending SwiftUI animation makes WindowServer re-composite its window every frame while it is up. Measured with `WindowServerCostTests` (WindowServer CPU via `ps`, opt-in TEST_RUNNER_WINDOWSERVER_COST=1): baseline 28–33 ms/s; idle live bubble 73 → 36 after the breathing caret went still; idle meeting live window 87 → 40.
 - Rule: nothing visible during a recording animates forever. The caret dims when idle, the recording card's waveform is a still glyph, sonar/pulse indicators pulse a few times (`repeatCount`) and hold, and the Island's recording dot pulses 5 times then holds solid. Short-lived progress animations (polish sweep, transcribing dots) are fine.
 - WindowServer's GPU time cannot be read from IORegistry `AppUsage`; its CPU time from `ps` tracks compositing well enough to compare.
+
+## Recordings workspace (2026-11)
+
+- **`.uiTestFrame` frames are recorded on appear and never removed**, so "is this control on screen?" cannot be
+  answered by `frames[key] != nil` — a view that left (an animated sidebar removal) still answers. The player rule
+  ("exactly one presentation") is asserted against `RecordingPlayerProbe` instead: a debug-only live-instance count
+  per `uiTestScope`, incremented in `onAppear` and decremented in `onDisappear`. Count per scope, never globally —
+  windows kept alive by earlier tests keep firing appear/disappear.
+- **A test window with `.titled` style shifts SwiftUI's `.global` frames by the title bar**; use `.borderless` when a test
+  compares a frame with the content bounds.
+- **A `LazyVStack` reader inside a `ScrollViewReader` can scroll to a paragraph that is not built yet** as long as the
+  `ForEach` ids are known — a cited passage far down a two-hour recording reveals correctly.
+- **Untimed text cannot be cited by time.** The AI is shown `[Ns]` keys either way; for untimed documents they are
+  ordinals at 60 s spacing, and the app resolves them back through `TranscriptDocument.paragraph(forCitationKey:)`, so no
+  time is ever displayed or sought to.

@@ -38,6 +38,8 @@ struct MeetingRecord: Identifiable, Equatable {
     var sourceAppName: String?
     /// Who was on the calendar invite; empty for meetings with no linked event.
     var participants: [MeetingParticipant] = []
+    var isPinned: Bool = false
+    var isFlagged: Bool = false
 
     // MARK: - Computed
 
@@ -95,6 +97,8 @@ struct MeetingRecord: Identifiable, Equatable {
         self.titleIsUserSet = entity.titleIsUserSet
         self.sourceBundleID = entity.sourceBundleID
         self.sourceAppName = entity.sourceAppName
+        self.isPinned = entity.isPinned
+        self.isFlagged = entity.isFlagged
 
         let decoder = JSONDecoder()
 
@@ -146,5 +150,26 @@ struct MeetingRecord: Identifiable, Equatable {
         self.captureFailed = false
         self.sourceBundleID = sourceBundleID
         self.sourceAppName = sourceAppName
+    }
+
+    // MARK: - Document init
+
+    /// A record assembled from a `TranscriptDocument`, for views written against `MeetingRecord`.
+    /// Never saved.
+    init(id: UUID, title: String, createdAt: Date, duration: Double, audioFileURL: String?,
+         segments: [MeetingSegment], notes: [MeetingNote], aiSummary: MeetingAISummary?, wordCount: Int,
+         language: String, modelUsed: String, isInProgress: Bool) {
+        self.id = id
+        self.title = title
+        self.createdAt = createdAt
+        self.duration = duration
+        self.audioFileURL = audioFileURL
+        self.segments = segments
+        self.notes = notes
+        self.aiSummary = aiSummary
+        self.wordCount = wordCount
+        self.language = language
+        self.modelUsed = modelUsed
+        self.isInProgress = isInProgress
     }
 }

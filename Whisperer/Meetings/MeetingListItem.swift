@@ -23,6 +23,8 @@ struct MeetingListItem: Identifiable, Equatable {
     var titleIsUserSet: Bool = false
     var sourceBundleID: String?
     var sourceAppName: String?
+    var isPinned: Bool = false
+    var isFlagged: Bool = false
 
     // MARK: - Computed (mirrors MeetingRecord)
 
@@ -78,6 +80,8 @@ struct MeetingListItem: Identifiable, Equatable {
         self.titleIsUserSet = entity.titleIsUserSet
         self.sourceBundleID = entity.sourceBundleID
         self.sourceAppName = entity.sourceAppName
+        self.isPinned = entity.isPinned
+        self.isFlagged = entity.isFlagged
     }
 
     // MARK: - Init for new session (before CoreData write)

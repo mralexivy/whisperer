@@ -675,6 +675,38 @@ The run is automatic when `meetingPolishEnabled` (default on) and the meeting au
 
 Source citation taps in `AskAIPane` post `.meetingScrollToTimestamp` with `chunk.startTimestamp` as `object: Double`. `MeetingTranscriptView` finds the last segment with `timestamp <= seconds + 2` and scrolls to it via `ScrollViewReader.scrollTo(segmentID, anchor: .top)`.
 
+## Recordings workspace (dictation + meetings + imported files)
+
+One destination, `HistorySidebarItem.recordings`, replaces Transcriptions / Meeting Notes / File Transcription:
+a mixed list, one reader, a context sidebar, and one playback session. Code: `Whisperer/Recordings/`.
+
+**Two stores stay two stores.** `TranscriptionEntity` (dictation and imports) and `MeetingEntity` are not merged
+or copied. `TranscriptDocument` is a *view* over either, built by an adapter: identity is `RecordingID`
+(store + the row's UUID), kind (`dictation | meeting | file`) is separate. The legacy `targetAppName == "File Import"`
+rule lives only in `TranscriptDocument.kind(of:)`; new imports also write `sourceKind = "file"`.
+
+**Additive columns** (lightweight migration; both sync automatically via `SyncRowStore`'s generic attributes):
+`TranscriptionEntity.title / sourceKind / sourceFileName / paragraphsJSON / aiSummaryJSON`,
+`MeetingEntity.isPinned / isFlagged`. `paragraphsJSON` is written by an import and keeps real paragraph start times;
+dictation derives paragraphs from its text with `FileTranscriptParagraphs` and never invents times or speakers.
+Dictation notes are kept in `notes` but have no UI. The AI polish writes `aiEnhancedText` with `aiModeName = "AI polish"`
+(wins over an earlier edit; Undo clears it); the original `transcription` is never rewritten.
+
+**AI is shared through one seam.** `MeetingAIService`, `TranscriptPolishController` and `MeetingOverviewView` address a
+recording by UUID; `RecordingResolver` sends summaries, titles and polished text to the right store, drops a polish
+result whose source text changed while it ran, and keeps meeting-only sections (decisions, actions) out of a dictation's
+summary. Views written against `MeetingRecord` get `TranscriptDocument.asMeetingRecord()`. Citations are `[Ns]` keys: real
+start times when every paragraph has one, otherwise ordinals at 60 s spacing (`citationKeys`) — resolved back to a paragraph
+with `paragraph(forCitationKey:)`, so untimed text is revealed, never given a time. Chat is `MeetingChatStore`, keyed by the UUID.
+
+**One player.** `RecordingsWorkspaceView` owns `RecordingPlaybackController` (one `SeekableAudioPlayer`). The full
+`RecordingPlayerView` sits above the sidebar tabs, the compact one under the reader when the sidebar is not shown
+(`RecordingsWorkspaceLayout`: hidden by the user, focus mode, or too narrow). Selecting another recording starts it at 0, paused.
+`RecordingsWorkspacePlayerTests` clicks through all 14 kind × tab combinations and asserts exactly one player and no reset.
+
+**Sidebar tabs** are decided only in `RecordingSidebarPolicy`: dictation Details / Ask AI, meeting Ask AI / Notes / People,
+file Ask AI / Notes. A meeting still being recorded shows a notice and the live window, not the reader.
+
 ## RTL Support
 
 ### Why NSTextField, not SwiftUI Text

@@ -825,3 +825,48 @@ class MeetingManager: ObservableObject {
         return true
     }
 }
+
+// MARK: - Pin / flag (shared Recordings list)
+
+extension MeetingManager {
+    /// Meetings gained pin and flag with the unified Recordings list; the columns default to NO,
+    /// so every existing meeting reads as neither.
+    func setPinned(meetingID: UUID, _ pinned: Bool) async {
+        await setMark(meetingID: meetingID, keyPath: \.isPinned, pinned)
+    }
+
+    func setFlagged(meetingID: UUID, _ flagged: Bool) async {
+        await setMark(meetingID: meetingID, keyPath: \.isFlagged, flagged)
+    }
+
+    private func setMark(meetingID: UUID, keyPath: ReferenceWritableKeyPath<MeetingEntity, Bool>, _ value: Bool) async {
+        let ctx = database.newBackgroundContext()
+        await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "id == %@", meetingID as CVarArg)
+            req.fetchLimit = 1
+            guard let entity = try? ctx.fetch(req).first else { return }
+            entity[keyPath: keyPath] = value
+            try? ctx.save()
+        }
+        updateItem(id: meetingID) { item in
+            if keyPath == \MeetingEntity.isPinned { item.isPinned = value } else { item.isFlagged = value }
+        }
+    }
+}
+
+// MARK: - Search (shared Recordings list)
+
+extension MeetingManager {
+    /// Meetings whose title or transcript contains `query`. The list rows carry no text, so the
+    /// match is made in the store.
+    func searchIDs(_ query: String) async -> Set<UUID> {
+        let ctx = database.newBackgroundContext()
+        return await ctx.perform {
+            let req = MeetingEntity.fetchRequest()
+            req.predicate = NSPredicate(format: "title CONTAINS[cd] %@ OR segmentsJSON CONTAINS[cd] %@", query, query)
+            req.propertiesToFetch = ["id"]
+            return Set(((try? ctx.fetch(req)) ?? []).map(\.id))
+        }
+    }
+}

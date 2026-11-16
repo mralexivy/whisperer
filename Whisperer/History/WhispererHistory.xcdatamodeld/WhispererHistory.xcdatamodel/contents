@@ -32,6 +32,8 @@
         <attribute name="sourceBundleID" optional="YES" attributeType="String"/>
         <attribute name="sourceAppName" optional="YES" attributeType="String"/>
         <attribute name="participantsJSON" optional="YES" attributeType="String"/>
+        <attribute name="isPinned" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isFlagged" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
     </entity>
     <entity name="TranscriptionEntity" representedClassName="TranscriptionEntity" syncable="YES">
         <attribute name="aiEnhancedText" optional="YES" attributeType="String"/>
@@ -55,6 +57,11 @@
         <attribute name="targetAppBundleID" optional="YES" attributeType="String"/>
         <attribute name="targetAppName" optional="YES" attributeType="String"/>
         <attribute name="transcription" attributeType="String"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <attribute name="sourceKind" optional="YES" attributeType="String"/>
+        <attribute name="sourceFileName" optional="YES" attributeType="String"/>
+        <attribute name="paragraphsJSON" optional="YES" attributeType="String"/>
+        <attribute name="aiSummaryJSON" optional="YES" attributeType="String"/>
         <attribute name="wordCount" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
     </entity>
 </model>

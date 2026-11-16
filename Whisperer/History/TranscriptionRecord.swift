@@ -21,8 +21,8 @@ struct TranscriptionRecord: Identifiable {
     let modelUsed: String
     let isPinned: Bool
     let isFlagged: Bool
-    let editedTranscription: String?
-    let notes: String?
+    var editedTranscription: String?
+    var notes: String?
     let createdAt: Date
     let lastModifiedAt: Date
     let corrections: [AppliedCorrection]
@@ -30,6 +30,11 @@ struct TranscriptionRecord: Identifiable {
     let targetAppName: String?
     let aiEnhancedText: String?
     let aiModeName: String?
+    let title: String?
+    let sourceKind: String?
+    let sourceFileName: String?
+    let paragraphsJSON: String?
+    let aiSummaryJSON: String?
 
     // Computed properties
     var displayText: String {
@@ -92,10 +97,15 @@ struct TranscriptionRecord: Identifiable {
         self.targetAppName = entity.targetAppName
         self.aiEnhancedText = entity.aiEnhancedText
         self.aiModeName = entity.aiModeName
+        self.title = entity.title
+        self.sourceKind = entity.sourceKind
+        self.sourceFileName = entity.sourceFileName
+        self.paragraphsJSON = entity.paragraphsJSON
+        self.aiSummaryJSON = entity.aiSummaryJSON
     }
 
     // For creating new records
-    init(id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, targetAppBundleID: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) {
+    init(id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, targetAppBundleID: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil, sourceKind: String? = nil, sourceFileName: String? = nil, paragraphsJSON: String? = nil) {
         let now = Date()
         self.id = id
         self.timestamp = now
@@ -116,5 +126,10 @@ struct TranscriptionRecord: Identifiable {
         self.targetAppName = targetAppName
         self.aiEnhancedText = aiEnhancedText
         self.aiModeName = aiModeName
+        self.title = nil
+        self.sourceKind = sourceKind
+        self.sourceFileName = sourceFileName
+        self.paragraphsJSON = paragraphsJSON
+        self.aiSummaryJSON = nil
     }
 }

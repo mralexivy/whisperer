@@ -9,6 +9,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct FileTranscriptionView: View {
+    /// Called with the saved recording's id once the import is stored. The caller opens it.
+    var onFinished: ((UUID) -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var manager = AppState.shared.fileTranscriptionManager
     @ObservedObject private var appState = AppState.shared
@@ -59,6 +61,11 @@ struct FileTranscriptionView: View {
         .background(WhispererColors.background(colorScheme))
         .onAppear {
             selectedLanguage = appState.selectedLanguage
+            // A file that finished while this page was away is opened now rather than left waiting.
+            if let id = manager.savedRecordID, let onFinished {
+                onFinished(id)
+                manager.clearSelection()
+            }
             for i in 0..<6 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1 + Double(i) * 0.08) {
                     withAnimation(.easeOut(duration: 0.4)) {
@@ -66,6 +73,11 @@ struct FileTranscriptionView: View {
                     }
                 }
             }
+        }
+        .onChange(of: manager.savedRecordID) { _, id in
+            guard let id, let onFinished else { return }
+            onFinished(id)
+            manager.clearSelection()
         }
     }
 
@@ -114,8 +126,6 @@ struct FileTranscriptionView: View {
             heroDropZone
             featureCards
                 .sectionFadeIn(index: 2, appeared: $appearedSections)
-            transcriptionResultSection
-                .sectionFadeIn(index: 3, appeared: $appearedSections)
         }
     }
 
@@ -460,8 +470,6 @@ struct FileTranscriptionView: View {
                 }
             }
             .onDrop(of: [.fileURL], isTargeted: $isDragOver) { providers in handleDrop(providers: providers) }
-
-            transcriptionResultSection
         }
     }
 
@@ -508,8 +516,6 @@ struct FileTranscriptionView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 28)
             }
-
-            transcriptionResultSection
         }
     }
 
@@ -633,74 +639,21 @@ struct FileTranscriptionView: View {
                     }
                 }
             }
-
-            transcriptionResultSection
         }
     }
 
     // MARK: - Complete Content
 
+    /// The file is saved as a recording and opened in the shared reader; nothing is kept here as a second result screen.
     private var completeContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Stats summary row
-            completionStatsRow
-                .sectionFadeIn(index: 0, appeared: $appearedSections)
-
-            // Transcription result with text
-            transcriptionResultSection
-                .sectionFadeIn(index: 1, appeared: $appearedSections)
-        }
-        .onAppear {
-            appearedSections = []
-            for i in 0..<3 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1 + Double(i) * 0.1) {
-                    withAnimation(.easeOut(duration: 0.4)) { _ = appearedSections.insert(i) }
-                }
-            }
-        }
-    }
-
-    private var completionStatsRow: some View {
         HStack(spacing: 10) {
-            CompletionStatCard(
-                icon: "checkmark.circle.fill",
-                label: "FILE",
-                value: manager.fileName,
-                isFileName: true,
-                color: Color(hex: "22C55E"),
-                colorScheme: colorScheme
-            )
-            CompletionStatCard(
-                icon: "clock",
-                label: "DURATION",
-                value: manager.formatDuration(manager.fileDuration),
-                color: Color(hex: "06B6D4"),
-                colorScheme: colorScheme
-            )
-            CompletionStatCard(
-                icon: "text.word.spacing",
-                label: "WORDS",
-                value: "\(manager.transcriptionResult.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count)",
-                color: WhispererColors.accentBlue,
-                colorScheme: colorScheme
-            )
-            CompletionStatCard(
-                icon: "speedometer",
-                label: "SPEED",
-                value: "\(wpmValue) wpm",
-                color: Color(hex: "F97316"),
-                colorScheme: colorScheme
-            )
-            if let multiplier = manager.speedMultiplier, multiplier > 0 {
-                CompletionStatCard(
-                    icon: "gauge.with.dots.needle.67percent",
-                    label: "REALTIME",
-                    value: String(format: "%.1fx", multiplier),
-                    color: Color(hex: "A855F7"),
-                    colorScheme: colorScheme
-                )
-            }
+            ProgressView().controlSize(.small)
+            Text("Opening your recording…")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(WhispererColors.secondaryText(colorScheme))
         }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
     }
 
     // MARK: - Error Content
@@ -763,162 +716,9 @@ struct FileTranscriptionView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
             }
-
-            transcriptionResultSection
         }
     }
 
-    // MARK: - Transcription Result Section
-
-    private var transcriptionResultSection: some View {
-        SettingsCard(colorScheme: colorScheme, borderColor: manager.state == .complete ? Color(hex: "22C55E").opacity(0.12) : nil) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    SettingsSectionHeader(
-                        icon: "text.alignleft",
-                        title: "Transcription Result",
-                        colorScheme: colorScheme,
-                        color: Color(hex: "22C55E")
-                    )
-
-                    Spacer()
-
-                    if manager.state == .complete && !manager.transcriptionResult.isEmpty {
-                        resultActionButtons
-                    }
-                }
-
-                Rectangle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "22C55E").opacity(0.12), WhispererColors.border(colorScheme), WhispererColors.border(colorScheme).opacity(0.3)],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                    .frame(height: 1)
-                    .padding(.top, 16)
-
-                if manager.state == .complete && !manager.transcriptionResult.isEmpty {
-                    if manager.paragraphs.isEmpty {
-                        Text(manager.transcriptionResult)
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundColor(WhispererColors.primaryText(colorScheme))
-                            .lineSpacing(5)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.top, 16)
-                    } else {
-                        FileTranscriptReaderView(paragraphs: manager.paragraphs, language: selectedLanguage, colorScheme: colorScheme)
-                            .padding(.top, 10)
-                    }
-                } else {
-                    VStack(spacing: 12) {
-                        Image(systemName: "text.page")
-                            .font(.system(size: 28, weight: .light))
-                            .foregroundColor(WhispererColors.tertiaryText(colorScheme))
-
-                        Text("Transcription will appear here")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundColor(WhispererColors.tertiaryText(colorScheme))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
-                }
-            }
-        }
-    }
-
-    private var resultActionButtons: some View {
-        HStack(spacing: 8) {
-            // New File button
-            Button(action: {
-                withAnimation(.spring(response: 0.3)) { manager.clearSelection() }
-            }) {
-                HStack(spacing: 5) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 11, weight: .medium))
-                    Text("New")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundColor(WhispererColors.accentBlue)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(WhispererColors.accentBlue.opacity(0.10)))
-                .overlay(Capsule().stroke(WhispererColors.accentBlue.opacity(0.12), lineWidth: 0.5))
-            }
-            .buttonStyle(.plain).pointerOnHover()
-
-            // Copy button
-            Button(action: copyToClipboard) {
-                HStack(spacing: 5) {
-                    Image(systemName: copiedFeedback ? "checkmark" : "doc.on.doc")
-                        .font(.system(size: 11, weight: .medium))
-                    Text(copiedFeedback ? "Copied" : "Copy")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundColor(copiedFeedback ? Color(hex: "22C55E") : WhispererColors.primaryText(colorScheme))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(copiedFeedback ? Color(hex: "22C55E").opacity(0.12) : WhispererColors.elevatedBackground(colorScheme)))
-                .overlay(Capsule().stroke(copiedFeedback ? Color(hex: "22C55E").opacity(0.2) : WhispererColors.border(colorScheme), lineWidth: 1))
-            }
-            .buttonStyle(.plain).pointerOnHover()
-
-            // Export menu
-            Menu {
-                Button(action: { exportTranscription(format: .txt) }) {
-                    Label("Export as TXT", systemImage: "doc.plaintext")
-                }
-                Button(action: { exportTranscription(format: .json) }) {
-                    Label("Export as JSON", systemImage: "curlybraces")
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 11, weight: .medium))
-                    Text("Export")
-                        .font(.system(size: 12, weight: .semibold))
-                }
-                .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(WhispererColors.elevatedBackground(colorScheme)))
-                .overlay(Capsule().stroke(WhispererColors.border(colorScheme), lineWidth: 1))
-            }
-            .menuStyle(.borderlessButton)
-            .pointerOnHover()
-
-            // Saved-to-history indicator (auto-save fires on completion — no user action needed)
-            HStack(spacing: 5) {
-                Image(systemName: manager.savedToHistory ? "checkmark.circle.fill" : "arrow.down.circle")
-                    .font(.system(size: 11, weight: .medium))
-                Text(manager.savedToHistory ? "Saved to History" : "Saving...")
-                    .font(.system(size: 12, weight: .semibold))
-            }
-            .foregroundColor(manager.savedToHistory ? Color(hex: "22C55E") : WhispererColors.secondaryText(colorScheme))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(Capsule().fill(manager.savedToHistory ? Color(hex: "22C55E").opacity(0.10) : WhispererColors.elevatedBackground(colorScheme)))
-            .overlay(Capsule().stroke(manager.savedToHistory ? Color(hex: "22C55E").opacity(0.20) : WhispererColors.border(colorScheme), lineWidth: 1))
-            .animation(.easeInOut(duration: 0.3), value: manager.savedToHistory)
-        }
-    }
-
-    // MARK: - Helpers
-
-    private var wpmValue: String {
-        let wordCount = manager.transcriptionResult.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
-        guard manager.fileDuration > 0 else { return "0" }
-        return "\(Int(Double(wordCount) / (manager.fileDuration / 60.0)))"
-    }
-
-    private var fileIcon: String {
-        guard let url = manager.selectedFileURL else { return "doc.fill" }
-        let ext = url.pathExtension.lowercased()
-        if FileTranscriptionManager.videoExtensions.contains(ext) { return "film" }
-        return "waveform"
-    }
 
     private var languagePicker: some View {
         Picker("", selection: $selectedLanguage) {
@@ -974,26 +774,11 @@ struct FileTranscriptionView: View {
         return true
     }
 
-    private enum ExportFormat { case txt, json }
-
-    private func exportTranscription(format: ExportFormat) {
-        let panel = NSSavePanel()
-        let baseName = (manager.fileName as NSString).deletingPathExtension
-        panel.nameFieldStringValue = "\(baseName)_transcript.\(format == .txt ? "txt" : "json")"
-        panel.allowedContentTypes = format == .txt ? [.plainText] : [.json]
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            switch format {
-            case .txt:
-                try manager.exportAsText(to: url)
-            case .json:
-                try manager.exportAsJSON(to: url)
-            }
-        } catch {
-            Logger.error("Export failed: \(error.localizedDescription)", subsystem: .app)
-        }
+    private var fileIcon: String {
+        guard let url = manager.selectedFileURL else { return "doc.fill" }
+        let ext = url.pathExtension.lowercased()
+        if FileTranscriptionManager.videoExtensions.contains(ext) { return "film" }
+        return "waveform"
     }
 
     private func formatETA(_ seconds: TimeInterval) -> String {
@@ -1003,17 +788,6 @@ struct FileTranscriptionView: View {
             let minutes = Int(seconds) / 60
             let secs = Int(seconds) % 60
             return secs > 0 ? "\(minutes)m \(secs)s" : "\(minutes)m"
-        }
-    }
-
-    private func copyToClipboard() {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(manager.formattedTranscript, forType: .string)
-
-        withAnimation(.easeInOut(duration: 0.2)) { copiedFeedback = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation(.easeInOut(duration: 0.2)) { copiedFeedback = false }
         }
     }
 }

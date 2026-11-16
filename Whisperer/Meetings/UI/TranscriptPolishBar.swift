@@ -20,6 +20,8 @@ struct TranscriptPolishBar: View {
     /// Icon-only actions and no provider name, for a narrow centre column. The tab bar picks
     /// this through `ViewThatFits`, so labels drop before anything wraps or clips.
     var compact: Bool = false
+    /// The flat bordered look the Recordings toolbar uses: a neutral outline instead of the gradient pill.
+    var quiet: Bool = false
 
     @ObservedObject private var store = ConnectedAIStore.shared
     @ObservedObject private var polish = TranscriptPolishController.shared
@@ -149,6 +151,24 @@ struct TranscriptPolishBar: View {
     }
 
     private func actionButton(title: String, icon: String, prominent: Bool, action: @escaping () -> Void) -> some View {
+        if quiet && prominent { return AnyView(quietButton(title: title, action: action)) }
+        return AnyView(styledActionButton(title: title, icon: icon, prominent: prominent, action: action))
+    }
+
+    private func quietButton(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles").font(.system(size: 11, weight: .medium))
+                Text(title).font(.system(size: 12.5, weight: .medium))
+            }
+            .foregroundColor(.white.opacity(0.9))
+            .padding(.horizontal, 12).frame(height: 30)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.16), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func styledActionButton(title: String, icon: String, prominent: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
                 if prominent, let provider {

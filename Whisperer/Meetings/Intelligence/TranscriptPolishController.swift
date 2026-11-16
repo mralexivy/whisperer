@@ -30,7 +30,7 @@ final class TranscriptPolishController: ObservableObject {
     let defaults: UserDefaults
     /// Persists the polished array. Replaced in tests.
     var persist: (UUID, [MeetingSegment]) async -> Void = { id, segments in
-        await MeetingManager.shared.updateSegments(meetingID: id, segments: segments)
+        await RecordingResolver.persistSegments(id, segments)
     }
 
     /// `store` nil = `ConnectedAIStore.shared`, resolved here on the main actor (a default

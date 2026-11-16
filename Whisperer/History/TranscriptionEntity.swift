@@ -32,6 +32,15 @@ public class TranscriptionEntity: NSManagedObject {
     @NSManaged public var isInProgress: Bool
     @NSManaged public var sessionAudioURL: String?
     @NSManaged public var chunkTextsJSON: String?
+    /// User- or AI-given name. Dictation had none; the Recordings list derives one from the text when nil.
+    @NSManaged public var title: String?
+    /// Where the row came from — "file" for an import. Replaces the `targetAppName == "File Import"` convention.
+    @NSManaged public var sourceKind: String?
+    @NSManaged public var sourceFileName: String?
+    /// `[StoredParagraph]` with real start times, written by an import. Dictation derives paragraphs from the text.
+    @NSManaged public var paragraphsJSON: String?
+    /// `MeetingAISummary` — the same shape meetings use, so the Overview tab is shared.
+    @NSManaged public var aiSummaryJSON: String?
 
     // Computed properties
     var displayText: String {
@@ -92,7 +101,7 @@ extension TranscriptionEntity {
 // MARK: - Convenience Initializer
 
 extension TranscriptionEntity {
-    static func create(in context: NSManagedObjectContext, id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, targetAppBundleID: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil) -> TranscriptionEntity {
+    static func create(in context: NSManagedObjectContext, id: UUID = UUID(), transcription: String, audioFileURL: String?, duration: Double, language: String, modelUsed: String, corrections: [AppliedCorrection] = [], targetAppName: String? = nil, targetAppBundleID: String? = nil, aiEnhancedText: String? = nil, aiModeName: String? = nil, sourceKind: String? = nil, sourceFileName: String? = nil, paragraphsJSON: String? = nil) -> TranscriptionEntity {
         let entity = TranscriptionEntity(context: context)
         let now = Date()
 
@@ -115,6 +124,9 @@ extension TranscriptionEntity {
         entity.targetAppName = targetAppName
         entity.aiEnhancedText = aiEnhancedText
         entity.aiModeName = aiModeName
+        entity.sourceKind = sourceKind
+        entity.sourceFileName = sourceFileName
+        entity.paragraphsJSON = paragraphsJSON
 
         return entity
     }

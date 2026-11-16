@@ -49,6 +49,8 @@ private struct UITestFrameModifier: ViewModifier {
             Color.clear
                 .onAppear { UITestFrames.frames[key] = geometry.frame(in: .global) }
                 .onChange(of: geometry.frame(in: .global)) { _, frame in UITestFrames.frames[key] = frame }
+                // A control that left the screen must not keep answering with its old position.
+                .onDisappear { UITestFrames.frames[key] = nil }
                 // A reused control whose label changes keeps its view identity, so onAppear
                 // does not fire again; record under the new key too.
                 .onChange(of: key) { _, newKey in UITestFrames.frames[newKey] = geometry.frame(in: .global) }

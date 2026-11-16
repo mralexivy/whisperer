@@ -74,6 +74,17 @@ struct MeetingAssistantPanel: View {
 
 struct AskAIPane: View {
     let meeting: MeetingRecord?
+    /// What the recording is called in the pane ("meeting", "recording", "dictation"). Meetings keep their wording.
+    var noun: String = "meeting"
+    /// A tap on a cited passage. Nil keeps the old behaviour (a notification the meeting view used to listen for).
+    var onCitation: ((RAGChunk) -> Void)? = nil
+    /// Suggested questions when the recording has no topics yet; nil = the meeting defaults.
+    var starters: [String]? = nil
+    /// The two-line heading and the sentence under it on the empty pane.
+    var headline: [String] = ["Good conversations.", "Clear next steps."]
+    var subtitle: String = "Find the decisions, connect the ideas, and turn this conversation into action."
+    /// The recording's title, shown in the scope chip.
+    var scopeTitle: String? = nil
 
     @State private var messages:      [MeetingChatMessage] = []
     @State private var question:      String = ""
@@ -88,15 +99,12 @@ struct AskAIPane: View {
     var body: some View {
         VStack(spacing: 0) {
             statusBar
-            Rectangle().fill(Color.white.opacity(0.04)).frame(height: 1)
-
             if messages.isEmpty {
-                emptyState
+                ScrollView(.vertical, showsIndicators: false) { emptyState }
             } else {
                 chatList
             }
 
-            Divider().overlay(Color.white.opacity(0.06))
             inputBar
         }
         .onAppear { onAppear() }
@@ -111,34 +119,38 @@ struct AskAIPane: View {
 
     // MARK: - Status bar
 
+    /// What the conversation is about, and the way to clear it.
     private var statusBar: some View {
         HStack(spacing: 6) {
-            answererChip
+            HStack(spacing: 6) {
+                Circle().fill(Color(hex: "5B6CF7")).frame(width: 5, height: 5)
+                Text("This \(noun == "meeting" ? "meeting" : "recording")")
+                    .foregroundColor(.white.opacity(0.4))
+                if let scopeTitle, !scopeTitle.isEmpty {
+                    Text("/").foregroundColor(.white.opacity(0.2))
+                    Text(scopeTitle).foregroundColor(.white.opacity(0.7)).lineLimit(1)
+                }
+            }
+            .font(.system(size: 11.5, weight: .medium))
             Spacer()
-
             if !messages.isEmpty {
-                Button {
-                    showClearConfirm = true
-                } label: {
-                    Image(systemName: "trash.circle")
-                        .font(.system(size: 13))
-                        .foregroundColor(.white.opacity(0.3))
+                Button { showClearConfirm = true } label: {
+                    Image(systemName: "trash").font(.system(size: 11)).foregroundColor(.white.opacity(0.35))
                 }
                 .buttonStyle(.plain)
                 .help("Clear conversation")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
     }
 
     /// Who answers: the connected AI the user chose, or this Mac. Click opens the LLM page.
     private var answererChip: some View {
-        let id = connectedAI.activeProviderID
-        return Button {
+        Button {
             NotificationCenter.default.post(name: .switchToLLMTab, object: nil)
         } label: {
-            ProviderBadge(provider: id, compact: true)
+            ProviderBadge(provider: connectedAI.activeProviderID, compact: true)
         }
         .buttonStyle(.plain)
         .help("Choose which AI answers on the LLM page")
@@ -147,60 +159,65 @@ struct AskAIPane: View {
     // MARK: - Empty state
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(
-                        colors: [Color(hex: "5B6CF7").opacity(0.3), Color(hex: "8B5CF6").opacity(0.15)],
-                        startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 56, height: 56)
-                Text("✦")
-                    .font(.system(size: 24))
-                    .foregroundColor(Color(hex: "5B6CF7"))
+        VStack(alignment: .leading, spacing: 18) {
+            Spacer(minLength: 12)
+            Image(systemName: "sparkles")
+                .font(.system(size: 18, weight: .medium)).foregroundColor(Color(hex: "8B9AFF"))
+                .frame(width: 52, height: 52)
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color(hex: "5B6CF7").opacity(0.18)))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(hex: "5B6CF7").opacity(0.3), lineWidth: 1))
+
+            VStack(alignment: .leading, spacing: 10) {
+                Text(headline.joined(separator: "\n"))
+                    .font(.system(size: 26, weight: .semibold)).foregroundColor(.white)
+                    .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                Text(subtitle)
+                    .font(.system(size: 13.5)).foregroundColor(.white.opacity(0.5))
+                    .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Ask anything about this meeting")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.5))
-
-            ProviderBadge(provider: connectedAI.activeProviderID)
-                .help(connectedAI.activeProviderID.map { "Questions go to \($0.displayName) under your \($0.recipient) account" }
-                      ?? "Answered privately on this Mac")
-
-            VStack(spacing: 6) {
-                ForEach(starterQuestions, id: \.self) { q in
+            VStack(spacing: 8) {
+                ForEach(Array(starterQuestions.enumerated()), id: \.offset) { index, q in
                     Button {
                         question = q
                         sendMessage()
                     } label: {
-                        Text(q)
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.6))
-                            .multilineTextAlignment(.center)
-                            .environment(\.layoutDirection, Self.detectRTL(q) ? .rightToLeft : .leftToRight)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background(Color.white.opacity(0.06))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                        HStack(spacing: 12) {
+                            Image(systemName: ["lightbulb", "list.bullet", "pencil"][index % 3])
+                                .font(.system(size: 13)).foregroundColor(.white.opacity(0.55)).frame(width: 18)
+                            Text(q)
+                                .font(.system(size: 13, weight: .medium)).foregroundColor(.white.opacity(0.85))
+                                .multilineTextAlignment(.leading)
+                                .environment(\.layoutDirection, Self.detectRTL(q) ? .rightToLeft : .leftToRight)
+                            Spacer(minLength: 4)
+                            Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .medium)).foregroundColor(.white.opacity(0.35))
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 13)
+                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.03)))
+                        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
+                    .uiTestFrame("recordings.ask.starter.\(index)")
                 }
             }
+
+            Label("Answers connect back to your transcript.", systemImage: "link")
+                .font(.system(size: 11)).foregroundColor(.white.opacity(0.3))
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding()
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 20)
+        .padding(.top, 6)
+        .padding(.bottom, 12)
     }
 
     private var starterQuestions: [String] {
-        // Prefer topic-derived suggestions from the AI summary
+        if let starters { return starters }
+        // Topic-derived suggestions from the AI summary, when a meeting has one
         if let topics = meeting?.aiSummary?.keyTopics, !topics.isEmpty {
             return Array(topics.prefix(3).map { Self.tellMeAbout($0.text) })
         }
-        return [
-            "What were the main decisions?",
-            "Summarize the action items",
-            "What was discussed about the timeline?",
-        ]
+        return ["What did we decide?", "What needs my attention?", "Draft a follow-up"]
     }
 
     // MARK: - Chat list
@@ -369,10 +386,14 @@ struct AskAIPane: View {
     @ViewBuilder
     private func sourceChip(_ chunk: RAGChunk) -> some View {
         Button {
-            NotificationCenter.default.post(
-                name: .meetingScrollToTimestamp,
-                object: chunk.startTimestamp
-            )
+            if let onCitation {
+                onCitation(chunk)
+            } else {
+                NotificationCenter.default.post(
+                    name: .meetingScrollToTimestamp,
+                    object: chunk.startTimestamp
+                )
+            }
         } label: {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -458,29 +479,42 @@ struct AskAIPane: View {
     // MARK: - Input bar
 
     private var inputBar: some View {
-        HStack(spacing: 8) {
-            TextField(connectedAI.activeProviderID.map { "Ask \($0.displayName) about this meeting…" } ?? "Ask about this meeting…",
-                      text: $question, axis: .vertical)
-                .font(.system(size: 13))
-                .foregroundColor(.white)
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .onSubmit { sendMessage() }
-
-            Button { sendMessage() } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(question.isEmpty || isThinking
-                                     ? .white.opacity(0.2)
-                                     : Color(hex: "5B6CF7"))
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
+                TextField(connectedAI.activeProviderID.map { "Ask \($0.displayName) about this \(noun)…" } ?? "Ask anything about this \(noun == "meeting" ? "meeting" : "recording")…",
+                          text: $question, axis: .vertical)
+                    .font(.system(size: 13.5))
+                    .foregroundColor(.white)
+                    .textFieldStyle(.plain)
+                    .lineLimit(2...6)
+                    .onSubmit { sendMessage() }
+                    .uiTestFrame("recordings.ask.input")
+                HStack(spacing: 8) {
+                    answererChip
+                    Spacer()
+                    Button { sendMessage() } label: {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
+                            .frame(width: 28, height: 28)
+                            .background(Circle().fill(question.isEmpty || isThinking ? Color.white.opacity(0.12) : Color(hex: "5B6CF7")))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(question.isEmpty || isThinking)
+                    .keyboardShortcut(.return, modifiers: .command)
+                    .accessibilityLabel("Send")
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(question.isEmpty || isThinking)
-            .keyboardShortcut(.return, modifiers: .command)
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1))
+            HStack {
+                Text(connectedAI.activeProviderID.map { "Answers from \($0.displayName)" } ?? "Answered on this Mac")
+                Spacer()
+                Text("↵ to send")
+            }
+            .font(.system(size: 10.5)).foregroundColor(.white.opacity(0.28))
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color.white.opacity(0.04))
+        .padding(.horizontal, 16).padding(.top, 10).padding(.bottom, 14)
     }
 
     // MARK: - Send
@@ -502,7 +536,7 @@ struct AskAIPane: View {
             await MeetingChatStore.shared.append(userMsg, meetingID: meeting.id)
             // The stored transcript as it is now — polish may have rewritten it since this pane
             // loaded the meeting, and the question must be answered from the latest text.
-            let stored = liveSegments == nil ? await MeetingManager.shared.meeting(id: meeting.id)?.segments : nil
+            let stored = liveSegments == nil ? await RecordingResolver.segments(for: meeting.id) : nil
             let askSegments = liveSegments ?? (stored?.isEmpty == false ? stored! : meeting.segments)
 
             // Switch phase label before LLM call

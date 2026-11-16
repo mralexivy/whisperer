@@ -200,7 +200,10 @@ class HistoryManager: ObservableObject {
                 targetAppName: record.targetAppName,
                 targetAppBundleID: record.targetAppBundleID,
                 aiEnhancedText: record.aiEnhancedText,
-                aiModeName: record.aiModeName
+                aiModeName: record.aiModeName,
+                sourceKind: record.sourceKind,
+                sourceFileName: record.sourceFileName,
+                paragraphsJSON: record.paragraphsJSON
             )
         }
 
@@ -706,4 +709,65 @@ nonisolated struct HistoryStatistics: Sendable {
 enum HistoryError: Error {
     case databaseNotInitialized
     case recordNotFound
+}
+
+// MARK: - Recordings workspace support
+
+extension HistoryManager {
+    /// The mode name written by the shared AI polish, so the reader can tell it from Fast Polish.
+    static let aiPolishModeName = "AI polish"
+
+    /// One record by id, read from the main context.
+    func record(id: UUID) -> TranscriptionRecord? {
+        guard let entity = entity(id: id) else { return nil }
+        return TranscriptionRecord(from: entity)
+    }
+
+    private func entity(id: UUID) -> TranscriptionEntity? {
+        let request: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        request.fetchLimit = 1
+        return try? context.fetch(request).first
+    }
+
+    /// Applies `change` to the row, saves, and patches the loaded page in place.
+    @discardableResult
+    func update(id: UUID, _ change: (TranscriptionEntity) -> Void) -> Bool {
+        guard let entity = entity(id: id) else { return false }
+        change(entity)
+        entity.lastModifiedAt = Date()
+        guard (try? context.save()) != nil else { return false }
+        if let index = transcriptions.firstIndex(where: { $0.id == id }) {
+            transcriptions[index] = TranscriptionRecord(from: entity)
+        }
+        return true
+    }
+
+    func setTitle(id: UUID, _ title: String?) { update(id: id) { $0.title = title } }
+
+    func setAISummary(id: UUID, _ summary: MeetingAISummary?) {
+        let json = summary.flatMap { try? JSONEncoder().encode($0) }.flatMap { String(data: $0, encoding: .utf8) }
+        update(id: id) { $0.aiSummaryJSON = json }
+    }
+
+    func setPinned(id: UUID, _ pinned: Bool) { update(id: id) { $0.isPinned = pinned } }
+    func setFlagged(id: UUID, _ flagged: Bool) { update(id: id) { $0.isFlagged = flagged } }
+
+    /// Stores (or clears) the AI-polished version. The recognizer's text and any user edit stay as they were.
+    func setPolished(id: UUID, text: String?) {
+        update(id: id) {
+            $0.aiEnhancedText = text
+            $0.aiModeName = text == nil ? nil : Self.aiPolishModeName
+        }
+    }
+
+    /// Records matching `query` in any text field, for the shared Recordings search.
+    func searchIDs(_ query: String) -> Set<UUID> {
+        let request: NSFetchRequest<TranscriptionEntity> = TranscriptionEntity.fetchRequest()
+        request.predicate = NSPredicate(
+            format: "transcription CONTAINS[cd] %@ OR editedTranscription CONTAINS[cd] %@ OR aiEnhancedText CONTAINS[cd] %@ OR title CONTAINS[cd] %@",
+            query, query, query, query)
+        request.propertiesToFetch = ["id"]
+        return Set((try? context.fetch(request))?.map(\.id) ?? [])
+    }
 }

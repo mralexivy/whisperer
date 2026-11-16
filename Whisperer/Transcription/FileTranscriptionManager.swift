@@ -59,6 +59,8 @@ class FileTranscriptionManager: ObservableObject {
     @Published var fileDuration: Double = 0.0
     @Published var fileSize: String = ""
     @Published var savedToHistory: Bool = false
+    /// The id of the history row the finished import was saved as — what the Recordings workspace opens.
+    @Published private(set) var savedRecordID: UUID?
     @Published var estimatedTimeRemaining: TimeInterval?
     @Published var processingDuration: TimeInterval = 0
 
@@ -79,10 +81,10 @@ class FileTranscriptionManager: ObservableObject {
     private var transcriptionTask: Task<Void, Never>?
 
     // Chunked transcription constants
-    private let sampleRate: Double = 16000.0
-    private let chunkDuration: Double = 30.0
-    private let overlapDuration: Double = 0.5
-    private let contextMaxLength = 100
+    let sampleRate: Double = 16000.0
+    let chunkDuration: Double = 30.0
+    let overlapDuration: Double = 0.5
+    let contextMaxLength = 100
 
     private var chunkSamples: Int { Int(chunkDuration * sampleRate) }
     private var overlapSamples: Int { Int(overlapDuration * sampleRate) }
@@ -103,6 +105,7 @@ class FileTranscriptionManager: ObservableObject {
         fileName = url.lastPathComponent
         savedToHistory = false
         transcriptionResult = ""
+        savedRecordID = nil
         progress = 0.0
         paragraphs = []
 
@@ -152,6 +155,7 @@ class FileTranscriptionManager: ObservableObject {
         isCancelled = false
         savedToHistory = false
         transcriptionResult = ""
+        savedRecordID = nil
         progress = 0.0
         paragraphs = []
         state = .loading
@@ -346,18 +350,26 @@ class FileTranscriptionManager: ObservableObject {
             recordedLanguage = AppState.shared.selectedLanguage.rawValue
         }
 
+        // The paragraphs with their times, so the reopened recording keeps them.
+        let paragraphsJSON = (try? JSONEncoder().encode(paragraphs.map { StoredParagraph(text: $0.text, start: $0.start, end: nil) }))
+            .flatMap { String(data: $0, encoding: .utf8) }
+
         let record = TranscriptionRecord(
             transcription: transcriptionResult,
             audioFileURL: audioFileName,
             duration: fileDuration,
             language: recordedLanguage,
             modelUsed: AppState.shared.activeModelDisplayName,
-            targetAppName: "File Import"
+            targetAppName: "File Import",
+            sourceKind: "file",
+            sourceFileName: sourceURL.lastPathComponent,
+            paragraphsJSON: paragraphsJSON
         )
 
         do {
             try await HistoryManager.shared.saveTranscription(record)
             savedToHistory = true
+            savedRecordID = record.id
             Logger.info("File transcription saved to history", subsystem: .app)
         } catch {
             Logger.error("Failed to save file transcription to history: \(error.localizedDescription)", subsystem: .app)
@@ -370,7 +382,7 @@ class FileTranscriptionManager: ObservableObject {
     /// Float32 at 16 kHz) ran on the main actor here, freezing the UI for the duration of the
     /// read. Everything below is pure AVFoundation work on local values.
     @concurrent
-    nonisolated private func loadAudioSamples(from url: URL) async throws -> [Float] {
+    nonisolated func loadAudioSamples(from url: URL) async throws -> [Float] {
         let ext = url.pathExtension.lowercased()
 
         if Self.videoExtensions.contains(ext) {
@@ -555,7 +567,7 @@ class FileTranscriptionManager: ObservableObject {
         }
     }
 
-    private func deduplicateOverlap(previousText: String, newText: String) -> String {
+    func deduplicateOverlap(previousText: String, newText: String) -> String {
         guard !previousText.isEmpty, !newText.isEmpty else { return newText }
 
         let prevWords = previousText.split(separator: " ").map(String.init)

@@ -87,10 +87,9 @@ enum TimeFormatSetting: String, CaseIterable {
 // MARK: - Navigation
 
 enum HistorySidebarItem: String, CaseIterable, Identifiable {
-    case transcriptions = "Transcriptions"
-    case meetingStudio  = "Meeting Notes"
+    /// Dictation, meetings and imported files in one list and one reader.
+    case recordings = "Recordings"
     case calendar = "Calendar"
-    case fileTranscription = "File Transcription"
     case dictionary = "Dictionary"
     case aiModes = "AI Modes"
     case llm = "LLM"
@@ -105,10 +104,8 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .transcriptions: return "waveform.and.mic"
-        case .meetingStudio:  return "note.text"
+        case .recordings: return "waveform.and.mic"
         case .calendar: return "calendar"
-        case .fileTranscription: return "doc.text.magnifyingglass"
         case .statistics: return "chart.xyaxis.line"
         case .dictionary: return "book.closed"
         case .aiModes: return "wand.and.sparkles"
@@ -123,10 +120,8 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
 
     var color: Color {
         switch self {
-        case .transcriptions: return WhispererColors.accentBlue
-        case .meetingStudio:  return Color(hex: "06B6D4")  // cyan
+        case .recordings: return WhispererColors.accentBlue
         case .calendar: return Color(hex: "F97316")  // orange — the calendar/reminder colour everywhere
-        case .fileTranscription: return .purple
         case .statistics: return .cyan
         case .dictionary: return .red
         case .aiModes: return Color(hex: "8B5CF6")
@@ -142,10 +137,10 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     /// Items shown in the sidebar
     static var visibleItems: [HistorySidebarItem] {
         #if !APP_STORE
-        var items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .calendar, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .feedback, .settings]
+        var items: [HistorySidebarItem] = [.recordings, .calendar, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .feedback, .settings]
         items.insert(.commandMode, at: items.count - 3) // Before setup
         #else
-        let items: [HistorySidebarItem] = [.transcriptions, .meetingStudio, .calendar, .fileTranscription, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .settings]
+        let items: [HistorySidebarItem] = [.recordings, .calendar, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .settings]
         #endif
         return items
     }
@@ -156,9 +151,8 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
 struct HistoryWindowView: View {
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var historyManager = HistoryManager.shared
-    @State private var selectedSidebarItem: HistorySidebarItem = .transcriptions
+    @State private var selectedSidebarItem: HistorySidebarItem = .recordings
     @State private var isSidebarCollapsed = false
-    @State private var meetingStudioSelectedID: UUID?
 
     #if !APP_STORE
     @StateObject private var commandModeService: CommandModeService = {
@@ -186,14 +180,10 @@ struct HistoryWindowView: View {
             // Main content
             Group {
                 switch selectedSidebarItem {
-                case .transcriptions:
-                    TranscriptionsView()
-                case .meetingStudio:
-                    MeetingStudioView(selectedMeetingID: $meetingStudioSelectedID)
+                case .recordings:
+                    RecordingsWorkspaceView()
                 case .calendar:
                     CalendarPageView(colorScheme: colorScheme)
-                case .fileTranscription:
-                    FileTranscriptionView()
                 case .statistics:
                     StatisticsView()
                 case .dictionary:
@@ -247,7 +237,9 @@ struct HistoryWindowView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToMeetingStudioTab)) { _ in
             withAnimation(.spring(response: 0.3)) {
-                selectedSidebarItem = .meetingStudio
+                selectedSidebarItem = .recordings
+                RecordingsWorkspaceModel.shared.isImporting = false
+                RecordingsWorkspaceModel.shared.kindFilter = .meetings
                 if isSidebarCollapsed {
                     isSidebarCollapsed = false
                 }
@@ -263,7 +255,8 @@ struct HistoryWindowView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .switchToFileTranscriptionTab)) { _ in
             withAnimation(.spring(response: 0.3)) {
-                selectedSidebarItem = .fileTranscription
+                selectedSidebarItem = .recordings
+                RecordingsWorkspaceModel.shared.isImporting = true
                 if isSidebarCollapsed {
                     isSidebarCollapsed = false
                 }
@@ -505,668 +498,6 @@ struct SidebarNavItem: View {
                 isHovered = hovering
             }
         }
-    }
-}
-
-// MARK: - Transcriptions View (Main Content)
-
-struct TranscriptionsView: View {
-    @Environment(\.colorScheme) var colorScheme
-    @ObservedObject var historyManager = HistoryManager.shared
-    @State private var searchText = ""
-    @State private var selectedFilter: TranscriptionFilter = .all
-    @State private var selectedTranscription: TranscriptionRecord?
-    @State private var detailPanelWidth: CGFloat = 420
-    @State private var dailyQuote: String = DailyQuotes.random
-    @State private var dateRangeStart: Date?
-    @State private var dateRangeEnd: Date?
-    @State private var showCalendarPicker = false
-    @State private var datesWithTranscriptions: Set<Date> = []
-
-    private let minDetailWidth: CGFloat = 320
-    private let maxDetailWidth: CGFloat = 600
-    private let dividerWidth: CGFloat = 12
-
-    var body: some View {
-        GeometryReader { geometry in
-            HStack(spacing: 0) {
-                // List panel
-                VStack(spacing: 0) {
-                    headerView
-                    toolbarView
-                    transcriptionList
-                }
-                .frame(width: listPanelWidth(in: geometry.size.width))
-                .clipped()
-
-                // Detail panel with resizable divider
-                if let selected = selectedTranscription {
-                    // Resizable divider
-                    ResizableDivider(colorScheme: colorScheme) { delta in
-                        var transaction = Transaction()
-                        transaction.animation = nil
-                        withTransaction(transaction) {
-                            let newWidth = detailPanelWidth - delta
-                            detailPanelWidth = min(max(newWidth, minDetailWidth), maxDetailWidth)
-                        }
-                    }
-
-                    TranscriptionDetailView(
-                        transcription: selected,
-                        onClose: { withAnimation(.spring(response: 0.3)) { selectedTranscription = nil } }
-                    )
-                    .id(selected.id) // Force view recreation when transcription changes
-                    .frame(width: detailPanelWidth)
-                    .clipped()
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
-                }
-            }
-        }
-        .background(WhispererColors.background(colorScheme))
-        .onAppear {
-            // Auto-select first transcription so detail panel is open by default
-            if selectedTranscription == nil, let first = historyManager.transcriptions.first {
-                selectedTranscription = first
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
-            dailyQuote = DailyQuotes.random
-        }
-        .onChange(of: historyManager.transcriptions.count) { _, _ in
-            // Select first item when data loads if nothing is selected
-            if selectedTranscription == nil, let first = historyManager.transcriptions.first {
-                selectedTranscription = first
-            }
-        }
-    }
-
-    private func listPanelWidth(in totalWidth: CGFloat) -> CGFloat {
-        if selectedTranscription != nil {
-            return totalWidth - detailPanelWidth - dividerWidth
-        }
-        return totalWidth
-    }
-
-    // MARK: - Header
-
-    private var headerView: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 14) {
-                // Avatar — blue-purple gradient fill with shadow
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    WhispererColors.accentBlue.opacity(0.18),
-                                    WhispererColors.accentPurple.opacity(0.10)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(WhispererColors.accentBlue.opacity(0.2), lineWidth: 0.5)
-                        )
-                        .shadow(color: WhispererColors.accentBlue.opacity(0.1), radius: 6, y: 2)
-
-                    Text(initials)
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(firstName)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(WhispererColors.primaryText(colorScheme))
-
-                    Text(greeting)
-                        .font(.system(size: 12))
-                        .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                }
-
-                Spacer()
-
-                // Daily quote
-                HStack(alignment: .center, spacing: 10) {
-                    Text("\u{201C}")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .offset(y: -2)
-
-                    Text(dailyQuote)
-                        .font(.system(size: 15, weight: .light, design: .rounded))
-                        .foregroundColor(.white.opacity(0.45))
-                        .italic()
-                        .lineLimit(1)
-
-                    Text("\u{201D}")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [WhispererColors.accentBlue, WhispererColors.accentPurple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .offset(y: -2)
-                }
-            }
-            .padding(.horizontal, 20)
-            .frame(height: 72)
-
-            // Subtle gradient separator
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            WhispererColors.border(colorScheme).opacity(0.6),
-                            WhispererColors.border(colorScheme),
-                            WhispererColors.border(colorScheme).opacity(0.6)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 1)
-        }
-        .background(WhispererColors.background(colorScheme))
-    }
-
-    // MARK: - Toolbar
-
-    private var toolbarView: some View {
-        VStack(spacing: 12) {
-            // Search row
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
-
-                TextField("Search transcriptions...", text: $searchText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundColor(WhispererColors.primaryText(colorScheme))
-                    .onChange(of: searchText) { _, _ in
-                        performSearch()
-                    }
-
-                if !searchText.isEmpty {
-                    Button(action: { searchText = "" }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 13))
-                            .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                    }
-                    .buttonStyle(.plain).pointerOnHover()
-                } else {
-                    // ⌘K shortcut badge
-                    HStack(spacing: 2) {
-                        Text("⌘")
-                            .font(.system(size: 10, weight: .medium))
-                        Text("K")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .foregroundColor(WhispererColors.secondaryText(colorScheme).opacity(0.6))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(WhispererColors.elevatedBackground(colorScheme))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(WhispererColors.border(colorScheme), lineWidth: 0.5)
-                    )
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(WhispererColors.elevatedBackground(colorScheme))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(WhispererColors.border(colorScheme), lineWidth: 1)
-            )
-            .shadow(
-                color: Color.black.opacity(colorScheme == .dark ? 0.06 : 0.03),
-                radius: 3, y: 1
-            )
-
-            // Filters row (separate line)
-            HStack(spacing: 6) {
-                FilterTab(title: "All", isSelected: selectedFilter == .all, colorScheme: colorScheme, color: WhispererColors.accentBlue) {
-                    withAnimation(.spring(response: 0.3)) { selectedFilter = .all }
-                    performSearch()
-                }
-                FilterTab(title: "Pinned", isSelected: selectedFilter == .pinned, colorScheme: colorScheme, color: .orange) {
-                    withAnimation(.spring(response: 0.3)) { selectedFilter = .pinned }
-                    performSearch()
-                }
-                FilterTab(title: "Flagged", isSelected: selectedFilter == .flagged, colorScheme: colorScheme, color: .red) {
-                    withAnimation(.spring(response: 0.3)) { selectedFilter = .flagged }
-                    performSearch()
-                }
-
-                if let start = dateRangeStart {
-                    dateRangeChip(start: start, end: dateRangeEnd ?? start)
-                }
-
-                Spacer()
-
-                calendarButton
-            }
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-    }
-
-    // MARK: - List
-
-    private var transcriptionList: some View {
-        Group {
-            if historyManager.transcriptions.isEmpty && !historyManager.isLoadingPage {
-                emptyStateView
-            } else if historyManager.transcriptions.isEmpty && historyManager.isLoadingPage {
-                // Initial load — show centered loading
-                VStack {
-                    Spacer()
-                    loadingIndicator
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        ForEach(groupedTranscriptions.keys.sorted(by: >), id: \.self) { date in
-                            Section(header: sectionHeader(for: date)) {
-                                VStack(spacing: 8) {
-                                    ForEach(groupedTranscriptions[date] ?? []) { transcription in
-                                        TranscriptionRow(
-                                            transcription: transcription,
-                                            isSelected: selectedTranscription?.id == transcription.id,
-                                            colorScheme: colorScheme,
-                                            onSelect: {
-                                                withAnimation(.spring(response: 0.3)) {
-                                                    selectedTranscription = transcription
-                                                }
-                                            }
-                                        )
-                                    }
-                                }
-                                .padding(.bottom, 8)
-                            }
-                        }
-
-                        // Sentinel + loading indicator for next page
-                        if historyManager.hasMorePages {
-                            loadingIndicator
-                                .id("sentinel-\(historyManager.transcriptions.count)")
-                                .onAppear {
-                                    Task {
-                                        await historyManager.loadNextPage()
-                                    }
-                                }
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 20)
-                }
-            }
-        }
-    }
-
-    private var loadingIndicator: some View {
-        HStack(spacing: 8) {
-            ProgressView()
-                .controlSize(.small)
-                .tint(WhispererColors.accentBlue)
-            Text("Loading...")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-    }
-
-    private var emptyStateView: some View {
-        VStack(spacing: 20) {
-            Spacer()
-
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                WhispererColors.accentBlue.opacity(0.18),
-                                WhispererColors.accentPurple.opacity(0.10)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 72, height: 72)
-
-                Image(systemName: "waveform.and.mic")
-                    .font(.system(size: 28))
-                    .foregroundColor(WhispererColors.accentBlue)
-            }
-
-            VStack(spacing: 6) {
-                Text("No Transcriptions Yet")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(WhispererColors.primaryText(colorScheme))
-
-                Text("Hold Fn to record, then release to transcribe.")
-                    .font(.system(size: 13))
-                    .foregroundColor(WhispererColors.secondaryText(colorScheme))
-            }
-
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-    }
-
-    private func sectionHeader(for date: Date) -> some View {
-        HStack(spacing: 10) {
-            Text(dateHeaderString(for: date))
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundColor(WhispererColors.secondaryText(colorScheme))
-                .textCase(.uppercase)
-                .tracking(0.5)
-
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            WhispererColors.border(colorScheme),
-                            WhispererColors.border(colorScheme).opacity(0.2)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 1)
-        }
-        .padding(.top, 16)
-        .padding(.bottom, 10)
-        .background(WhispererColors.background(colorScheme))
-
-    }
-
-    // MARK: - Helpers
-
-    private var initials: String {
-        let name = NSFullUserName()
-        let components = name.split(separator: " ")
-        if components.count >= 2 {
-            return "\(components[0].prefix(1))\(components[1].prefix(1))"
-        }
-        return String(name.prefix(2)).uppercased()
-    }
-
-    private var firstName: String {
-        NSFullUserName().split(separator: " ").first.map(String.init) ?? "User"
-    }
-
-    private var greeting: String {
-        let calendar = Calendar.current
-        let now = Date()
-        let hour = calendar.component(.hour, from: now)
-        let weekday = calendar.component(.weekday, from: now)
-        let day = calendar.ordinality(of: .day, in: .era, for: now) ?? 0
-
-        // Time-of-day greetings — the main pool
-        let timeMessages: [String]
-        switch hour {
-        case 5..<8:
-            timeMessages = [
-                "You're up early. I like that",
-                "Early bird gets the words",
-                "Coffee first, then conquer",
-                "Up before the sun? Respect",
-                "The world's still sleeping",
-                "Best time to get things done",
-            ]
-        case 8..<12:
-            timeMessages = [
-                "Good morning",
-                "Morning! Big day ahead?",
-                "Let's make today count",
-                "Ready to crush it today?",
-                "Fresh day, fresh start",
-                "Morning. What's the plan?",
-            ]
-        case 12..<14:
-            timeMessages = [
-                "Lunch can wait, right?",
-                "Halfway through the day",
-                "Good midday",
-                "Powering through, I see",
-                "Hope your morning was solid",
-            ]
-        case 14..<17:
-            timeMessages = [
-                "Good afternoon",
-                "Afternoon hustle. Love to see it",
-                "The home stretch",
-                "Keep the momentum going",
-                "Almost there. Finish strong",
-            ]
-        case 17..<20:
-            timeMessages = [
-                "Good evening",
-                "Wrapping up for the day?",
-                "One more thing before you go?",
-                "Hope today was a good one",
-                "Evening vibes. Nice",
-            ]
-        case 20..<22:
-            timeMessages = [
-                "Still at it? Impressive",
-                "Your dedication is showing",
-                "Evening grind. Respect",
-                "Shouldn't you be relaxing?",
-                "Going the extra mile tonight",
-            ]
-        default:
-            timeMessages = [
-                "What are you doing up so late?",
-                "Shouldn't you be sleeping?",
-                "Your bed misses you",
-                "The best ideas come at night",
-                "Go to sleep... after this one thing",
-                "Does anyone know you're still up?",
-                "Okay, one more. Then bed",
-                "Night owl energy",
-            ]
-        }
-
-        // Day-of-week greetings
-        let weekdayMessages: [String]
-        switch weekday {
-        case 1: weekdayMessages = ["Sunday funday", "Productive Sunday, huh?"]
-        case 2: weekdayMessages = ["Monday again. We got this", "New week, new energy"]
-        case 3: weekdayMessages = ["Tuesday momentum", "Let's keep it rolling"]
-        case 4: weekdayMessages = ["Hump day. Downhill from here", "Midweek already"]
-        case 5: weekdayMessages = ["Thursday. So close to Friday", "One more day"]
-        case 6: weekdayMessages = ["It's Friday! You made it", "TGIF", "Weekend countdown: started"]
-        case 7: weekdayMessages = ["Working on a Saturday? Dedication", "Saturday vibes"]
-        default: weekdayMessages = ["Welcome back"]
-        }
-
-        let universalMessages = [
-            "Welcome back",
-            "Look who's here",
-            "Missed you. A little",
-            "Back for more?",
-            "Good to see you again",
-            "The usual?",
-            "Right where we left off",
-        ]
-
-        // Pick category first, then pick within it.
-        // 3 out of 5 days → time-of-day, 1 → day-of-week, 1 → universal.
-        // Ensures time-relevant greetings appear most often.
-        let pool: [String]
-        switch day % 5 {
-        case 0, 1, 2: pool = timeMessages
-        case 3: pool = weekdayMessages
-        default: pool = universalMessages
-        }
-
-        // Deterministic within time window — stable across view redraws
-        let index = (day + hour) % pool.count
-        return pool[index]
-    }
-
-    private var groupedTranscriptions: [Date: [TranscriptionRecord]] {
-        Dictionary(grouping: historyManager.transcriptions) { transcription in
-            Calendar.current.startOfDay(for: transcription.timestamp)
-        }
-    }
-
-    private func dateHeaderString(for date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) {
-            return "Today"
-        } else if calendar.isDateInYesterday(date) {
-            return "Yesterday"
-        } else {
-            let formatter = DateFormatter()
-            formatter.dateFormat = "EEEE, MMMM d"
-            return formatter.string(from: date)
-        }
-    }
-
-    private func performSearch() {
-        var dateRange: (start: Date, end: Date)?
-        if let start = dateRangeStart {
-            dateRange = (start: start, end: dateRangeEnd ?? start)
-        }
-        Task {
-            await historyManager.loadTranscriptions(
-                filter: selectedFilter,
-                searchQuery: searchText.isEmpty ? nil : searchText,
-                dateRange: dateRange
-            )
-        }
-    }
-
-    private func performSearchWithDateRange(start: Date, end: Date) {
-        Task {
-            await historyManager.loadTranscriptions(
-                filter: selectedFilter,
-                searchQuery: searchText.isEmpty ? nil : searchText,
-                dateRange: (start: start, end: end)
-            )
-        }
-    }
-
-    // MARK: - Calendar Filter
-
-    private var calendarButton: some View {
-        let isActive = dateRangeStart != nil
-        return Button(action: {
-            Task { datesWithTranscriptions = await historyManager.fetchDatesWithTranscriptions() }
-            showCalendarPicker.toggle()
-        }) {
-            Image(systemName: "calendar")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(isActive ? .white : WhispererColors.secondaryText(colorScheme))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(
-                    Capsule()
-                        .fill(isActive ? WhispererColors.accentBlue : Color.clear)
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(isActive ? Color.clear : WhispererColors.border(colorScheme), lineWidth: 1)
-                )
-                .shadow(
-                    color: isActive ? WhispererColors.accentBlue.opacity(0.25) : Color.clear,
-                    radius: 4, y: 1
-                )
-        }
-        .buttonStyle(.plain).pointerOnHover()
-        .popover(isPresented: $showCalendarPicker, arrowEdge: .top) {
-            CalendarPickerView(
-                startDate: $dateRangeStart,
-                endDate: $dateRangeEnd,
-                datesWithTranscriptions: datesWithTranscriptions,
-                colorScheme: colorScheme,
-                onApply: { start, end in
-                    dateRangeStart = start
-                    dateRangeEnd = end
-                    performSearchWithDateRange(start: start, end: end)
-                },
-                onPresetApply: { start, end in
-                    dateRangeStart = start
-                    dateRangeEnd = end
-                    showCalendarPicker = false
-                    performSearchWithDateRange(start: start, end: end)
-                },
-                onReset: {
-                    dateRangeStart = nil
-                    dateRangeEnd = nil
-                    showCalendarPicker = false
-                    performSearch()
-                }
-            )
-        }
-    }
-
-    private func dateRangeChip(start: Date, end: Date) -> some View {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        let startStr = formatter.string(from: start)
-        let endStr = formatter.string(from: end)
-        let label = Calendar.current.isDate(start, inSameDayAs: end) ? startStr : "\(startStr) – \(endStr)"
-
-        return HStack(spacing: 4) {
-            Image(systemName: "calendar")
-                .font(.system(size: 10, weight: .semibold))
-            Text(label)
-                .font(.system(size: 11, weight: .semibold))
-            Button(action: {
-                withAnimation(.spring(response: 0.3)) {
-                    dateRangeStart = nil
-                    dateRangeEnd = nil
-                }
-                performSearch()
-            }) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 8, weight: .bold))
-            }
-            .buttonStyle(.plain).pointerOnHover()
-        }
-        .foregroundColor(WhispererColors.accentBlue)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(
-            Capsule()
-                .fill(WhispererColors.accentBlue.opacity(0.12))
-        )
     }
 }
 
