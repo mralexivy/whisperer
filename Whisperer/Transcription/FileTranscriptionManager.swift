@@ -49,6 +49,8 @@ nonisolated enum FileTranscriptionError: Error, LocalizedError {
 class FileTranscriptionManager: ObservableObject {
     @Published var state: FileTranscriptionState = .idle
     @Published var transcriptionResult: String = ""
+    /// The finished transcript cut into readable paragraphs with approximate times; empty until complete.
+    @Published private(set) var paragraphs: [FileTranscriptParagraph] = []
     @Published var progress: Double = 0.0
     @Published var currentChunk: Int = 0
     @Published var totalChunks: Int = 0
@@ -102,6 +104,7 @@ class FileTranscriptionManager: ObservableObject {
         savedToHistory = false
         transcriptionResult = ""
         progress = 0.0
+        paragraphs = []
 
         // Get file size
         if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
@@ -124,6 +127,7 @@ class FileTranscriptionManager: ObservableObject {
         fileName = ""
         fileDuration = 0.0
         fileSize = ""
+        paragraphs = []
         transcriptionResult = ""
         progress = 0.0
         savedToHistory = false
@@ -149,6 +153,7 @@ class FileTranscriptionManager: ObservableObject {
         savedToHistory = false
         transcriptionResult = ""
         progress = 0.0
+        paragraphs = []
         state = .loading
 
         transcriptionTask = Task { [weak self] in
@@ -174,6 +179,8 @@ class FileTranscriptionManager: ObservableObject {
                 }
 
                 var accumulatedText = ""
+                var anchors: [FileTranscriptAnchor] = []
+                var accumulatedWords = 0
 
                 for chunkIndex in 0..<chunks {
                     guard !self.isCancelled else {
@@ -182,6 +189,7 @@ class FileTranscriptionManager: ObservableObject {
                     }
 
                     let startSample = chunkIndex * self.chunkSamples
+                    anchors.append(FileTranscriptAnchor(word: accumulatedWords, seconds: Double(startSample) / self.sampleRate))
                     let endSample = min(startSample + self.chunkSamples, totalSamples)
 
                     // Add overlap from previous chunk for continuity
@@ -221,6 +229,7 @@ class FileTranscriptionManager: ObservableObject {
                     )
 
                     if !deduplicatedText.isEmpty {
+                        accumulatedWords += FileTranscriptParagraphs.wordCount(deduplicatedText)
                         if accumulatedText.isEmpty {
                             accumulatedText = deduplicatedText
                         } else {
@@ -247,10 +256,13 @@ class FileTranscriptionManager: ObservableObject {
 
                 // Apply dictionary corrections
                 let finalText = DictionaryManager.shared.correctTextCapturing(accumulatedText).text
+                anchors.append(FileTranscriptAnchor(word: accumulatedWords, seconds: Double(totalSamples) / self.sampleRate))
+                let paragraphs = FileTranscriptParagraphs.split(finalText, anchors: anchors)
 
                 await MainActor.run {
                     self.transcriptionResult = finalText
                     self.progress = 1.0
+                    self.paragraphs = paragraphs
                     self.estimatedTimeRemaining = nil
                     if let startTime = self.transcriptionStartTime {
                         self.processingDuration = Date().timeIntervalSince(startTime)
@@ -587,6 +599,11 @@ class FileTranscriptionManager: ObservableObject {
 
     // MARK: - Export
 
+    /// The transcript as paragraphs separated by blank lines — what Copy and Export put on the clipboard and in the file.
+    var formattedTranscript: String {
+        paragraphs.isEmpty ? transcriptionResult : paragraphs.map(\.text).joined(separator: "\n\n")
+    }
+
     func exportAsText(to url: URL) throws {
         let wordCount = transcriptionResult.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.count
         let wpm = fileDuration > 0 ? Int(Double(wordCount) / (fileDuration / 60.0)) : 0
@@ -601,7 +618,7 @@ class FileTranscriptionManager: ObservableObject {
         Language: \(AppState.shared.selectedLanguage.displayName)
         ---
 
-        \(transcriptionResult)
+        \(formattedTranscript)
         """
 
         if let speed = speedMultiplier {

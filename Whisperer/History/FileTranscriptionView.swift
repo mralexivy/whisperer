@@ -800,13 +800,18 @@ struct FileTranscriptionView: View {
                     .padding(.top, 16)
 
                 if manager.state == .complete && !manager.transcriptionResult.isEmpty {
-                    Text(manager.transcriptionResult)
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundColor(WhispererColors.primaryText(colorScheme))
-                        .lineSpacing(5)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.top, 16)
+                    if manager.paragraphs.isEmpty {
+                        Text(manager.transcriptionResult)
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundColor(WhispererColors.primaryText(colorScheme))
+                            .lineSpacing(5)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 16)
+                    } else {
+                        FileTranscriptReaderView(paragraphs: manager.paragraphs, language: selectedLanguage, colorScheme: colorScheme)
+                            .padding(.top, 10)
+                    }
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: "text.page")
@@ -1004,7 +1009,7 @@ struct FileTranscriptionView: View {
     private func copyToClipboard() {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
-        pasteboard.setString(manager.transcriptionResult, forType: .string)
+        pasteboard.setString(manager.formattedTranscript, forType: .string)
 
         withAnimation(.easeInOut(duration: 0.2)) { copiedFeedback = true }
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
