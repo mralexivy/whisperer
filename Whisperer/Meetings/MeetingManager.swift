@@ -99,11 +99,15 @@ class MeetingManager: ObservableObject {
 
     // MARK: - Internal
 
-    private let database = HistoryDatabase.shared
+    private let database: HistoryDatabase
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    private init() {
+    private convenience init() { self.init(database: .shared) }
+
+    /// A manager over a given store — the app uses `shared`; tests pass an in-memory one.
+    init(database: HistoryDatabase) {
+        self.database = database
         Task { await loadMeetings() }
     }
 

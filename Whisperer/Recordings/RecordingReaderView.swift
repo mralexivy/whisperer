@@ -228,9 +228,9 @@ private struct RecordingParagraphRow: View {
         if flashing { return accent.opacity(0.20) }
         if isCurrentMatch { return Color.yellow.opacity(0.12) }
         if isPlayhead { return accent.opacity(0.10) }
-        if style == .labelled { return Color.white.opacity(hovering ? 0.045 : 0.025) }
+        if style == .labelled { return WhispererColors.cardBackground(.dark).opacity(hovering ? 1 : 0.8) }
         if isMatch { return Color.yellow.opacity(0.05) }
-        return Color.white.opacity(hovering ? 0.035 : 0)
+        return WhispererColors.elevatedBackground(.dark).opacity(hovering ? 0.55 : 0)
     }
 
     private var stroke: Color {

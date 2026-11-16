@@ -46,7 +46,9 @@ struct RecordingDetailView: View {
     var body: some View {
         Group {
             if let document = detail.document {
-                if document.isInProgress { liveNotice(document) } else { content(document) }
+                if document.isInProgress {
+                    if isLive(document) { liveMeeting(document) } else { liveNotice(document) }
+                } else { content(document) }
             } else if detail.isLoading {
                 skeleton
             } else {
@@ -83,7 +85,7 @@ struct RecordingDetailView: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            if showsCompactPlayer, playback.availability != .none {
+            if showsCompactPlayer, playback.availability != .none, !isLive(document) {
                 RecordingPlayerView(controller: playback, style: .compact)
                     .padding(.horizontal, 28).padding(.bottom, 14).padding(.top, 6)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -152,7 +154,7 @@ struct RecordingDetailView: View {
             Image(systemName: symbol).font(.system(size: 13, weight: .medium))
                 .foregroundColor(active ? accent : Color.white.opacity(0.7))
                 .frame(width: 32, height: 32)
-                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(active ? accent.opacity(0.16) : Color.white.opacity(0.03)))
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(active ? accent.opacity(0.16) : WhispererColors.cardBackground(.dark)))
                 .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(active ? accent.opacity(0.4) : Color.white.opacity(0.09), lineWidth: 1))
         }
         .buttonStyle(.plain).help(help).accessibilityLabel(help)
@@ -402,7 +404,7 @@ struct RecordingDetailView: View {
                 .uiTestFrame("recordings.version.\(original ? "original" : "enhanced")")
             }
         }
-        .padding(2).background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Color.white.opacity(0.05)))
+        .padding(2).background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
     }
 
     /// "⏱ 4 speakers · Time-aligned transcript" and the word count.
@@ -447,7 +449,7 @@ struct RecordingDetailView: View {
         }
         .font(.system(size: 10)).foregroundColor(Color.white.opacity(0.6))
         .padding(.horizontal, 10).frame(height: 30)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(WhispererColors.cardBackground(.dark)))
         .onExitCommand { searching = false; search.clear() }
     }
 
@@ -458,6 +460,57 @@ struct RecordingDetailView: View {
             .id(document.id.key)
     }
 
+    // MARK: Live meeting
+
+    /// This recording is the meeting the app is capturing right now.
+    private func isLive(_ document: TranscriptDocument) -> Bool {
+        document.kind == .meeting && session.isRecording && session.meetingID == document.id.uuid
+    }
+
+    /// A meeting being recorded keeps its live transcript in the reader, with the capture controls in the sidebar.
+    private func liveMeeting(_ document: TranscriptDocument) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    Text("Recordings").foregroundColor(Color.white.opacity(0.45))
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundColor(Color.white.opacity(0.25))
+                    Text("Meeting").foregroundColor(Color.white.opacity(0.75))
+                }
+                .font(.system(size: 12.5, weight: .medium))
+                Spacer()
+                Button { MeetingLiveWindowManager.shared.show(session: session) } label: {
+                    HStack(spacing: 6) { Image(systemName: "rectangle.on.rectangle").font(.system(size: 12)); Text("Float") }
+                        .font(.system(size: 12.5, weight: .medium)).foregroundColor(Color.white.opacity(0.8))
+                        .padding(.horizontal, 12).frame(height: 32)
+                }
+                .buttonStyle(.plain).help("Show the live transcript in a floating window")
+                squareButton("sidebar.right", active: sidebarVisible, help: sidebarVisible ? "Hide sidebar" : "Show sidebar") {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { sidebarVisible.toggle() }
+                }
+                .uiTestFrame("recordings.sidebar.toggle")
+            }
+            .padding(.horizontal, 28).padding(.top, 18).padding(.bottom, 12)
+            VStack(alignment: .leading, spacing: 12) {
+                titleField(document)
+                HStack(spacing: 10) {
+                    HStack(spacing: 7) { Circle().fill(Color.red).frame(width: 7, height: 7); Text("Recording") }.foregroundColor(Color.red.opacity(0.9))
+                    dot
+                    Text(FileTranscriptClock.format(session.elapsedSeconds)).monospacedDigit()
+                    dot
+                    Text(RecordingTimeFormat.string(document.createdAt, setting: timeFormat))
+                }
+                .font(.system(size: 13)).foregroundColor(Color.white.opacity(0.5))
+            }
+            .padding(.horizontal, 28).padding(.top, 6).padding(.bottom, 14)
+            Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
+            MeetingLiveTranscriptView(session: session, meeting: detail.meetingRecord, segments: session.segments)
+                .id(document.id.key)
+        }
+        .onAppear { titleDraft = document.title }
+        .onChange(of: document.id) { _, _ in titleDraft = document.title }
+        .onChange(of: document.title) { _, title in if !titleFocused { titleDraft = title } }
+    }
+
     // MARK: Pieces
 
     private func notice(_ text: String) -> some View {
@@ -466,8 +519,8 @@ struct RecordingDetailView: View {
 
     private var skeleton: some View {
         VStack(alignment: .leading, spacing: 14) {
-            RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)).frame(width: 260, height: 28)
-            ForEach(0..<6, id: \.self) { _ in RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.04)).frame(height: 14) }
+            RoundedRectangle(cornerRadius: 8).fill(WhispererColors.cardBackground(.dark)).frame(width: 260, height: 28)
+            ForEach(0..<6, id: \.self) { _ in RoundedRectangle(cornerRadius: 6).fill(WhispererColors.cardBackground(.dark)).frame(height: 14) }
             Spacer()
         }.padding(28)
     }

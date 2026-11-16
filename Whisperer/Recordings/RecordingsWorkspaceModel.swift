@@ -4,7 +4,7 @@
 //
 //  State of the unified Recordings destination: one list over both stores, its filters and search, and
 //  which recording is open. It reads `HistoryManager` and `MeetingManager`'s already-paged lists and
-//  merges them; no record is copied or duplicated.
+//  merges them (`RecordingListBuilder`); no record is copied or duplicated.
 //
 
 import Combine
@@ -28,24 +28,11 @@ nonisolated struct RecordingListItem: Identifiable, Equatable, Sendable {
 final class RecordingsWorkspaceModel: ObservableObject {
     static let shared = RecordingsWorkspaceModel()
 
-    enum KindFilter: String, CaseIterable, Identifiable {
-        case all = "All", meetings = "Meetings", dictation = "Dictation", files = "Files"
-        var id: String { rawValue }
-        func includes(_ kind: RecordingKind) -> Bool {
-            switch self {
-            case .all: return true
-            case .dictation: return kind == .dictation
-            case .meetings: return kind == .meeting
-            case .files: return kind == .file
-            }
-        }
-    }
+    typealias KindFilter = RecordingKindFilter
+    typealias MarkFilter = RecordingMarkFilter
 
-    enum MarkFilter: String, CaseIterable { case none, pinned, flagged }
-
-    @Published var kindFilter: KindFilter = .all { didSet { rebuild() } }
-    @Published var markFilter: MarkFilter = .none { didSet { markFilterChanged() } }
-    @Published var oldestFirst = false { didSet { rebuild() } }
+    @Published var kindFilter: KindFilter = .all { didSet { filtersChanged() } }
+    @Published var markFilter: MarkFilter = .none { didSet { filtersChanged() } }
     @Published var searchText = "" { didSet { searchChanged() } }
     @Published private(set) var items: [RecordingListItem] = []
     @Published var selectedID: RecordingID?
@@ -54,16 +41,26 @@ final class RecordingsWorkspaceModel: ObservableObject {
     /// Hides the list and the sidebar so the reader has the window.
     @Published var focusMode = false
 
+    /// Rows to keep on screen before asking a store for another page, so a short list never looks finished.
+    static let wantedRows = 30
+
+    private let history: HistoryManager
+    private let meetingStore: MeetingManager
     private var bag = Set<AnyCancellable>()
     private var meetingMatches: Set<UUID>?
     private var searchTask: Task<Void, Never>?
     private var rebuildScheduled = false
+    private var limiting: RecordingStoreSource?
+    private var toppingUp = false
+    private var reapplying = false
 
-    private init() {
-        HistoryManager.shared.$transcriptions
-            .sink { [weak self] _ in self?.scheduleRebuild() }.store(in: &bag)
-        MeetingManager.shared.$meetings
-            .sink { [weak self] _ in self?.scheduleRebuild() }.store(in: &bag)
+    init(history: HistoryManager = .shared, meetings: MeetingManager = .shared) {
+        self.history = history
+        self.meetingStore = meetings
+        history.$transcriptions.sink { [weak self] _ in self?.historyChanged() }.store(in: &bag)
+        history.$hasMorePages.sink { [weak self] _ in self?.scheduleRebuild() }.store(in: &bag)
+        meetings.$meetings.sink { [weak self] _ in self?.scheduleRebuild() }.store(in: &bag)
+        meetings.$hasMorePages.sink { [weak self] _ in self?.scheduleRebuild() }.store(in: &bag)
     }
 
     // MARK: Selection
@@ -79,7 +76,7 @@ final class RecordingsWorkspaceModel: ObservableObject {
     private func kind(of id: RecordingID) -> RecordingKind {
         if let item = items.first(where: { $0.id == id }) { return item.kind }
         if id.store == .meeting { return .meeting }
-        return HistoryManager.shared.record(id: id.uuid).map(TranscriptDocument.kind(of:)) ?? .dictation
+        return history.record(id: id.uuid).map(TranscriptDocument.kind(of:)) ?? .dictation
     }
 
     /// First time the list is shown: pick the most recent recording so the reader is never empty.
@@ -92,15 +89,15 @@ final class RecordingsWorkspaceModel: ObservableObject {
 
     func togglePin(_ item: RecordingListItem) {
         switch item.id.store {
-        case .transcription: HistoryManager.shared.setPinned(id: item.id.uuid, !item.isPinned)
-        case .meeting: Task { await MeetingManager.shared.setPinned(meetingID: item.id.uuid, !item.isPinned) }
+        case .transcription: history.setPinned(id: item.id.uuid, !item.isPinned)
+        case .meeting: Task { await meetingStore.setPinned(meetingID: item.id.uuid, !item.isPinned) }
         }
     }
 
     func toggleFlag(_ item: RecordingListItem) {
         switch item.id.store {
-        case .transcription: HistoryManager.shared.setFlagged(id: item.id.uuid, !item.isFlagged)
-        case .meeting: Task { await MeetingManager.shared.setFlagged(meetingID: item.id.uuid, !item.isFlagged) }
+        case .transcription: history.setFlagged(id: item.id.uuid, !item.isFlagged)
+        case .meeting: Task { await meetingStore.setFlagged(meetingID: item.id.uuid, !item.isFlagged) }
         }
     }
 
@@ -108,25 +105,23 @@ final class RecordingsWorkspaceModel: ObservableObject {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         switch id.store {
-        case .transcription: HistoryManager.shared.setTitle(id: id.uuid, trimmed)
-        case .meeting: Task { await MeetingManager.shared.updateTitle(meetingID: id.uuid, title: trimmed, userEdited: true) }
+        case .transcription: history.setTitle(id: id.uuid, trimmed)
+        case .meeting: Task { await meetingStore.updateTitle(meetingID: id.uuid, title: trimmed, userEdited: true) }
         }
     }
 
     /// Deletes the recording from its own store (audio, chat and, for meetings, the job queue and
     /// refiner state included) and moves the selection to a neighbour so the reader is not left stale.
     func delete(_ id: RecordingID) async {
-        let neighbour = neighbourOf(id)
+        // Move first: the store emits as soon as the row is gone, and the list would fall back to its first row.
+        if selectedID == id { selectedID = neighbourOf(id) }
         switch id.store {
         case .transcription:
-            if let record = HistoryManager.shared.record(id: id.uuid) {
-                try? await HistoryManager.shared.deleteTranscription(record)
-            }
+            if let record = history.record(id: id.uuid) { try? await history.deleteTranscription(record) }
             await MeetingChatStore.shared.clear(meetingID: id.uuid)
         case .meeting:
-            await MeetingManager.shared.deleteMeeting(meetingID: id.uuid)
+            await meetingStore.deleteMeeting(meetingID: id.uuid)
         }
-        if selectedID == id { selectedID = neighbour }
     }
 
     private func neighbourOf(_ id: RecordingID) -> RecordingID? {
@@ -135,15 +130,43 @@ final class RecordingsWorkspaceModel: ObservableObject {
         return index > 0 ? items[index - 1].id : nil
     }
 
+    // MARK: Paging
+
+    /// Called as rows scroll into view: near the end of the list, the store that bounds it loads its next page.
     func loadMoreIfNeeded(after item: RecordingListItem) {
-        guard item.id == items.suffix(5).first?.id || items.suffix(5).contains(where: { $0.id == item.id }) else { return }
+        guard items.suffix(8).contains(where: { $0.id == item.id }) else { return }
+        loadNextPage()
+    }
+
+    /// Keeps the list from looking finished when the cutoff has trimmed it short.
+    private func topUp() {
+        guard items.count < Self.wantedRows else { return }
+        loadNextPage()
+    }
+
+    private func loadNextPage() {
+        guard !toppingUp else { return }
+        let source = limiting
+        toppingUp = true
         Task {
-            await HistoryManager.shared.loadNextPage()
-            await MeetingManager.shared.loadNextPage()
+            switch source {
+            case .history: await history.loadNextPage()
+            case .meetings: await meetingStore.loadNextPage()
+            case nil:
+                // Nothing is bounding the list (every store is fully loaded, or a filter excludes them).
+                break
+            }
+            toppingUp = false
+            rebuild()
         }
     }
 
     // MARK: Building the list
+
+    private func historyChanged() {
+        scheduleRebuild()
+        reapplyIfStoreDrifted()
+    }
 
     private func scheduleRebuild() {
         guard !rebuildScheduled else { return }
@@ -155,60 +178,43 @@ final class RecordingsWorkspaceModel: ObservableObject {
     }
 
     private func rebuild() {
-        var merged: [RecordingListItem] = []
-        var seen = Set<RecordingID>()
-
-        for record in HistoryManager.shared.transcriptions {
-            let kind = TranscriptDocument.kind(of: record)
-            guard kindFilter.includes(kind) else { continue }
-            let text = record.editedTranscription ?? record.aiEnhancedText ?? record.transcription
-            let item = RecordingListItem(
-                id: .dictation(record.id), kind: kind,
-                title: record.title ?? TranscriptDocument.derivedTitle(from: text),
-                preview: String((record.title == nil ? TranscriptDocument.previewAfterTitle(text) : text).prefix(140)).replacingOccurrences(of: "\n", with: " "),
-                date: record.timestamp, duration: record.duration, isPinned: record.isPinned, isFlagged: record.isFlagged,
-                isInProgress: false, sourceName: kind == .file ? record.sourceFileName : record.targetAppName,
-                sourceBundleID: record.targetAppBundleID)
-            if seen.insert(item.id).inserted { merged.append(item) }
-        }
-
-        if kindFilter.includes(.meeting) {
-            for meeting in MeetingManager.shared.meetings {
-                if let matches = meetingMatches, !matches.contains(meeting.id) { continue }
-                switch markFilter {
-                case .pinned where !meeting.isPinned: continue
-                case .flagged where !meeting.isFlagged: continue
-                default: break
-                }
-                let item = RecordingListItem(
-                    id: .meeting(meeting.id), kind: .meeting, title: meeting.title,
-                    preview: meeting.captureFailed ? "No audio was captured" : "\(meeting.wordCount) words",
-                    date: meeting.createdAt, duration: meeting.duration, isPinned: meeting.isPinned, isFlagged: meeting.isFlagged,
-                    isInProgress: meeting.isInProgress, sourceName: meeting.sourceAppName, sourceBundleID: meeting.sourceBundleID)
-                if seen.insert(item.id).inserted { merged.append(item) }
-            }
-        }
-
-        merged.sort { oldestFirst ? $0.date < $1.date : $0.date > $1.date }
-        if items != merged { items = merged }
+        let output = RecordingListBuilder.build(.init(
+            transcriptions: history.transcriptions, meetings: meetingStore.meetings,
+            historyHasMore: history.hasMorePages, meetingsHaveMore: meetingStore.hasMorePages,
+            kind: kindFilter, mark: markFilter, meetingMatches: meetingMatches))
+        limiting = output.limiting
+        if items != output.items { items = output.items }
         // A selection that was deleted elsewhere moves to a neighbour; one that is merely filtered out
         // stays open, so typing in search never blanks the reader.
-        if let selected = selectedID, !isStillStored(selected) { selectedID = merged.first?.id }
+        if let selected = selectedID, !isStillStored(selected) { selectedID = output.items.first?.id }
+        topUp()
     }
 
     private func isStillStored(_ id: RecordingID) -> Bool {
         if items.contains(where: { $0.id == id }) { return true }
         switch id.store {
-        case .transcription: return HistoryManager.shared.record(id: id.uuid) != nil
-        case .meeting: return MeetingManager.shared.meetings.contains { $0.id == id.uuid }
+        case .transcription: return history.record(id: id.uuid) != nil
+        case .meeting: return meetingStore.meetings.contains { $0.id == id.uuid }
         }
     }
 
     // MARK: Search and marks
 
-    private func markFilterChanged() {
-        Task { await reloadHistory() }
-        rebuild()
+    private var wantedHistoryFilter: TranscriptionFilter {
+        markFilter == .pinned ? .pinned : markFilter == .flagged ? .flagged : .all
+    }
+
+    private var wantedQuery: String? {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty ? nil : query
+    }
+
+    private func filtersChanged() {
+        searchTask?.cancel()
+        searchTask = Task { [weak self] in
+            guard let self else { return }
+            await self.applyFilters()
+        }
     }
 
     private func searchChanged() {
@@ -216,17 +222,52 @@ final class RecordingsWorkspaceModel: ObservableObject {
         searchTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 250_000_000)
             guard !Task.isCancelled, let self else { return }
-            let query = self.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.meetingMatches = query.isEmpty ? nil : await MeetingManager.shared.searchIDs(query)
-            await self.reloadHistory()
-            self.rebuild()
+            await self.applyFilters()
+        }
+    }
+
+    /// Re-runs both stores' queries for the current search and mark filter.
+    private func applyFilters() async {
+        // Meetings are filtered here, on what is loaded, so a search or a mark filter needs all of them
+        // (there are far fewer than dictations); the matches themselves come from the store.
+        if wantedQuery != nil || markFilter != .none { await loadAllMeetings() }
+        meetingMatches = wantedQuery == nil ? nil : await meetingStore.searchIDs(wantedQuery!)
+        await reloadHistory()
+        rebuild()
+    }
+
+    private func loadAllMeetings() async {
+        var guardRail = 0
+        while meetingStore.hasMorePages, guardRail < 500 {
+            guardRail += 1
+            if meetingStore.isLoadingPage { try? await Task.sleep(nanoseconds: 50_000_000); continue }
+            await meetingStore.loadNextPage()
+        }
+    }
+
+    private var wantedKindScope: HistoryKindScope {
+        switch kindFilter {
+        case .files: return .files
+        case .dictation: return .dictation
+        case .all, .meetings: return .any
         }
     }
 
     private func reloadHistory() async {
-        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let filter: TranscriptionFilter = markFilter == .pinned ? .pinned : markFilter == .flagged ? .flagged : .all
-        await HistoryManager.shared.loadTranscriptions(filter: filter, searchQuery: query.isEmpty ? nil : query)
+        await history.loadTranscriptions(filter: wantedHistoryFilter, searchQuery: wantedQuery, kind: wantedKindScope)
+    }
+
+    /// Another part of the app reloads the history store with its own idea of the filter — the workspace
+    /// window does it every time it becomes key. The list must keep showing what the search box says.
+    private func reapplyIfStoreDrifted() {
+        guard !reapplying else { return }
+        let storeQuery = history.currentSearchQuery.flatMap { $0.isEmpty ? nil : $0 }
+        guard history.currentFilter != wantedHistoryFilter || storeQuery != wantedQuery || history.currentKindScope != wantedKindScope else { return }
+        reapplying = true
+        Task {
+            await reloadHistory()
+            reapplying = false
+        }
     }
 }
 

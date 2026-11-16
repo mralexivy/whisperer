@@ -42,3 +42,46 @@ final class RecordingsWorkspaceSnapshotTests: XCTestCase {
         print("RECORDINGS items=\(model.items.count) selected=\(String(describing: model.selectedID?.key))")
     }
 }
+
+/// Opt-in renders of the "+" menu and of a meeting that is being recorded (`TEST_RUNNER_RECORDINGS_DIR=<folder>`).
+@MainActor
+final class RecordingsNewAndLiveSnapshotTests: XCTestCase {
+    private static var keepAlive: [AnyObject] = []
+
+    private func render<V: View>(_ view: V, size: CGSize, to path: String, wait: Double = 2) throws {
+        let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
+        host.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView = host
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.orderFront(nil)
+        Self.keepAlive += [window, host]
+        let end = Date().addingTimeInterval(wait)
+        while Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.1)) }
+        let rep = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: rep)
+        try XCTUnwrap(rep.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: path))
+    }
+
+    func testRenderMenuAndLiveMeeting() throws {
+        guard let dir = ProcessInfo.processInfo.environment["RECORDINGS_DIR"] else { throw XCTSkip("set TEST_RUNNER_RECORDINGS_DIR") }
+        let session = MeetingSession()
+        Self.keepAlive.append(session)
+        try render(NewRecordingMenu(model: RecordingsWorkspaceModel.shared, session: session, dismiss: {})
+            .padding(20).background(WhispererColors.background(.dark)), size: CGSize(width: 380, height: 280), to: "\(dir)/6-new-menu.png")
+
+        var meeting = MeetingRecord(id: UUID(), title: "Note Nov 16, 2026 6:02 PM", language: "en", modelUsed: "Nemotron Multilingual")
+        meeting.isInProgress = true
+        session.isRecording = true
+        session.meetingID = meeting.id
+        session.elapsedSeconds = 84
+        session.segments = [
+            MeetingSegment(timestamp: 0, endTimestamp: 6, text: "Okay, let's start with the roadmap for next quarter.", speakerName: "Alex", speakerIndex: 0),
+            MeetingSegment(timestamp: 7, endTimestamp: 14, text: "Sounds good. I have three things I want to cover today.", speakerName: "Maya", speakerIndex: 1),
+        ]
+        let document = TranscriptDocument(meeting: meeting)
+        try render(RecordingsWorkspaceView(fixture: RecordingsWorkspaceFixture(document: document, record: meeting), session: session),
+                   size: CGSize(width: 1320, height: 820), to: "\(dir)/7-live-meeting.png", wait: 3)
+        session.isRecording = false
+    }
+}

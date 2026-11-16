@@ -704,6 +704,10 @@ with `paragraph(forCitationKey:)`, so untimed text is revealed, never given a ti
 (`RecordingsWorkspaceLayout`: hidden by the user, focus mode, or too narrow). Selecting another recording starts it at 0, paused.
 `RecordingsWorkspacePlayerTests` clicks through all 14 kind × tab combinations and asserts exactly one player and no reset.
 
+**Paging.** Each store pages newest-first by itself, so `RecordingListBuilder` ends the merged list at a cutoff (the newer of the two stores' oldest loaded dates, for stores with more to load); rows older than that wait for their page, so nothing pops into the middle. Search and Pinned/Flagged need every meeting loaded (meetings are filtered client-side); Files/Dictation are server-side (`HistoryKindScope`). The workspace window reloads the history store unfiltered whenever it becomes key, so the model re-applies its own search/filter when the store drifts. An in-flight dictation with no text yet is not listed.
+
+**New recording.** The "+" in the list header (`NewRecordingMenu`) starts a meeting/call (`MeetingSession.startRecording(... surface: .workspace)`), a hands-free dictation (the Island's start path) or the file import flow, which opens the saved recording when it finishes. A meeting being recorded shows its live transcript in the reader and the capture controls (`RecordingStrip`) in the sidebar.
+
 **Sidebar tabs** are decided only in `RecordingSidebarPolicy`: dictation Details / Ask AI, meeting Ask AI / Notes / People,
 file Ask AI / Notes. A meeting still being recorded shows a notice and the live window, not the reader.
 

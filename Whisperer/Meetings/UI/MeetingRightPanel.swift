@@ -58,7 +58,7 @@ struct MeetingRightPanel: View {
 
 /// The recording, small: state, elapsed time, pause and mute. Sits where the player will be
 /// once the meeting ends.
-private struct RecordingStrip: View {
+struct RecordingStrip: View {
     @ObservedObject var session: MeetingSession
     @ObservedObject private var appState = AppState.shared
 

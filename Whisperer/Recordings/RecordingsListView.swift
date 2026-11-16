@@ -9,14 +9,15 @@ import SwiftUI
 
 struct RecordingsListView: View {
     @ObservedObject var model: RecordingsWorkspaceModel
+    @ObservedObject var session: MeetingSession
     @State private var pendingDelete: RecordingListItem?
     @FocusState private var searchFocused: Bool
 
     private var groups: [(title: String, items: [RecordingListItem])] {
         let calendar = Calendar.current
         let grouped = Dictionary(grouping: model.items) { calendar.startOfDay(for: $0.date) }
-        return grouped.keys.sorted(by: model.oldestFirst ? (<) : (>)).map { day in
-            (Self.dayTitle(day), grouped[day]!.sorted { ($0.isPinned ? 1 : 0, model.oldestFirst ? -$0.date.timeIntervalSince1970 : $0.date.timeIntervalSince1970) > ($1.isPinned ? 1 : 0, model.oldestFirst ? -$1.date.timeIntervalSince1970 : $1.date.timeIntervalSince1970) })
+        return grouped.keys.sorted(by: >).map { day in
+            (Self.dayTitle(day), grouped[day]!.sorted { ($0.isPinned ? 1 : 0, $0.date) > ($1.isPinned ? 1 : 0, $1.date) })
         }
     }
 
@@ -44,17 +45,9 @@ struct RecordingsListView: View {
             Text("Recordings").font(.system(size: 24, weight: .semibold)).foregroundColor(.white)
             Text("\(model.items.count)")
                 .font(.system(size: 11, weight: .semibold)).foregroundColor(Color.white.opacity(0.6))
-                .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(Color.white.opacity(0.08)))
+                .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(WhispererColors.cardBackground(.dark)))
             Spacer()
-            Button { model.isImporting = true } label: {
-                Image(systemName: "square.and.arrow.down").font(.system(size: 13, weight: .medium))
-                    .foregroundColor(model.isImporting ? WhispererColors.accent : Color.white.opacity(0.7))
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(Color.white.opacity(model.isImporting ? 0.12 : 0.06)))
-            }
-            .buttonStyle(.plain).help("Import an audio or video file")
-            .accessibilityLabel("Import file")
-            .uiTestFrame("recordings.import")
+            NewRecordingButton(model: model, session: session)
         }
         .padding(.horizontal, 16).padding(.top, 18).padding(.bottom, 12)
     }
@@ -71,11 +64,11 @@ struct RecordingsListView: View {
                 }.buttonStyle(.plain)
             } else {
                 Text("⌘K").font(.system(size: 10, weight: .medium)).foregroundColor(Color.white.opacity(0.35))
-                    .padding(.horizontal, 5).padding(.vertical, 2).background(RoundedRectangle(cornerRadius: 4).fill(Color.white.opacity(0.06)))
+                    .padding(.horizontal, 5).padding(.vertical, 2).background(RoundedRectangle(cornerRadius: 4).fill(WhispererColors.cardBackground(.dark)))
             }
         }
         .padding(.horizontal, 11).frame(height: 34)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.05)))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(searchFocused ? WhispererColors.accent.opacity(0.6) : Color.white.opacity(0.07), lineWidth: 1))
         .background(Button("") { searchFocused = true }.keyboardShortcut("k", modifiers: .command).opacity(0))
         .uiTestFrame("recordings.search")
@@ -97,20 +90,12 @@ struct RecordingsListView: View {
                 .uiTestFrame("recordings.filter.\(filter.rawValue.lowercased())")
             }
         }
-        .padding(3).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+        .padding(3).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
     }
 
     private var marksRow: some View {
         HStack(spacing: 6) {
-            Button { model.oldestFirst.toggle() } label: {
-                HStack(spacing: 5) {
-                    Text(model.oldestFirst ? "Oldest first" : "Newest first")
-                    Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold))
-                }
-                .font(.system(size: 12, weight: .medium)).foregroundColor(Color.white.opacity(0.5))
-            }
-            .buttonStyle(.plain).help("Change the order")
-            .uiTestFrame("recordings.sort")
+            Text("Newest first").font(.system(size: 12, weight: .medium)).foregroundColor(Color.white.opacity(0.5))
             Spacer()
             markToggle(.pinned, "pin")
             markToggle(.flagged, "flag")
@@ -189,9 +174,10 @@ private struct RecordingRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 11) {
             Image(systemName: item.kind.outlineIcon)
-                .font(.system(size: 12, weight: .regular)).foregroundColor(Color.white.opacity(isSelected ? 0.9 : 0.6))
+                .font(.system(size: 12, weight: .regular)).foregroundColor(tint)
                 .frame(width: 30, height: 30)
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(tint.opacity(0.10)))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(tint.opacity(0.32), lineWidth: 1))
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundColor(.white).lineLimit(1)
@@ -215,7 +201,7 @@ private struct RecordingRow: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .fill(isSelected ? Color.white.opacity(0.05) : Color.white.opacity(hovering ? 0.03 : 0)))
+            .fill(isSelected ? WhispererColors.cardBackground(.dark) : WhispererColors.cardBackground(.dark).opacity(hovering ? 0.6 : 0)))
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
             .stroke(isSelected ? Color.white.opacity(0.12) : .clear, lineWidth: 1))
         .overlay(alignment: .leading) {

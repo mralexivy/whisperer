@@ -22,8 +22,10 @@ struct RecordingsWorkspaceView: View {
     @StateObject private var playback: RecordingPlaybackController
     private let fixture: RecordingsWorkspaceFixture?
     private let testScope: String
+    private let testSession: MeetingSession?
 
-    init(fixture: RecordingsWorkspaceFixture? = nil, playback: RecordingPlaybackController? = nil, testScope: String = "") {
+    init(fixture: RecordingsWorkspaceFixture? = nil, playback: RecordingPlaybackController? = nil, testScope: String = "", session: MeetingSession? = nil) {
+        self.testSession = session
         self.fixture = fixture
         self.testScope = testScope
         _playback = StateObject(wrappedValue: playback ?? RecordingPlaybackController())
@@ -42,7 +44,7 @@ struct RecordingsWorkspaceView: View {
     private static let listWidth = RecordingsWorkspaceLayout.listWidth
     private static let sidebarRange: ClosedRange<Double> = 300...480
 
-    private var session: MeetingSession { appState.activeMeetingSession ?? localSession }
+    private var session: MeetingSession { testSession ?? appState.activeMeetingSession ?? localSession }
 
     var body: some View {
         GeometryReader { geo in
@@ -51,7 +53,7 @@ struct RecordingsWorkspaceView: View {
                                 hasDocument: detail.document != nil && !model.isImporting)
             HStack(spacing: 0) {
                 if layout.showsList {
-                    RecordingsListView(model: model)
+                    RecordingsListView(model: model, session: session)
                         .frame(width: Self.listWidth)
                         .transition(.move(edge: .leading).combined(with: .opacity))
                     divider
@@ -61,7 +63,8 @@ struct RecordingsWorkspaceView: View {
                     ResizeHandle(width: $sidebarWidth, range: Self.sidebarRange)
                     RecordingSidebarView(
                         document: document, meetingRecord: record, playback: playback, session: session, detail: detail,
-                        tab: $sidebarTab, onCitation: { openCitation($0) }, onCollapse: { withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { sidebarVisible = false } })
+                        tab: $sidebarTab, onCitation: { openCitation($0) }, onCollapse: { withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { sidebarVisible = false } },
+                        isLive: document.kind == .meeting && session.isRecording && session.meetingID == document.id.uuid)
                         .frame(width: CGFloat(sidebarWidth))
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }

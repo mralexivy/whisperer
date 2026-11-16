@@ -312,3 +312,8 @@ it across launches would have to be per-display anyway. Drag/resize still holds 
 - **Untimed text cannot be cited by time.** The AI is shown `[Ns]` keys either way; for untimed documents they are
   ordinals at 60 s spacing, and the app resolves them back through `TranscriptDocument.paragraph(forCitationKey:)`, so no
   time is ever displayed or sought to.
+- **Never recolor a surface with `Color.white.opacity(x)`.** On the app's navy it renders neutral grey (`#1F2031`) where the
+  design's `cardBackground` is `#14142B` (`#151835` on screen). Use `WhispererColors.cardBackground / elevatedBackground / border`;
+  sample the pixels of an old and a new render when someone says "the colors changed".
+- **A selection must be moved before the row is deleted.** The store emits as soon as the row is gone and the list falls back to its
+  first row, so setting the neighbour afterwards loses the race.

@@ -67,6 +67,8 @@ struct RecordingSidebarView: View {
     @Binding var tab: RecordingSidebarTab
     let onCitation: (RAGChunk) -> Void
     let onCollapse: () -> Void
+    /// This meeting is being recorded right now: capture controls take the place of the player.
+    var isLive = false
 
     private var tabs: [RecordingSidebarTab] { RecordingSidebarPolicy.tabs(for: document.kind) }
     private var current: RecordingSidebarTab { tabs.contains(tab) ? tab : tabs[0] }
@@ -74,8 +76,12 @@ struct RecordingSidebarView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            RecordingPlayerView(controller: playback, style: .full)
-                .padding(.horizontal, 16).padding(.bottom, 14)
+            if isLive {
+                RecordingStrip(session: session).padding(.horizontal, 16).padding(.bottom, 14)
+            } else {
+                RecordingPlayerView(controller: playback, style: .full)
+                    .padding(.horizontal, 16).padding(.bottom, 14)
+            }
             tabStrip
             Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
             content
@@ -121,7 +127,7 @@ struct RecordingSidebarView: View {
                 .uiTestFrame("recordings.sidebar.tab.\(item.rawValue.lowercased().replacingOccurrences(of: " ", with: ""))")
             }
         }
-        .padding(3).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+        .padding(3).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
         .padding(.horizontal, 14).padding(.bottom, 10)
     }
 
@@ -168,7 +174,7 @@ private struct RecordingNotesPane: View {
             TextEditor(text: $text)
                 .font(.system(size: 13)).foregroundColor(.white).scrollContentBackground(.hidden)
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.04)))
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
                 .overlay(alignment: .topLeading) {
                     if text.isEmpty {
                         Text("Add notes about this recording…").font(.system(size: 13)).foregroundColor(Color.white.opacity(0.3))
@@ -228,7 +234,7 @@ private struct DictationDetailsPane: View {
                         Label(copied ? "Copied" : "Copy text", systemImage: copied ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 12, weight: .semibold)).foregroundColor(copied ? Color(hex: "22C55E") : .white)
                             .padding(.horizontal, 12).padding(.vertical, 7)
-                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.07)))
+                            .background(RoundedRectangle(cornerRadius: 8).fill(WhispererColors.cardBackground(.dark)))
                     }.buttonStyle(.plain)
                     Spacer()
                     if document.audioURL != nil {
@@ -287,7 +293,7 @@ private struct DictationDetailsPane: View {
             Text(value).font(.system(size: 17, weight: .light, design: .rounded)).foregroundColor(.white).lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.04)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
     }
 
     private func row(_ icon: String, _ title: String, _ value: String) -> some View {
@@ -299,14 +305,14 @@ private struct DictationDetailsPane: View {
             }
             Spacer()
         }
-        .padding(12).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.04)))
+        .padding(12).background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
     }
 
     private func pill(_ title: String, _ icon: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Label(title, systemImage: icon).font(.system(size: 11.5, weight: .medium)).foregroundColor(.white)
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.07)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(WhispererColors.cardBackground(.dark)))
         }.buttonStyle(.plain)
     }
 }

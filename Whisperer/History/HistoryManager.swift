@@ -20,8 +20,9 @@ class HistoryManager: ObservableObject {
 
     private let pageSize = 50
     private var currentOffset = 0
-    private var currentFilter: TranscriptionFilter = .all
-    private var currentSearchQuery: String?
+    private(set) var currentFilter: TranscriptionFilter = .all
+    private(set) var currentSearchQuery: String?
+    private(set) var currentKindScope: HistoryKindScope = .any
     private var currentDateRange: (start: Date, end: Date)?
     private var loadGeneration: Int = 0
 
@@ -144,7 +145,7 @@ class HistoryManager: ObservableObject {
             }
             entity.lastModifiedAt = Date()
         }
-        await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
+        await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange, kind: currentKindScope)
         await updateStatistics()
         NotificationCenter.default.post(name: NSNotification.Name("TranscriptionSaved"), object: nil)
     }
@@ -207,7 +208,7 @@ class HistoryManager: ObservableObject {
             )
         }
 
-        await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
+        await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange, kind: currentKindScope)
         await updateStatistics()
 
         NotificationCenter.default.post(name: NSNotification.Name("TranscriptionSaved"), object: nil)
@@ -216,11 +217,12 @@ class HistoryManager: ObservableObject {
     // MARK: - Read
 
     /// Resets pagination and loads the first page. Called on filter/search/date changes.
-    func loadTranscriptions(filter: TranscriptionFilter = .all, searchQuery: String? = nil, dateRange: (start: Date, end: Date)? = nil) async {
+    func loadTranscriptions(filter: TranscriptionFilter = .all, searchQuery: String? = nil, dateRange: (start: Date, end: Date)? = nil, kind: HistoryKindScope = .any) async {
         // Increment generation to invalidate any in-flight sentinel loads
         loadGeneration += 1
         currentFilter = filter
         currentSearchQuery = searchQuery
+        currentKindScope = kind
         currentDateRange = dateRange
         currentOffset = 0
         hasMorePages = true
@@ -245,6 +247,10 @@ class HistoryManager: ObservableObject {
 
         var predicates: [NSPredicate] = []
 
+        // A dictation that is still being written has no text yet — it is not a recording to list. (A crashed
+        // session that did keep text stays visible.)
+        predicates.append(NSPredicate(format: "NOT (isInProgress == YES AND transcription == %@)", ""))
+
         switch currentFilter {
         case .all:
             break
@@ -252,6 +258,12 @@ class HistoryManager: ObservableObject {
             predicates.append(NSPredicate(format: "isPinned == YES"))
         case .flagged:
             predicates.append(NSPredicate(format: "isFlagged == YES"))
+        }
+
+        switch currentKindScope {
+        case .any: break
+        case .files: predicates.append(NSPredicate(format: "sourceKind == %@ OR targetAppName == %@", "file", "File Import"))
+        case .dictation: predicates.append(NSPredicate(format: "(sourceKind == nil OR sourceKind != %@) AND (targetAppName == nil OR targetAppName != %@)", "file", "File Import"))
         }
 
         if let query = currentSearchQuery, !query.isEmpty {
@@ -533,7 +545,7 @@ class HistoryManager: ObservableObject {
                 Self.deleteRecordingFile(for: audioFileURL)
             }
 
-            await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange)
+            await loadTranscriptions(filter: currentFilter, searchQuery: currentSearchQuery, dateRange: currentDateRange, kind: currentKindScope)
             await updateStatistics()
         } catch {
             Logger.error("Failed to delete all transcriptions: \(error)", subsystem: .app)
@@ -696,6 +708,12 @@ enum TranscriptionFilter {
     case all
     case pinned
     case flagged
+}
+
+/// Which kind of history row to list: dictations, imported files, or both. Imports are recognised by their
+/// `sourceKind` and, for rows saved before it existed, by the legacy "File Import" app name.
+enum HistoryKindScope {
+    case any, files, dictation
 }
 
 nonisolated struct HistoryStatistics: Sendable {

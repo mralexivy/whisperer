@@ -193,7 +193,7 @@ struct AskAIPane: View {
                             Image(systemName: "arrow.up.right").font(.system(size: 10, weight: .medium)).foregroundColor(.white.opacity(0.35))
                         }
                         .padding(.horizontal, 14).padding(.vertical, 13)
-                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.03)))
+                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
                         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.white.opacity(0.09), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
@@ -505,7 +505,7 @@ struct AskAIPane: View {
                 }
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.04)))
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(WhispererColors.cardBackground(.dark)))
             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.10), lineWidth: 1))
             HStack {
                 Text(connectedAI.activeProviderID.map { "Answers from \($0.displayName)" } ?? "Answered on this Mac")

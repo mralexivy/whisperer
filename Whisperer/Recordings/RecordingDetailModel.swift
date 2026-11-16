@@ -33,6 +33,12 @@ final class RecordingDetailModel: ObservableObject {
                 self.reload()
             }.store(in: &bag)
         }
+        // A meeting that was being recorded has finished: its row stops being in progress and the reader takes over.
+        center.publisher(for: .meetingSegmentsDidPersist).receive(on: DispatchQueue.main).sink { [weak self] note in
+            guard let self, let uuid = note.object as? UUID, uuid == self.currentID?.uuid, self.document?.isInProgress == true,
+                  MeetingManager.shared.meetings.first(where: { $0.id == uuid })?.isInProgress == false else { return }
+            self.reload()
+        }.store(in: &bag)
         // Edits made from the list (pin, flag, rename) and by the history store itself.
         HistoryManager.shared.$transcriptions
             .receive(on: DispatchQueue.main)
