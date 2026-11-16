@@ -107,7 +107,7 @@ final class RecordingPlaybackController: ObservableObject {
         waveform = []
         waveformTask = Task { [weak self] in
             let bars = await Task.detached(priority: .utility) {
-                WaveformGenerator.generateWaveform(from: url, sampleCount: 120)
+                WaveformGenerator.generateWaveform(from: url, sampleCount: 70)
             }.value
             guard !Task.isCancelled else { return }
             self?.waveform = bars
