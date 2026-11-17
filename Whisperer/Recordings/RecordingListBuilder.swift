@@ -93,7 +93,8 @@ nonisolated enum RecordingListBuilder {
                     id: .meeting(meeting.id), kind: .meeting, title: meeting.title,
                     preview: (input.meetingHits?[meeting.id] ?? nil) ?? (meeting.captureFailed ? "No audio was captured" : "\(meeting.wordCount) words"),
                     date: meeting.createdAt, duration: meeting.duration, isPinned: meeting.isPinned, isFlagged: meeting.isFlagged,
-                    isInProgress: meeting.isInProgress, sourceName: meeting.sourceAppName, sourceBundleID: meeting.sourceBundleID)
+                    isInProgress: meeting.isInProgress, sourceName: meeting.sourceAppName, sourceBundleID: meeting.sourceBundleID,
+                    captureFailed: meeting.captureFailed)
                 if seen.insert(item.id).inserted { merged.append(item) }
             }
         }

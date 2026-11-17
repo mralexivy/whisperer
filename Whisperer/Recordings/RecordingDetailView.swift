@@ -478,6 +478,7 @@ struct RecordingDetailView: View {
                 }
                 .font(.system(size: 12.5, weight: .medium))
                 Spacer()
+                StopRecordingButton().padding(.trailing, 6)
                 Button { MeetingLiveWindowManager.shared.show(session: session) } label: {
                     HStack(spacing: 6) { Image(systemName: "rectangle.on.rectangle").font(.system(size: 12)); Text("Float") }
                         .font(.system(size: 12.5, weight: .medium)).foregroundColor(Color.white.opacity(0.8))

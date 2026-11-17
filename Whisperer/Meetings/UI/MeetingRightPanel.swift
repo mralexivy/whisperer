@@ -91,8 +91,10 @@ struct RecordingStrip: View {
                 MeetingCaptureControls(size: 28)
             }
 
+            StopRecordingButton(expands: true)
+
             Text(appState.isMicMuted ? "Your microphone is muted. The call is still recorded."
-                 : "Ask about what has been said so far. The player appears when the meeting ends.")
+                 : "Stopping saves the meeting and writes its notes. The player appears when it ends.")
                 .font(.system(size: 11.5))
                 .foregroundColor(.white.opacity(0.4))
                 .fixedSize(horizontal: false, vertical: true)
@@ -107,6 +109,32 @@ struct RecordingStrip: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 14).fill(WhispererColors.cardBackground(.dark)))
+    }
+}
+
+/// The way to end the recording: a red capsule with a stop square, in the workspace as in the floating window.
+struct StopRecordingButton: View {
+    var expands = false
+    @State private var hovering = false
+
+    var body: some View {
+        Button { AppState.shared.stopActiveRecording() } label: {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2.5).fill(Color.white).frame(width: 9, height: 9)
+                Text("Stop recording").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+            }
+            .frame(maxWidth: expands ? .infinity : nil)
+            .padding(.horizontal, 16).frame(height: 36)
+            .background(Capsule().fill(LinearGradient(colors: [Color(hex: "F0524F"), Color(hex: "D93A3A")], startPoint: .top, endPoint: .bottom)))
+            .overlay(Capsule().stroke(Color.white.opacity(hovering ? 0.28 : 0.14), lineWidth: 1))
+            .shadow(color: Color.red.opacity(hovering ? 0.45 : 0.28), radius: hovering ? 9 : 6, y: 2)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help("Stop recording and write the notes")
+        .accessibilityLabel("Stop recording")
+        .accessibilityIdentifier("meetingStopButton")
     }
 }
 

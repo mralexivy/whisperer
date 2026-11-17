@@ -170,6 +170,7 @@ private struct RecordingRow: View {
     let isSelected: Bool
     var query: String? = nil
     @State private var hovering = false
+    @ObservedObject private var meetings = MeetingManager.shared
 
     @AppStorage("timeFormat") private var timeFormat = "12h"
 
@@ -182,13 +183,19 @@ private struct RecordingRow: View {
                     Spacer(minLength: 0)
                     if item.isPinned { Image(systemName: "pin.fill").font(.system(size: 9)).foregroundColor(WhispererColors.accent) }
                     if item.isFlagged { Image(systemName: "flag.fill").font(.system(size: 9)).foregroundColor(.orange) }
-                    if item.isInProgress { Circle().fill(Color.red).frame(width: 6, height: 6) }
+                    if item.isInProgress { LivePill() }
                 }
                 if !item.preview.isEmpty {
                     Text(RecordingSnippet.highlighted(item.preview, query: query)).font(.system(size: 13)).foregroundColor(Color.white.opacity(0.5)).lineLimit(1)
                 }
                 HStack(spacing: 6) {
                     Text(item.kind.plural).foregroundColor(item.kind.tint.opacity(0.9))
+                    if item.captureFailed {
+                        Label("No audio", systemImage: "exclamationmark.triangle.fill").labelStyle(.titleAndIcon)
+                            .foregroundColor(Color(hex: "EF4444"))
+                    } else if item.kind == .meeting, let phase = meetings.processingPhases[item.id.uuid] {
+                        Label(phase.shortLabel, systemImage: "sparkles").foregroundColor(WhispererColors.accentPurple)
+                    }
                     Text("·")
                     Text(RecordingTimeFormat.string(item.date, setting: timeFormat))
                     Spacer()
@@ -210,5 +217,28 @@ private struct RecordingRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .uiTestFrame("recordings.row.\(item.id.uuid.uuidString)")
+    }
+}
+
+
+/// A recording in progress: a pulsing red dot and the word, so a live meeting is unmistakable in the list.
+struct LivePill: View {
+    @State private var pulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Circle().fill(Color.red).frame(width: 6, height: 6)
+                .opacity(pulse && !reduceMotion ? 0.35 : 1)
+            Text("LIVE").font(.system(size: 9, weight: .bold)).tracking(0.6)
+        }
+        .foregroundColor(Color.red.opacity(0.95))
+        .padding(.horizontal, 7).padding(.vertical, 3)
+        .background(Capsule().fill(Color.red.opacity(0.12)))
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
+        }
+        .accessibilityLabel("Recording now")
     }
 }

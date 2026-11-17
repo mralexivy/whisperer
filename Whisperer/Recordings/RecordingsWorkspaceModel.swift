@@ -22,6 +22,8 @@ nonisolated struct RecordingListItem: Identifiable, Equatable, Sendable {
     var isInProgress: Bool
     var sourceName: String?
     var sourceBundleID: String?
+    /// A meeting whose recording produced no audio.
+    var captureFailed = false
 }
 
 @MainActor
