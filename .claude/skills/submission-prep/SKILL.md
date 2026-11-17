@@ -101,7 +101,7 @@ Every submission produces **two** archives from the same commit and the same ver
 | Bundle ID | `com.ivy.whisperer` | `com.ivy.whisperer.cn` |
 | App Store Connect record | the existing app (`6758626671`) | a **separate** app record |
 | Territories | everything **except** China mainland | **China mainland only** |
-| Regulated features | closed at runtime when the storefront is `CHN` (`MarketPolicy`) | compiled to the closed state, whatever the storefront says |
+| Regulated features | closed at runtime when the storefront is `CHN` (`MarketPolicy`) | the market is fixed to China mainland at build time, so they stay closed whatever the storefront says |
 | Models downloaded from | Hugging Face (ModelScope when the storefront is `CHN`) | ModelScope |
 
 Why two records: App Store Connect cannot ship a different binary to one territory within one record, and the China forms ask about "the app". The China record answers them **No / No** because the features are off, and the regular record is simply not sold in China mainland.
@@ -163,7 +163,7 @@ Do once when the China record does not exist, and re-check every release. Only t
 
 1. **App ID and record.** Certificates, Identifiers & Profiles → register App ID `com.ivy.whisperer.cn` with the same capabilities as the regular one (App Sandbox, network client, audio input, user-selected files, camera). App Store Connect → new macOS app, bundle `com.ivy.whisperer.cn`, name e.g. "Whisperer - Voice to Text" (add a suffix if the name is taken), SKU `whisperer-macos-cn-1`, primary language Chinese (Simplified).
 2. **Availability.** China record → Pricing and Availability → **only China mainland**. Regular record → remove **China mainland** from availability.
-3. **Compliance forms (China record).** *AI-Generated or Synthetic Content*: **No**. *Security Assessment*: **No**. Apple allows "No" when the features are "disabled or geoblocked in China mainland": in this edition they are compiled out of reach, not merely hidden. In the regular record do not answer for China (it is not sold there).
+3. **Compliance forms (China record).** *AI-Generated or Synthetic Content*: **No**. *Security Assessment*: **No**. Apple allows "No" when the features are "disabled or geoblocked in China mainland": in this edition the market is fixed to China mainland at build time, so their entry points are removed and the services refuse to run. In the regular record do not answer for China (it is not sold there).
 4. **In-App Purchase.** Done 2026-11-17: the China record sells `com.ivy.whisperer.propack` ($14.99, app $4.99); the regular app sells `com.ivy.whisperer.pro` (a product id cannot be reused in a record where it once existed). `StoreManager` picks the id by edition and honours either. Purchases do not carry over between the two apps. Tell users who bought in the regular app that a China purchase needs restoring in the China app (a note in the China description).
 5. **Metadata.** zh-Hans description, keywords, screenshots (take them from the China build: no Ask AI tab, no cloud AI providers). Privacy policy URL and App Privacy answers are the same ("data not collected", transcription on-device).
 6. **Review notes** (China record): paste `references/china-edition.md`. State that on-device transcription and local summaries are the only AI, that cloud AI, chat, voice alteration and sync are not present in this edition, and that models download from ModelScope (modelscope.cn).

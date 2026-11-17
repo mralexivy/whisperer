@@ -59,6 +59,30 @@ struct AcknowledgementsView: View {
                 // Models section
                 sectionHeader("AI Models")
 
+                #if CHINA_EDITION
+                // The China edition offers Qwen models only (plus the small voice-activity detector); list just those.
+                modelEntry(
+                    name: "Qwen3-ASR-1.7B",
+                    author: "Alibaba Cloud",
+                    license: "Apache License 2.0",
+                    url: "https://modelscope.cn/models/mlx-community/Qwen3-ASR-1.7B-8bit"
+                )
+
+                modelEntry(
+                    name: "Qwen3.5-4B",
+                    author: "Alibaba Cloud",
+                    license: "Apache License 2.0",
+                    url: "https://modelscope.cn/models/mlx-community/Qwen3.5-4B-MLX-4bit"
+                )
+
+                modelEntry(
+                    name: "Silero VAD (voice-activity detection)",
+                    author: "Silero Team",
+                    license: "MIT License",
+                    url: "https://modelscope.cn/models/ggml-org/whisper-vad"
+                )
+                #else
+
                 modelEntry(
                     name: "Qwen3-ASR-1.7B",
                     author: "Alibaba Cloud",
@@ -149,6 +173,8 @@ struct AcknowledgementsView: View {
                     license: "MIT License",
                     url: "https://github.com/snakers4/silero-vad"
                 )
+
+                #endif
 
                 Divider()
                     .padding(.vertical, 8)

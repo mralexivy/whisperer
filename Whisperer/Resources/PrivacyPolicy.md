@@ -43,7 +43,7 @@ Whisperer uses the network for one purpose: downloading AI model weights.
 
 - Model weights are **data files**, not executable code. The transcription and language engines are
   compiled into the app itself.
-- Models are downloaded from Hugging Face. The speech model is about 2.5 GB. The language model
+- Models are downloaded from Hugging Face (from ModelScope, modelscope.cn, in the China mainland edition). The speech model is about 2.5 GB. The language model
   used for meeting overviews is about 3.2 GB.
 - No personal information is transmitted during a download.
 

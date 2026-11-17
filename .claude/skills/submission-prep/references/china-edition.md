@@ -1,35 +1,37 @@
 # China edition — App Store Connect notes
 
-Used for the `com.ivy.whisperer.cn` record (China mainland only). Fill `{VERSION}`. Keep under 4000 characters.
+Used for the `com.ivy.whisperer.cn` record ("Whisperer China", China mainland only; app id 6835744579). Already applied to the record on 2026-11-17: zh-Hans listing, 3 screenshots, categories, age rating 4+, privacy URL, these review notes, availability, prices ($4.99 app, Pro $14.99 `com.ivy.whisperer.propack`).
 
-## Review notes (paste)
+## Review notes (as sent)
 
 ```
-Whisperer {VERSION} (China edition) is an offline voice-to-text tool for macOS. Speech recognition runs on the Mac with open-source models; audio and text never leave the device.
+Whisperer China is the China-mainland edition of our macOS app "Whisperer - Voice to Text" (separate App Store record, bundle id com.ivy.whisperer.cn, sold in China mainland only). It is an offline voice-to-text tool: speech is recognised on the Mac and nothing is sent to any server.
 
-CHINA COMPLIANCE (AI-Generated or Synthetic Content / Security Assessment): both answers are No.
-This edition has no AI chatbot, no image/video generation, no voice or face alteration, and no end-to-end encrypted messaging. The following exist in our other edition and are removed from this one at build time (compiled out of the China build, not hidden by a setting):
-• Ask AI chat over transcripts
-• Connected cloud AI providers (OpenAI, Anthropic, Google) and coding-tool CLI providers
-• Voice reshaping / Privacy Shield
-• Command Mode
-• Cloud sync
-• Google Calendar sign-in
-The remaining text features (a title and short overview of a recording, punctuation/grammar clean-up) run fully on-device with an open-source model and do not offer a conversational or generative service to the user.
+CHINA COMPLIANCE FORMS (AI-Generated or Synthetic Content; Security Assessment): both answered No.
+This edition offers no AI chatbot, no image or video generation, no voice or face alteration and no end-to-end encrypted messaging. These features exist in our other edition and are disabled in this one: the build is fixed to the China-mainland market, their entry points are removed from the UI and their services refuse to run. Disabled here: Ask AI chat over transcripts; connected cloud AI providers and coding-tool providers (third-party AI services); voice reshaping (Privacy Shield); Command Mode; cloud sync; Google Calendar sign-in. No transcript or audio is ever sent to a third-party AI service from this edition.
 
-MODELS: downloaded once, on first use, from ModelScope (modelscope.cn). No other server is contacted for transcription.
-NO SIGN-IN REQUIRED. No accounts, no analytics.
-EXPORT: HTTPS only (exempt).
-HOW TO TEST: Launch → onboarding → microphone permission → menu bar icon → hold Fn → speak → release → text is copied; press ⌘V.
-IAP: same products as the main app, purchased separately in this app.
+MODELS (complete list). The only AI models offered are Alibaba's Qwen models:
+1. Qwen3-ASR-1.7B (8-bit MLX) for speech recognition (default engine).
+2. Qwen3.5-4B (4-bit MLX), used only by the Pro in-app purchase, on the Mac: a title and short overview of a recorded meeting, and the optional AI rewrite modes for dictated text.
+Both are downloaded once, on first use, from ModelScope (modelscope.cn, repositories mlx-community/Qwen3-ASR-1.7B-8bit and mlx-community/Qwen3.5-4B-MLX-4bit); files are verified against ModelScope's published SHA-256. Hugging Face is not used in this edition.
+Also used, neither generative: (a) Apple's built-in on-device speech recogniser, for the live preview while speaking; (b) Silero VAD (about 0.9 MB, MIT licence), a voice-activity detector downloaded from ModelScope (ggml-org/whisper-vad). No other model is offered or downloaded.
+
+HOW TO TEST
+Launch, accept the microphone permission (button reads "Continue"), complete model download in onboarding, then hold Fn, speak, release; the text is copied to the clipboard and can be pasted with Cmd+V. No Accessibility or Input Monitoring permission is requested. Drop an audio file on the Workspace to transcribe it.
+Pro (in-app purchase com.ivy.whisperer.propack, non-consumable, one time): meeting recording, meeting detection, Outlook/Microsoft 365 calendar sync, on-device meeting titles and summaries, and a local MCP server that stays on the Mac.
+
+NO SIGN-IN REQUIRED. No accounts, no analytics, no advertising.
+PRIVACY: all processing is on the device; the only network use is downloading the models above and the App Store purchase.
+EXPORT: HTTPS only (exempt encryption).
 ```
 
-## What to say if Apple asks about on-device models
+## Keep the claims true
 
-Transcription (speech to text) and the short on-device summary are not chat, image/video generation, or voice/face alteration, the three services named on Apple's China compliance page. If Apple wants the summary feature off as well, it is one flag: `ComplianceFeature` already separates it from Ask AI.
+- The features listed as disabled are disabled at runtime by `MarketPolicy` (the China edition fixes the market at build time). They are **not** compiled out; do not say they are.
+- The model list must match `LLMModelVariant.available`, `BackendType.selectable`, `ModelSources` and `AcknowledgementsView` (China branch). Change all together.
+- Screenshots must not show: Whisper/Parakeet or any non-Qwen model, several model sizes, Ask AI, cloud AI providers, Accessibility or "Set Up Later", third-party app logos, or a "Pro" badge on Basic features.
 
 ## Verify before submitting
 
 - `scripts/verify-china-models.sh`
-- `strings <china app binary> | grep whisperer-edition=china-mainland` returns 1 line
-- bundle id `com.ivy.whisperer.cn`
+- `strings <china app binary> | grep whisperer-edition=china-mainland` returns 1 line; bundle id `com.ivy.whisperer.cn`
