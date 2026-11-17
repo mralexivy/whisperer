@@ -57,16 +57,9 @@ struct TranscriptPolishBar: View {
                     .help("Restore the original transcript")
                     .uiTestFrame("polish.undo")
                 } else {
-                    actionButton(title: provider == nil ? "Polish with AI" : "Polish",
-                                 icon: "sparkles", prominent: true) {
-                        if provider == nil {
-                            NotificationCenter.default.post(name: .switchToLLMTab, object: nil)
-                        } else {
-                            start()
-                        }
-                    }
+                    actionButton(title: "Polish", icon: "sparkles", prominent: true) { start() }
                     .help(provider == nil
-                          ? "Choose an AI on the LLM page to clean up this transcript"
+                          ? "Fix misheard words, punctuation and fillers with the AI on this Mac. Nothing leaves your Mac. The original is kept."
                           : "Fix misheard words, punctuation and fillers with \(provider!.displayName). The original is kept.")
                     .uiTestFrame("polish.start")
                 }

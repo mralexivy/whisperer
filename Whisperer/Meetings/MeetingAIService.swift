@@ -247,6 +247,23 @@ actor MeetingAIService {
         }
     }
 
+    // MARK: - Transcript polish (on-device)
+
+    /// One `instructions` + `input` request answered by the on-device LLM, for the local transcript polish.
+    func localComplete(instructions: String, input: String) async throws -> String {
+        guard let llm = await acquireLLM() else {
+            throw MeetingAIProviderError.processFailed(exitCode: -1, stderrTail: "The on-device AI is not ready yet. Open the LLM page to download it.")
+        }
+        defer { releaseLLM() }
+        let reply = try await llm.process(
+            text: input, systemPrompt: instructions, userMessage: input,
+            temperature: 0.0, repetitionPenalty: 1.05,
+            maxTokensCap: min(1_400, max(160, input.count / 2 + 96)),
+            outputTokensHint: min(1_400, max(160, input.count / 2 + 96)),
+            timeoutSecondsOverride: 180, throwOnFallback: true, reuseWarmCache: false)
+        return reply.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     // MARK: - Title generation
 
     /// Arms the naming of an untitled recording. Cheap and synchronous — the title itself is

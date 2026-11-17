@@ -57,7 +57,8 @@ Whisperer uses the network to download AI model weights. It reaches a calendar o
   used for meeting overviews is about 3.2 GB.
 - No personal information is transmitted during a download.
 - Calendar (optional): if you sign in to Google or Microsoft, the app reads your events directly from that service.
-- AI providers (optional): if you connect ChatGPT, OpenAI, Anthropic or Gemini for meeting notes or Ask AI, the text transcript of that meeting and your question are sent from your Mac straight to the provider, with your own sign-in or API key. Audio is never sent, and neither is dictation text. Whisperer's developer is not a party to that exchange and receives none of it. The provider's own terms and privacy policy apply to what it receives.
+- AI providers (optional): if you connect ChatGPT, OpenAI, Anthropic or Gemini for meeting notes or Ask AI, the text transcript of that meeting and your question are sent from your Mac straight to the provider, with your own sign-in or API key. Text you press Polish on is sent the same way, only when you press it. Audio is never sent, and dictation text is never sent automatically. Whisperer's developer is not a party to that exchange and receives none of it. The provider's own terms and privacy policy apply to what it receives.
+- Without a connected provider, Polish, meeting summaries and Ask AI run on the on-device language model (Alibaba Qwen) and nothing leaves your Mac.
 - China edition: Whisperer China has no cloud AI provider, no Ask AI and no Google Calendar sign-in. Meeting text is never sent to an AI service.
 
 Once the models are on disk, **transcription works completely offline**.

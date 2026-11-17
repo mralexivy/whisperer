@@ -213,4 +213,59 @@ nonisolated enum MeetingTranscriptPolisher {
         }
         return apply(rewrites, to: segments)
     }
+
+    // MARK: On-device pass
+
+    /// What the small on-device model gets: plain `id | text` lines in and out. It is not asked for JSON, which a small
+    /// model breaks far more often than a line format.
+    static func localInstructions(languageName: String?) -> String {
+        let language = languageName.map { "The text is in \($0). Keep every line in its own language, never translate." }
+            ?? "Keep every line in its own language, never translate."
+        return """
+        You clean up a speech-to-text transcript. Each input line is `id | text`.
+        For every line, output the same id, a pipe, and the cleaned text, on one line:
+        - fix misheard words only when the context makes the intended word clear,
+        - fix punctuation and capitalization,
+        - remove filler words and false starts.
+        Never add information, summarize, merge or split lines, or change what was said.
+        If a line is already clean, repeat it unchanged. Output every id exactly once and nothing else.
+        \(language)
+        """
+    }
+
+    /// `id | text` lines in the model's reply. Tolerates a speaker column the model copied, and ignores anything else.
+    static func parseLines(_ reply: String, speakers: [Int: String]) -> [Int: String] {
+        var out: [Int: String] = [:]
+        for raw in reply.split(whereSeparator: \.isNewline) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            guard let bar = line.firstIndex(of: "|"), let id = Int(line[..<bar].trimmingCharacters(in: .whitespaces)) else { continue }
+            var text = line[line.index(after: bar)...].trimmingCharacters(in: .whitespaces)
+            if let speaker = speakers[id], !speaker.isEmpty, text.hasPrefix(speaker + " |") {
+                text = String(text.dropFirst(speaker.count + 2)).trimmingCharacters(in: .whitespaces)
+            }
+            if !text.isEmpty { out[id] = text }
+        }
+        return out
+    }
+
+    /// Runs the whole pass on this Mac, one small chunk at a time (the on-device model serves one request at a time).
+    @concurrent
+    static func polishLocally(_ segments: [MeetingSegment], languageName: String?,
+                              complete: @escaping @Sendable (_ instructions: String, _ input: String) async throws -> String,
+                              onProgress: @escaping @Sendable (Int, Int) -> Void) async throws -> Outcome {
+        let plan = chunks(for: segments, maxCards: 10, maxChars: 2_400)
+        let prompt = localInstructions(languageName: languageName)
+        let speakers = Dictionary(uniqueKeysWithValues: segments.enumerated().map { ($0.offset, $0.element.speakerName) })
+        onProgress(0, plan.count)
+        var rewrites: [Int: String] = [:]
+        for (n, chunk) in plan.enumerated() {
+            try Task.checkCancellation()
+            let text = chunk.indices.map { i in "\(i) | \(segments[i].text.replacingOccurrences(of: "\n", with: " "))" }.joined(separator: "\n")
+            let reply = try await complete(prompt, text)
+            rewrites.merge(parseLines(reply, speakers: speakers).filter { chunk.indices.contains($0.key) }) { _, new in new }
+            onProgress(n + 1, plan.count)
+        }
+        if rewrites.isEmpty && !plan.isEmpty { throw MeetingAIProviderError.schemaMismatch(raw: "") }
+        return apply(rewrites, to: segments)
+    }
 }

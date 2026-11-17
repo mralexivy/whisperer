@@ -277,7 +277,7 @@ private struct DictationDetailsPane: View {
                 Text("Your words, exactly as transcribed.").font(.system(size: 12)).foregroundColor(Color.white.opacity(0.4))
             }
             // Fast Polish is on by default, so nearly every dictation has an "enhancement"; the AI polish is a separate, optional step.
-            if MarketPolicy.allows(.connectedCloudAI) { polishCard }
+            polishCard
         }
     }
 
@@ -288,7 +288,7 @@ private struct DictationDetailsPane: View {
                 Image(systemName: "sparkles").font(.system(size: 12, weight: .semibold)).foregroundColor(WhispererColors.accentPurple)
                 Text("Polish with AI").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
             }
-            Text("Fixes misheard words, punctuation and fillers in this dictation. Only when you ask. Your original is kept and Undo restores it.")
+            Text("Fixes misheard words, punctuation and fillers in this dictation. Runs on this Mac or on the AI you connected. Only when you ask. Your original is kept and Undo restores it.")
                 .font(.system(size: 11.5)).foregroundColor(Color.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
             TranscriptPolishBar(meetingID: document.id.uuid, segments: document.segments, compact: false)
         }

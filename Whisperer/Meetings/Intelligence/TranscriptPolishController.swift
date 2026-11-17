@@ -56,9 +56,7 @@ final class TranscriptPolishController: ObservableObject {
                provider explicit: (any MeetingIntelligenceProvider)? = nil) -> Task<Void, Never>? {
         guard !isRunning else { return nil }
         guard let provider = explicit ?? store.activeProvider() else {
-            phase = .failed("Choose an AI on the LLM page first.")
-            self.meetingID = meetingID
-            return nil
+            return startLocal(meetingID: meetingID, segments: segments, languageName: languageName)
         }
         self.meetingID = meetingID
         providerID = provider.id
@@ -95,6 +93,47 @@ final class TranscriptPolishController: ObservableObject {
             } catch {
                 let message = (error as? MeetingAIProviderError)?.localizedDescription ?? error.localizedDescription
                 Logger.warning("Transcript polish: \(provider.id.rawValue) failed (\(error))", subsystem: .transcription)
+                self?.phase = .failed(message)
+            }
+        }
+        task = t
+        return t
+    }
+
+    /// No connected AI: the on-device model polishes, so nothing leaves the Mac.
+    private func startLocal(meetingID: UUID, segments: [MeetingSegment], languageName: String?) -> Task<Void, Never>? {
+        self.meetingID = meetingID
+        providerID = nil
+        phase = .running(done: 0, total: max(1, MeetingTranscriptPolisher.chunks(for: segments, maxCards: 10, maxChars: 2_400).count))
+        let defaults = self.defaults
+        let persist = self.persist
+        weak let weakSelf = self
+        let onProgress: @Sendable (Int, Int) -> Void = { done, total in
+            Task { @MainActor in
+                guard let self = weakSelf, self.meetingID == meetingID, self.isRunning else { return }
+                self.phase = .running(done: done, total: max(total, 1))
+            }
+        }
+        Logger.info("Transcript polish: on-device model starting for \(meetingID), \(segments.count) card(s)", subsystem: .transcription)
+        let t = Task { [weak self] in
+            do {
+                let outcome = try await MeetingTranscriptPolisher.polishLocally(
+                    segments, languageName: languageName,
+                    complete: { instructions, input in try await MeetingAIService.shared.localComplete(instructions: instructions, input: input) },
+                    onProgress: onProgress)
+                await persist(meetingID, outcome.segments)
+                MeetingAIProvenance.record(
+                    MeetingAIProvenance(source: "local", model: LLMModelVariant.qwen3_5_4B_mtp.displayName, date: Date()),
+                    for: meetingID, defaults: defaults, key: MeetingAIProvenance.polishStoreKey)
+                NotificationCenter.default.post(name: .meetingSegmentsDidRefine, object: meetingID,
+                                                userInfo: ["segments": outcome.segments])
+                Logger.info("Transcript polish: on-device model changed \(outcome.changed) card(s), rejected \(outcome.rejected) for \(meetingID)", subsystem: .transcription)
+                self?.phase = .finished(changed: outcome.changed)
+            } catch is CancellationError {
+                self?.phase = .idle
+            } catch {
+                let message = (error as? MeetingAIProviderError)?.localizedDescription ?? error.localizedDescription
+                Logger.warning("Transcript polish: on-device model failed (\(error))", subsystem: .transcription)
                 self?.phase = .failed(message)
             }
         }
