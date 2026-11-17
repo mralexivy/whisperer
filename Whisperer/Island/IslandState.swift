@@ -177,6 +177,22 @@ struct IslandViewModel: Equatable {
 // MARK: - ViewModel projection
 
 extension IslandModel {
+    /// A recording is one fixed element resting at the nub: nothing legitimately grows it into the big compact bar while it
+    /// records, pauses or starts (`expand` refuses). This puts it back at the nub when something else left it hidden or large,
+    /// e.g. a window that stood the Island down and then closed. Returns whether it changed anything.
+    @discardableResult
+    mutating func restToNub() -> Bool {
+        switch capture {
+        case .starting, .recording, .paused:
+            guard presentation != .peek else { return false }
+            presentation = .peek
+            revision &+= 1
+            return true
+        default:
+            return false
+        }
+    }
+
     func viewModel() -> IslandViewModel {
         var actions: [IslandAction] = []
         // Peek tier has no visible hit targets — actions are only surfaced in compact/expanded.

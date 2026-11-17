@@ -389,3 +389,33 @@ final class IslandReducerTests: XCTestCase {
         XCTAssertTrue(m.isOutputMuted)
     }
 }
+
+/// A recording rests at the nub, never the big bar, including after a window that stood the Island down closes.
+final class IslandRestToNubTests: XCTestCase {
+    private func model(_ capture: IslandCaptureState, _ presentation: IslandPresentation) -> IslandModel {
+        var m = IslandModel(sessionID: UUID(), revision: 0, capture: capture, presentation: presentation,
+                            isMicMuted: false, isOutputMuted: false, isPaused: false, stopInFlight: false)
+        _ = m.revision
+        return m
+    }
+
+    func testAHiddenOrBigRecordingGoesBackToTheNub() {
+        for capture in [IslandCaptureState.starting, .recording, .paused] {
+            for presentation in [IslandPresentation.hidden, .compact, .expanded] {
+                var m = model(capture, presentation)
+                XCTAssertTrue(m.restToNub(), "\(capture) at \(presentation)")
+                XCTAssertEqual(m.presentation, .peek)
+            }
+        }
+    }
+
+    func testTheNubAndNonRecordingStatesAreLeftAlone() {
+        var nub = model(.recording, .peek)
+        XCTAssertFalse(nub.restToNub())
+        var idle = model(.idle, .compact)
+        XCTAssertFalse(idle.restToNub(), "the idle launcher bar is meant to be compact")
+        XCTAssertEqual(idle.presentation, .compact)
+        var failed = model(.failed("no audio"), .compact)
+        XCTAssertFalse(failed.restToNub(), "a failure message needs the room")
+    }
+}

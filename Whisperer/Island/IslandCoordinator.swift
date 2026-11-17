@@ -493,6 +493,10 @@ final class IslandCoordinator: ObservableObject {
             }
         }
 
+        // The Island comes back after a window that stood it down (the floating live window, the workspace) closes: a recording
+        // rests at the nub, never the big bar, whatever state it was left in.
+        if model.restToNub() { Logger.info("Island: recording restored to the nub", subsystem: .ui) }
+
         if model.isMicMuted != appState.isMicMuted {
             model.isMicMuted = appState.isMicMuted
         }
