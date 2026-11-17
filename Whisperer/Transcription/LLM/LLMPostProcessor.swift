@@ -208,8 +208,16 @@ class LLMPostProcessor: ObservableObject {
     static func download(_ variant: LLMModelVariant,
                          progress: @escaping @Sendable (Double) -> Void) async throws {
         guard !isOnDisk(variant) else { return }
-        _ = try await HubApi().snapshot(from: variant.huggingFaceId,
-                                        matching: ["*.safetensors", "*.json", "*.jinja"]) { p in
+        let globs = ["*.safetensors", "*.json", "*.jinja"]
+        if ModelSources.host == .modelScope {
+            // mainland China: the same weights from ModelScope, into the directory the loader reads
+            try await ModelScopeFetcher.snapshot(repo: ModelSources.modelScopeRepo(for: variant.huggingFaceId) ?? variant.huggingFaceId,
+                                                 globs: globs,
+                                                 into: ModelConfiguration(id: variant.huggingFaceId).modelDirectory(hub: HubApi()),
+                                                 progress: progress)
+            return
+        }
+        _ = try await HubApi().snapshot(from: variant.huggingFaceId, matching: globs) { p in
             progress(p.fractionCompleted)
         }
     }
@@ -233,6 +241,15 @@ class LLMPostProcessor: ObservableObject {
 
         // If the model already exists locally, use ModelConfiguration(directory:) to bypass
         // HubApi network checks (which time out when offline or on restricted networks).
+        // In China the weights come from ModelScope, so fetch them first and load from disk.
+        if ModelSources.host == .modelScope, !Self.isOnDisk(variant) {
+            try await Self.download(variant) { [weak self] fraction in
+                Task { @MainActor [weak self] in
+                    self?.didReceiveDownloadProgress = true
+                    self?.loadPhase = .downloading(progress: fraction)
+                }
+            }
+        }
         let hub = HubApi()
         let idConfig = ModelConfiguration(id: variant.huggingFaceId)
         let localDir = idConfig.modelDirectory(hub: hub)

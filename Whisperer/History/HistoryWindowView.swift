@@ -138,7 +138,7 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
     static var visibleItems: [HistorySidebarItem] {
         #if !APP_STORE
         var items: [HistorySidebarItem] = [.recordings, .calendar, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .feedback, .settings]
-        items.insert(.commandMode, at: items.count - 3) // Before setup
+        if MarketPolicy.allows(.commandMode) { items.insert(.commandMode, at: items.count - 3) } // Before setup
         #else
         let items: [HistorySidebarItem] = [.recordings, .calendar, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .settings]
         #endif

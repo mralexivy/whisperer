@@ -17,7 +17,7 @@ struct CalendarSettingsRows: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(Array(CalendarAccountProvider.allCases.enumerated()), id: \.element) { index, provider in
+            ForEach(Array(CalendarAccountProvider.available.enumerated()), id: \.element) { index, provider in
                 if index > 0 { divider }
                 accountRows(provider)
             }

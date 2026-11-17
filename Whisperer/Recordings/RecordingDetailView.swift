@@ -346,7 +346,9 @@ struct RecordingDetailView: View {
             if document.hasOriginalVersion { versionSwitch(document) }
             Spacer()
             if searching { searchField }
-            TranscriptPolishBar(meetingID: document.id.uuid, segments: document.segments, compact: false, quiet: true)
+            if MarketPolicy.allows(.connectedCloudAI) {
+                TranscriptPolishBar(meetingID: document.id.uuid, segments: document.segments, compact: false, quiet: true)
+            }
             plainIcon("doc.on.doc", tint: copied ? Color(hex: "22C55E") : nil, help: "Copy transcript") { copyTranscript(document) }
             plainIcon("magnifyingglass", active: searching, help: "Search this transcript") {
                 withAnimation(.easeInOut(duration: 0.15)) { searching.toggle() }

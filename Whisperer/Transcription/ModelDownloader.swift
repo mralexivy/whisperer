@@ -26,7 +26,8 @@ nonisolated enum VADModel: String, CaseIterable {
     var downloadURL: URL {
         switch self {
         case .sileroV6:
-            return URL(string: "https://huggingface.co/ggml-org/whisper-vad/resolve/\(ModelChecksums.vadRevision)/ggml-silero-v6.2.0.bin")!
+            let hf = URL(string: "https://huggingface.co/ggml-org/whisper-vad/resolve/\(ModelChecksums.vadRevision)/ggml-silero-v6.2.0.bin")!
+            return ModelSources.resolve(huggingFaceURL: hf, repo: "ggml-org/whisper-vad", file: "ggml-silero-v6.2.0.bin")
         }
     }
 

@@ -95,6 +95,8 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
     /// CLI adapters need to launch a user-installed binary that reads its own credentials
     /// from the home directory. The App Store sandbox forbids both.
     var isAvailableInThisBuild: Bool {
+        // The market decides first: in mainland China no third-party AI service is offered (MarketPolicy).
+        guard MarketPolicy.allows(kind == .cli ? .cliAIProviders : .connectedCloudAI) else { return false }
         #if APP_STORE
         return kind != .cli
         #else

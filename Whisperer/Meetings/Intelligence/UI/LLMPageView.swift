@@ -99,8 +99,10 @@ struct LLMPageView: View {
 
     private var meetingSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionTitle("MEETING NOTES & ASK AI",
-                         detail: "Choose who writes the title, summary and action items when a meeting ends, and who answers in Ask AI.")
+            sectionTitle(MarketPolicy.allows(.askAIChat) ? "MEETING NOTES & ASK AI" : "MEETING NOTES",
+                         detail: MarketPolicy.allows(.connectedCloudAI)
+                            ? "Choose who writes the title, summary and action items when a meeting ends, and who answers in Ask AI."
+                            : "The title, summary and action items are written privately on this Mac.")
 
             CurrentChoiceBanner(colorScheme: colorScheme,
                                 provider: store.activeProviderID,
@@ -108,10 +110,14 @@ struct LLMPageView: View {
 
             VStack(spacing: 8) {
                 localRow
-                groupLabel("YOUR AI SUBSCRIPTIONS", hint: subscriptionHint)
-                ForEach(orderedSubscriptions) { id in providerRow(id) }
-                groupLabel("API KEYS", hint: "Billed to your own key. Stored in the Keychain on this Mac.")
-                ForEach(controller.apiKeyProviders) { id in providerRow(id) }
+                if !orderedSubscriptions.isEmpty {
+                    groupLabel("YOUR AI SUBSCRIPTIONS", hint: subscriptionHint)
+                    ForEach(orderedSubscriptions) { id in providerRow(id) }
+                }
+                if !controller.apiKeyProviders.isEmpty {
+                    groupLabel("API KEYS", hint: "Billed to your own key. Stored in the Keychain on this Mac.")
+                    ForEach(controller.apiKeyProviders) { id in providerRow(id) }
+                }
             }
         }
     }
@@ -881,7 +887,7 @@ struct DictationPolishCard: View {
                 if appState.llmEnabled {
                     Rectangle().fill(WhispererColors.border(colorScheme)).frame(height: 1)
                     VStack(spacing: 4) {
-                        ForEach(LLMModelVariant.allCases) { variant in modelRow(variant) }
+                        ForEach(LLMModelVariant.available) { variant in modelRow(variant) }
                     }
                     .padding(10)
                     .transition(.move(edge: .top).combined(with: .opacity))

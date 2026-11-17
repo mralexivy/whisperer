@@ -57,6 +57,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Logger.info("Application launched", subsystem: .app)
+        // Which market this is (China edition, App Store storefront, or system region) decides which features exist.
+        MarketMonitor.shared.start()
         // Whisperer Cloud (App Store build, once live): the transaction listener must run from launch.
         if CloudFeature.isAvailable {
             CloudSubscriptionStore.shared.start()
@@ -4421,7 +4423,7 @@ private struct LLMModelPickerView: View {
                 LLMModelListView(selectedModel: $selectedModel, processor: processor, onRetry: onRetry)
             } else {
                 // Processor not yet created — show static list
-                ForEach(LLMModelVariant.allCases) { variant in
+                ForEach(LLMModelVariant.available) { variant in
                     LLMModelRowStatic(variant: variant, isSelected: selectedModel == variant)
                 }
             }
@@ -4439,7 +4441,7 @@ private struct LLMModelListView: View {
     }
 
     var body: some View {
-        ForEach(LLMModelVariant.allCases) { variant in
+        ForEach(LLMModelVariant.available) { variant in
             let isSelected = selectedModel == variant
 
             Button(action: {

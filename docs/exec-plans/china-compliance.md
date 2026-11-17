@@ -1,6 +1,6 @@
 # China mainland compliance — plan
 
-Status: proposal (2026-11-17). Based on Apple's own page and an audit of the code, not on legal summaries.
+Status: implemented (2026-11-17) — China edition + market policy + ModelScope sources. Open items in §9.
 
 ## 1. What Apple asks
 
@@ -57,22 +57,66 @@ Result: answer **No / No** on both forms with Ask AI, cloud AI (including the CL
 
 Open point worth asking Apple (App Review notes or Developer Support), not a lawyer: whether on-device summaries and rewrites count as an "AI service". Their list does not include them.
 
-## 5. Detecting China
+## 5. Design as built
 
-- App Store build: `Storefront.current?.countryCode == "CHN"` (ISO 3166-1 alpha-3; StoreKit, macOS 12+), re-checked on `Storefront.updates`. The storefront is the account's App Store country, so it can differ from the device region.
-- Cache the last value so offline launches behave; **unknown is treated as restricted** for anything that needs a network (cloud AI, sync) — it costs other users nothing because those need a connection anyway.
-- Direct build has no storefront: use the system region (`CN`) as a conservative rule. Apple's forms do not cover that channel.
+### 5.1 Two editions
 
-## 6. Implementation
+| | Regular | China |
+|---|---|---|
+| Xcode configuration | `AppStore` | `AppStoreChina` (clone of `AppStore`, added to all four configuration lists) |
+| Flags | `APP_STORE` | `APP_STORE CHINA_EDITION` |
+| Bundle ID | `com.ivy.whisperer` | `com.ivy.whisperer.cn` |
+| App Store Connect | existing record, China mainland removed from availability | separate record, China mainland only |
+| Gating | runtime, by storefront | fixed at compile time |
 
-1. `RegionPolicy` (`Whisperer/Compliance/`): `Region` (`.chinaMainland`, `.other`, `.unknown`), `RegulatedFeature`, `allows(_:)` with a reason string; injectable `StorefrontProviding`; debug override `WHISPERER_FORCE_REGION=CHN`.
-2. Enforce in layers: UI hides the entry points with a plain "not available in your region" note; services refuse before building a prompt (`ConnectedAIStore.availableProviders/activeProviderID`, `MeetingAIService.ask`); stored provider, consent and keys stay dormant in China and return when the storefront changes.
-3. Ask AI tab removed in the China profile; meeting notes keep the local Qwen title/overview.
-4. Direct build: also gate rewrite-selection, Command Mode, CLI providers, Privacy Shield by region (MCP stays: it is local).
-5. Tests: with a simulated CHN storefront, every `RegulatedFeature` entry point is closed; a grep test fails if a regulated service is referenced outside the policy.
-6. Hide Google sign-in in China (unreachable there); keep Apple Calendar and Microsoft.
-7. **Model delivery**: huggingface.co is unreliable from mainland China and the code has no mirror. Options: Apple-hosted Background Assets, or our own CDN. Needs its own plan; without it a China user cannot download a model.
-8. Default engine for China: Qwen3-ASR is already built in. Choose it as the China default only after a Chinese-accuracy benchmark against Whisper Large V3 Turbo and Apple Speech.
-9. zh-Hans strings for the notices and the China App Store listing.
-10. App Store Connect: complete both forms (No / No) before the next submission, with review notes explaining the storefront geoblock and screenshots of the China behaviour. Existing app: before 2027-01-31.
-11. If the business later wants Ask AI in China: it needs an approved filing number and an authorization from the model's owner. That is a separate project, not a code change.
+A separate record is needed because App Store Connect cannot ship different binaries per territory within one record. The China record answers both Apple forms **No** (features disabled in the build); the regular record is not sold in China. The direct (website) build follows the system region at runtime. The submission skill (`.claude/skills/submission-prep`) archives both editions every time and checks the marker string `whisperer-edition=china-mainland` (present only in the China binary).
+
+### 5.2 Market detection (`Whisperer/Compliance/MarketPolicy.swift`)
+
+- `Market`: `.chinaMainland`, `.other`, `.unknown`. `MarketPolicy.current` is a lock-protected value readable from any thread; `MarketMonitor` (main actor) updates it.
+- App Store build: `Storefront.current?.countryCode == "CHN"` (alpha-3), re-read on `Storefront.updates`. Hong Kong (`HKG`), Macau and Taiwan are `.other`. Last value cached for offline launches.
+- Direct build: system region `CN`. China edition: always `.chinaMainland`.
+- `unknown` is treated as restricted only for features that need a network (`ComplianceFeature.needsNetwork`), so offline users lose nothing they could have used.
+- Debug only: `WHISPERER_FORCE_MARKET=china|other`, `MarketPolicy.testOverride`.
+
+### 5.3 What is closed in China (`ComplianceFeature`)
+
+`askAIChat` (Ask AI tab and `MeetingAIService.ask`), `connectedCloudAI` (provider list, active provider, "Polish with AI" bar), `cliAIProviders`, `commandMode`, `voiceReshaping` (Privacy Shield `start()`), `cloudSync` (`CloudFeature`), `googleCalendar` (`CalendarAccountProvider.available`). Stored provider choices and consent stay dormant and return when the market is not China. **Kept:** MCP, transcription, Fast Polish, local Qwen titles/overviews.
+
+The LLM page hides empty provider groups and is titled "Meeting notes" when Ask AI and cloud are closed.
+
+### 5.4 Model sources (`Whisperer/Transcription/ModelSources.swift`)
+
+Hugging Face is unreliable from mainland China. In China the app downloads from ModelScope (modelscope.cn):
+
+| Model | Source in China |
+|---|---|
+| whisper.cpp base / small / medium / large-v3 / large-v3-q5_0 (default) | `cjc1887415157/whisper.cpp` — SHA-256 equal to the pins in `ModelChecksums.swift` |
+| Silero VAD | `ggml-org/whisper-vad` |
+| Qwen3-ASR-1.7B-8bit, Qwen2.5-1.5B, Qwen3.5-2B/4B/9B (MLX) | same repo id under `mlx-community/…` |
+| ggml turbo, turbo-q5, distil, ivrit; Parakeet; Nemotron; speaker model; MTP LLM; Whisperer V3 LLM; `whisperer-polish`; WhisperKit | **not on ModelScope** — hidden in China (see §9) |
+
+`ModelScopeFetcher` downloads a repo snapshot into the directory the existing loaders read, verifying each file's Size and SHA-256 from ModelScope's listing, and skips files already present. **China is built around Qwen**: the default engine is Qwen3-ASR (Whisper stays selectable, with large-v3-q5 as its default model there) and the default text model is Qwen3.5-4B (the MTP build when reachable). Meetings still run without the speaker and cleanup models.
+
+`scripts/verify-china-models.sh` checks every row above (reachability and checksums) and is part of the submission skill.
+
+## 6. Tests
+
+`MarketPolicyTests` (storefront mapping, every feature closed in China and open elsewhere, unknown market, providers and Ask AI disappear including stored consent, Cloud and Google closed) and `ModelSourcesTests` (host choice, URL mapping, listing parser, an opt-in real ModelScope download with `TEST_RUNNER_NETWORK_TESTS=1`).
+
+## 7. Verified
+
+- `xcodebuild -configuration AppStoreChina`: builds, bundle id `com.ivy.whisperer.cn`, flags `APP_STORE CHINA_EDITION`, marker string present only in this binary.
+- ModelScope sources: `scripts/verify-china-models.sh` all good (2026-11-17).
+
+## 8. If the business later wants Ask AI in China
+
+It needs an approved filing number and an authorization from the model's owner naming us. That is a separate project, not a code change.
+
+## 9. Open items
+
+1. **Missing models in China.** Parakeet, Nemotron, the speaker model, the MTP LLM, Whisperer V3 LLM, `whisperer-polish`, ggml turbo/distil/ivrit have no ModelScope copy. Publish them under our own ModelScope repo (`mralexivy/whisperer-models`, list the files in `ModelSources.ownFiles`) or leave them hidden. Needs a ModelScope account.
+2. **Chinese accuracy.** Qwen3-ASR is the China default by decision; still worth a benchmark against Whisper large-v3-q5 on our Chinese corpus.
+3. **Manual App Store Connect steps** (skill Step 14): App ID and second record, availability, forms, IAP re-creation, zh-Hans metadata.
+4. **Apple's view on on-device summaries.** Not in Apple's trigger list; if App Review objects, the local title/overview is one flag away.
+5. Background Assets (Apple-hosted) as a later alternative to ModelScope.

@@ -94,6 +94,8 @@ final class PolishModelManager: ObservableObject {
     /// If a model is already installed, silently checks for a newer version in the background.
     func start() {
         guard task == nil else { return }
+        // The tagger is hosted on Hugging Face only; where that is not reachable Fast Polish runs on its rules.
+        guard isInstalled || ModelSources.isReachable(repo: Self.repo) else { return }
         if isInstalled {
             phase = .ready
             progress = 1

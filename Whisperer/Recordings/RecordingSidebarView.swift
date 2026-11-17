@@ -16,11 +16,14 @@ enum RecordingSidebarTab: String, CaseIterable, Identifiable {
 
 enum RecordingSidebarPolicy {
     static func tabs(for kind: RecordingKind) -> [RecordingSidebarTab] {
+        let all: [RecordingSidebarTab]
         switch kind {
-        case .dictation: return [.details, .askAI]
-        case .meeting: return [.askAI, .notes, .people]
-        case .file: return [.askAI, .notes]
+        case .dictation: all = [.details, .askAI]
+        case .meeting: all = [.askAI, .notes, .people]
+        case .file: all = [.askAI, .notes]
         }
+        // Ask AI is an AI chatbot: not offered in markets that restrict it (MarketPolicy).
+        return MarketPolicy.allows(.askAIChat) ? all : all.filter { $0 != .askAI }
     }
 
     static func defaultTab(for kind: RecordingKind) -> RecordingSidebarTab { tabs(for: kind)[0] }

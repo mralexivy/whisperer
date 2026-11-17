@@ -28,7 +28,7 @@ nonisolated enum CloudFeature {
         #if DEBUG
         if let forced = testOverride { return forced }
         #endif
-        return isStoreBuild && isLive
+        return isStoreBuild && isLive && MarketPolicy.allows(.cloudSync)
     }
 
     #if DEBUG

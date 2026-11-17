@@ -159,7 +159,7 @@ struct CalendarPageView: View {
                          subtitle: connected ? "Add another account any time — events from all of them are merged."
                                              : "Pick where your meetings live. Access is read-only.")
             VStack(spacing: 10) {
-                ForEach(CalendarAccountProvider.allCases, id: \.self) { provider in
+                ForEach(CalendarAccountProvider.available, id: \.self) { provider in
                     providerCard(provider)
                 }
             }

@@ -52,6 +52,17 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Whether the weights can be downloaded in this market (`ModelSources`).
+    var isAvailableInThisMarket: Bool { ModelSources.isReachable(repo: huggingFaceId) }
+
+    /// The variants this market offers.
+    static var available: [LLMModelVariant] { allCases.filter(\.isAvailableInThisMarket) }
+
+    /// The default LLM: the recommended MTP build, or the plain 4B where only that one can be downloaded.
+    static var marketDefault: LLMModelVariant {
+        qwen3_5_4B_mtp.isAvailableInThisMarket ? .qwen3_5_4B_mtp : (qwen3_5_4B.isAvailableInThisMarket ? .qwen3_5_4B : available.first ?? .qwen3_5_4B_mtp)
+    }
+
     var isRecommended: Bool {
         self == .qwen3_5_4B_mtp
     }

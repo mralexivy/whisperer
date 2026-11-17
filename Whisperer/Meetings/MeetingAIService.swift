@@ -145,6 +145,10 @@ actor MeetingAIService {
     func ask(question: String, meetingID: UUID, segments: [MeetingSegment],
              history: [(question: String, answer: String)] = [],
              onPartial: (@Sendable (String) -> Void)? = nil) async -> RAGAnswer {
+        // Defence in depth: the UI hides Ask AI in restricted markets; the service refuses too.
+        guard MarketPolicy.allows(.askAIChat) else {
+            return RAGAnswer(text: "Ask AI isn't available in your region.", sources: [], usedRAG: false)
+        }
         guard !question.isEmpty else {
             return RAGAnswer(text: "Please enter a question.", sources: [], usedRAG: false)
         }

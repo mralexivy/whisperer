@@ -121,6 +121,7 @@ final class MeetingDiarizerService: ObservableObject {
     /// Downloads the model if absent. Idempotent and safe to call on every launch —
     /// a cache hit resolves synchronously without touching the network.
     func prefetch() {
+        guard ModelSources.isReachable(repo: "FluidInference/nemotron-3-diarization-coreml") else { return }
         if AppEnvironment.isRunningTests { return }
         guard prefetchTask == nil else { return }
         if Self.isModelCached() {

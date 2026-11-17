@@ -36,13 +36,25 @@ nonisolated enum BackendType: String, CaseIterable, Identifiable {
     /// Not Nemotron either. It was the default from 2026-11-03 for its streaming live text; that
     /// job now belongs to the built-in engine, which needs no download and runs beside the user's
     /// engine instead of competing with it.
-    static var defaultBackend: BackendType { .whisperCpp }
+    static var defaultBackend: BackendType {
+        // Mainland China: the app is built around Qwen (Alibaba) — Qwen3-ASR for speech, Qwen for text — which is
+        // strong on Chinese and reachable from ModelScope. Whisper stays selectable.
+        MarketPolicy.current == .chinaMainland ? .qwen3asr : .whisperCpp
+    }
 
     /// The engines a user can pick. Excludes the built-in engine, the Hebrew sub-backend and
     /// Apple Speech — Apple's on-device recognizer already runs for every engine as the live
     /// preview, so offering it again as an engine of its own only duplicated it.
     static var selectable: [BackendType] {
-        allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew && $0 != .speechAnalyzer }
+        allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew && $0 != .speechAnalyzer && $0.isOfferedInThisMarket }
+    }
+
+    /// Parakeet and WhisperKit download from Hugging Face only; where that is not the host they are not offered.
+    var isOfferedInThisMarket: Bool {
+        switch self {
+        case .parakeet, .whisperKit: return ModelSources.host == .huggingFace
+        default: return true
+        }
     }
 
     var displayName: String {

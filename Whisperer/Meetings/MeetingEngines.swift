@@ -20,6 +20,15 @@ import MLXLMCommon
 enum MeetingEngine: CaseIterable {
     case speech, cleanup, intelligence, speakers
 
+    /// Whether this engine's weights can be downloaded in this market. The speaker model is hosted on Hugging Face
+    /// only; where that is not reachable (mainland China until it is on ModelScope) meetings run without it.
+    var isAvailableInThisMarket: Bool {
+        switch self {
+        case .speakers: return ModelSources.isReachable(repo: "FluidInference/nemotron-3-diarization-coreml")
+        default: return true
+        }
+    }
+
     /// User-visible role label. Never use raw model display names for these —
     /// both "Whisperer V3" LLM variant and "Whisperer V3" Whisper model share
     /// that display string and would be confusing unqualified.
@@ -62,6 +71,7 @@ enum MeetingEngine: CaseIterable {
 
     /// Byte size used for weighted progress calculation.
     var downloadBytes: Double {
+        guard isAvailableInThisMarket else { return 0 }
         switch self {
         case .speech:       return MeetingEngines.speechEngineIsQwen3 ? 2_500_000_000 : 547_000_000
         case .cleanup:
@@ -100,7 +110,7 @@ final class MeetingEngines: ObservableObject {
     /// Model behind the `.intelligence` engine (title, overview, Ask AI). Reverting a quality
     /// regression is a one-line change here. Keep `downloadSizeLabel` / `downloadBytes` in sync
     /// — `MeetingPrepView`'s progress rail is weighted by those.
-    static let intelligenceVariant: LLMModelVariant = .qwen3_5_4B_mtp
+    static var intelligenceVariant: LLMModelVariant { LLMModelVariant.marketDefault }
 
     /// True when the `.speech` engine resolves to Qwen3. A meeting transcribes with the engine
     /// the user dictates with (`AppState.prepareMeetingASRBridge()`), so this is Qwen3 exactly
@@ -183,8 +193,9 @@ final class MeetingEngines: ObservableObject {
 
     /// True when any engine is not `.ready`.
     var needsPreparation: Bool {
-        readiness.values.contains {
-            if case .ready = $0 { return false }
+        readiness.contains { engine, state in
+            guard engine.isAvailableInThisMarket else { return false }
+            if case .ready = state { return false }
             return true
         }
     }
@@ -233,7 +244,7 @@ final class MeetingEngines: ObservableObject {
     /// — there is no cleanup to prepare, so `.cleanup` reports ready with nothing downloaded.
     static func cleanupModelSet() -> [WhisperModel] {
         RefineModelTable.modelsForCurrentConfig(
-            liveEngine: speechEngineIsQwen3 ? .qwen3asr : .whisperCpp)
+            liveEngine: speechEngineIsQwen3 ? .qwen3asr : .whisperCpp).filter(\.isAvailableInThisMarket)
     }
 
     // MARK: - Readiness checks

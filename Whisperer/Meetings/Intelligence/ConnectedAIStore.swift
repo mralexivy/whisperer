@@ -16,6 +16,7 @@ import Foundation
 @MainActor
 final class ConnectedAIStore: ObservableObject {
     static let shared = ConnectedAIStore()
+    private var marketObserver: AnyCancellable?
 
     // MARK: Keys
 
@@ -57,6 +58,8 @@ final class ConnectedAIStore: ObservableObject {
         selectedProvider = defaults.string(forKey: Key.provider).flatMap(AIProviderID.init(rawValue:))
         keepLocalOnly = defaults.bool(forKey: Key.keepLocal)
         consented = Set((defaults.stringArray(forKey: Key.consent) ?? []).compactMap(AIProviderID.init(rawValue:)))
+        // The available providers depend on the market, which can change (the storefront is read after launch).
+        marketObserver = MarketMonitor.shared.$market.dropFirst().sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     // MARK: Availability

@@ -34,6 +34,11 @@ nonisolated final class Qwen3ASREngine {
     }
 
     static func download(progress: @escaping @Sendable (Double) -> Void) async throws {
+        if ModelSources.host == .modelScope {
+            try await ModelScopeFetcher.snapshot(repo: ModelSources.modelScopeRepo(for: repoId) ?? repoId, globs: downloadGlobs,
+                                                 into: modelDirectory(), progress: progress)
+            return
+        }
         _ = try await HubApi().snapshot(from: repoId, matching: downloadGlobs) { p in
             progress(p.fractionCompleted)
         }

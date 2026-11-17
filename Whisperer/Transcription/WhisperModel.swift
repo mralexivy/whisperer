@@ -198,10 +198,25 @@ nonisolated enum WhisperModel: String, CaseIterable, Identifiable {
 
     /// The models the Models tab lists up front: the default, the Hebrew fine-tune and
     /// full-precision Turbo. The rest of `displayOrder` sits behind "More models".
-    static let primaryOrder: [WhisperModel] = [.largeTurboQ5, .ivritLargeTurbo, .largeTurbo]
+    static var primaryOrder: [WhisperModel] {
+        let wanted = [WhisperModel.largeTurboQ5, .ivritLargeTurbo, .largeTurbo].filter(\.isAvailableInThisMarket)
+        // Where none of the usual three can be downloaded (mainland China until they are on ModelScope) offer what can.
+        return wanted.isEmpty ? [.largeV3Q5, .small, .base].filter(\.isAvailableInThisMarket) : wanted
+    }
+
+    /// Whether this model can be downloaded in the current market (`ModelSources`).
+    var isAvailableInThisMarket: Bool {
+        switch self {
+        case .distilLargeV3: return ModelSources.isReachable(repo: "distil-whisper/distil-large-v3-ggml", file: rawValue)
+        case .distilSmallEn: return ModelSources.isReachable(repo: "dharmab/distill-whisper-ggml", file: rawValue)
+        case .ivritLargeTurbo: return ModelSources.isReachable(repo: "ivrit-ai/whisper-large-v3-turbo-ggml", file: rawValue)
+        default: return ModelSources.isReachable(repo: ModelSources.whisperCppRepo, file: rawValue)
+        }
+    }
 
     /// Display order with recommended model first
-    static let displayOrder: [WhisperModel] = [
+    static var displayOrder: [WhisperModel] { allDisplayOrder.filter(\.isAvailableInThisMarket) }
+    private static let allDisplayOrder: [WhisperModel] = [
         .largeTurboQ5, .largeTurbo, .ivritLargeTurbo, .largeV3Q5,
         .distilLargeV3, .distilSmallEn,
         .tiny, .base, .small, .medium, .largeV3,
@@ -299,7 +314,8 @@ nonisolated enum WhisperModel: String, CaseIterable, Identifiable {
             return URL(string: "https://huggingface.co/ivrit-ai/whisper-large-v3-turbo-ggml/resolve/\(ModelChecksums.ivritRevision)/ggml-model.bin")!
         default:
             // Standard models from ggerganov/whisper.cpp
-            return URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/\(ModelChecksums.whisperCppRevision)/\(rawValue)")!
+            let hf = URL(string: "https://huggingface.co/ggerganov/whisper.cpp/resolve/\(ModelChecksums.whisperCppRevision)/\(rawValue)")!
+            return ModelSources.resolve(huggingFaceURL: hf, repo: ModelSources.whisperCppRepo, file: rawValue)
         }
     }
 

@@ -194,6 +194,10 @@ final class PrivacyShieldController {
         #if APP_STORE
         snapshot.message = "Privacy Shield requires the direct-download build."
         #else
+        guard MarketPolicy.allows(.voiceReshaping) else {
+            snapshot.message = "Privacy Shield isn't available in your region."
+            return
+        }
         guard !requested, !changingMode, !AppState.shared.privacyShieldInstallerBusy, snapshot.phase != .stopping else { return }
         let app = AppState.shared
         guard app.state == .idle, app.activeMeetingSession == nil, app.pendingMeetingStarts == 0 else {
