@@ -2,37 +2,39 @@
 //  RecordingKindBadge.swift
 //  Whisperer
 //
-//  The icon that says what a recording is, at a glance: a dictation, a meeting or call, an imported file. A
-//  lit glass tile with a white glyph, one colour per kind — the same blue, cyan and purple, and the same
-//  symbols, the old Transcriptions, Meeting Notes and File Transcription pages had.
+//  The icon that says what a recording is, at a glance: a dictation, a meeting or call, an imported file. A tile
+//  on the navy surface with a wash and hairline of its own colour and a glyph in that colour, one colour per kind, all three
+//  from the design system's palette (DESIGN.md): the brand blue-to-purple for dictation (the app icon's waveform), success
+//  green for meetings, warning amber for files.
 //
 
 import SwiftUI
 
 extension RecordingKind {
+    /// The kind's colour: used for the tile, and for the word in the list row.
     var tint: Color {
         switch self {
         case .dictation: return WhispererColors.accentBlue
-        case .meeting: return Color(hex: "06B6D4")
-        case .file: return WhispererColors.accentPurple
+        case .meeting: return Color(hex: "10B981")
+        case .file: return Color(hex: "F59E0B")
         }
     }
 
-    /// The lighter and deeper ends of the tile's gradient.
-    var tileColors: (top: Color, bottom: Color) {
+    /// The brighter end of the glyph's gradient.
+    var tintLight: Color {
         switch self {
-        case .dictation: return (Color(hex: "7C8BFF"), Color(hex: "4553E0"))
-        case .meeting: return (Color(hex: "3DD9EE"), Color(hex: "0A8FB0"))
-        case .file: return (Color(hex: "A98BFF"), Color(hex: "6D3DE0"))
+        case .dictation: return WhispererColors.accentPurple
+        case .meeting: return Color(hex: "34D399")
+        case .file: return Color(hex: "FBBF24")
         }
     }
 
-    /// The symbols the old Transcriptions, Meeting Notes and File Transcription pages used.
+    /// A waveform (the app's own mark), two people, a document.
     var badgeSymbol: String {
         switch self {
-        case .dictation: return "waveform.and.mic"
-        case .meeting: return "person.2.wave.2.fill"
-        case .file: return "doc.text.magnifyingglass"
+        case .dictation: return "waveform"
+        case .meeting: return "person.2.fill"
+        case .file: return "doc.text.fill"
         }
     }
 
@@ -51,21 +53,19 @@ struct RecordingKindBadge: View {
     var selected = false
 
     var body: some View {
-        let colors = kind.tileColors
-        let shape = RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
         ZStack {
-            shape.fill(LinearGradient(colors: [colors.top, colors.bottom], startPoint: .top, endPoint: .bottom))
-            // The light catching the top edge: what makes the tile read as glass rather than a flat colour.
-            shape.fill(LinearGradient(colors: [Color.white.opacity(0.32), Color.white.opacity(0)], startPoint: .top, endPoint: .center))
-            shape.strokeBorder(LinearGradient(colors: [Color.white.opacity(0.55), Color.white.opacity(0.06)], startPoint: .top, endPoint: .bottom), lineWidth: 0.8)
+            shape.fill(Color(hex: "14142B"))
+            shape.fill(LinearGradient(colors: [kind.tint.opacity(selected ? 0.30 : 0.22), kind.tint.opacity(0.05)],
+                                      startPoint: .topLeading, endPoint: .bottomTrailing))
+            shape.stroke(LinearGradient(colors: [kind.tint.opacity(selected ? 0.75 : 0.45), kind.tint.opacity(0.12)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
             Image(systemName: kind.badgeSymbol)
-                .font(.system(size: size * 0.44, weight: .semibold))
-                .foregroundColor(.white)
-                .shadow(color: colors.bottom.opacity(0.55), radius: 1.2, y: 0.8)
+                .font(.system(size: size * 0.42, weight: .medium))
+                .foregroundStyle(LinearGradient(colors: [kind.tintLight, kind.tint], startPoint: .topLeading, endPoint: .bottomTrailing))
         }
         .frame(width: size, height: size)
-        .shadow(color: colors.bottom.opacity(selected ? 0.55 : 0.32), radius: selected ? 9 : 5, y: 2)
-        .opacity(selected ? 1 : 0.94)
+        .shadow(color: kind.tint.opacity(selected ? 0.28 : 0), radius: 7, y: 1)
         .accessibilityHidden(true)
     }
 }
