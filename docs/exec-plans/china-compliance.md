@@ -120,3 +120,10 @@ It needs an approved filing number and an authorization from the model's owner n
 3. **Manual App Store Connect steps** (skill Step 14): App ID and second record, availability, forms, IAP re-creation, zh-Hans metadata.
 4. **Apple's view on on-device summaries.** Not in Apple's trigger list; if App Review objects, the local title/overview is one flag away.
 5. Background Assets (Apple-hosted) as a later alternative to ModelScope.
+
+## 10. Submission log
+
+- **2026-11-17: "Whisperer China" (`com.ivy.whisperer.cn`, app `6835744579`) submitted to App Review**, version 2.0 build 7, with the Pro purchase `com.ivy.whisperer.propack` ($14.99; app $4.99). Both China forms saved as **No**. App Privacy: Data Not Collected. Availability: China mainland only. The regular app (`6758626671`) no longer lists China mainland.
+- Basis for "No" on AIGC: no chat, no image/video, no voice or face alteration, no free-form prompts. The only generated text is a meeting title and short overview from the on-device Qwen (disclosed in the review notes). If App Review objects, the single switch is the meeting-summary feature (`MeetingAIService`, gated by `ProAccess`/`MarketPolicy`).
+- Not done: the **ICP Filing Number** block on App Compliance (Apple shows it as "if you have one"); ask Apple if a number is required for this app.
+- The first China archive (build 1) wrongly embedded the Privacy Shield driver (`embed-driver.sh` only knew `AppStore`); fixed, build 1 and 2 expired. The submission skill now asserts no driver in either archive.
