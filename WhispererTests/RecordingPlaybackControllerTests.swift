@@ -146,7 +146,7 @@ final class RecordingPlaybackControllerTests: XCTestCase {
 
 final class RecordingSidebarPolicyTests: XCTestCase {
     func testTabsAndDefaultsPerKind() {
-        XCTAssertEqual(RecordingSidebarPolicy.tabs(for: .dictation), [.details, .askAI])
+        XCTAssertEqual(RecordingSidebarPolicy.tabs(for: .dictation), [.details])
         XCTAssertEqual(RecordingSidebarPolicy.defaultTab(for: .dictation), .details)
         XCTAssertEqual(RecordingSidebarPolicy.tabs(for: .meeting), [.askAI, .notes, .people])
         XCTAssertEqual(RecordingSidebarPolicy.tabs(for: .file), [.askAI, .notes])

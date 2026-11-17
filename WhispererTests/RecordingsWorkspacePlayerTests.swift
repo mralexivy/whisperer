@@ -155,7 +155,7 @@ final class RecordingsWorkspacePlayerTests: XCTestCase {
         for detailTab in ["transcript", "overview"] {
             try click("recordings.tab.\(detailTab)")
             for sidebarTab in sidebarTabs {
-                try click("recordings.sidebar.tab.\(sidebarTab)")
+                if sidebarTabs.count > 1 { try click("recordings.sidebar.tab.\(sidebarTab)") }  // a lone tab has no strip
                 let context = "\(kind) \(detailTab) × \(sidebarTab)"
                 assertOnePlayer(expecting: "full", context)
                 position = assertSameSession(since: position, context)
@@ -173,7 +173,7 @@ final class RecordingsWorkspacePlayerTests: XCTestCase {
     }
 
     func testDictationAllFourCombinationsKeepOneFullPlayerAndOneSession() throws {
-        try runCombinations(kind: .dictation, sidebarTabs: ["details", "askai"])
+        try runCombinations(kind: .dictation, sidebarTabs: ["details"])
     }
 
     // MARK: Layout changes

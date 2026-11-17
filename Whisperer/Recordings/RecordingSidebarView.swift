@@ -18,7 +18,8 @@ enum RecordingSidebarPolicy {
     static func tabs(for kind: RecordingKind) -> [RecordingSidebarTab] {
         let all: [RecordingSidebarTab]
         switch kind {
-        case .dictation: all = [.details, .askAI]
+        // A dictation is a few lines: too little context for a useful chat. Its AI is the opt-in Polish in Details.
+        case .dictation: all = [.details]
         case .meeting: all = [.askAI, .notes, .people]
         case .file: all = [.askAI, .notes]
         }
@@ -85,7 +86,7 @@ struct RecordingSidebarView: View {
                 RecordingPlayerView(controller: playback, style: .full)
                     .padding(.horizontal, 16).padding(.bottom, 14)
             }
-            tabStrip
+            if tabs.count > 1 { tabStrip }
             Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
             content
         }
@@ -275,7 +276,27 @@ private struct DictationDetailsPane: View {
                 Text("Original wording").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
                 Text("Your words, exactly as transcribed.").font(.system(size: 12)).foregroundColor(Color.white.opacity(0.4))
             }
+            // Fast Polish is on by default, so nearly every dictation has an "enhancement"; the AI polish is a separate, optional step.
+            if MarketPolicy.allows(.connectedCloudAI) { polishCard }
         }
+    }
+
+    /// Optional and never automatic: the AI touches a dictation only when the user asks, and the original is kept.
+    private var polishCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles").font(.system(size: 12, weight: .semibold)).foregroundColor(WhispererColors.accentPurple)
+                Text("Polish with AI").font(.system(size: 13, weight: .semibold)).foregroundColor(.white)
+            }
+            Text("Fixes misheard words, punctuation and fillers in this dictation. Only when you ask. Your original is kept and Undo restores it.")
+                .font(.system(size: 11.5)).foregroundColor(Color.white.opacity(0.5)).fixedSize(horizontal: false, vertical: true)
+            TranscriptPolishBar(meetingID: document.id.uuid, segments: document.segments, compact: false)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(WhispererColors.accentPurple.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(WhispererColors.accentPurple.opacity(0.22), lineWidth: 1))
+        .padding(.top, 4)
     }
 
     private func copy() {

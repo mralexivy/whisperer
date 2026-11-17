@@ -16,7 +16,7 @@ import Foundation
 import SwiftUI
 
 nonisolated enum RecordingKindFilter: String, CaseIterable, Identifiable, Sendable {
-    case all = "All", meetings = "Meetings", dictation = "Dictation", files = "Files"
+    case all = "All", dictation = "Dictation", meetings = "Meetings", files = "Files"
     var id: String { rawValue }
 
     func includes(_ kind: RecordingKind) -> Bool {

@@ -16,6 +16,15 @@ final class ProPurchaseFlowTests: XCTestCase {
         session.clearTransactions()
     }
 
+    /// The simulated store publishes a new transaction a moment after `buyProduct` returns; give it up to 5 s.
+    private func readEntitlement(_ store: StoreManager) async {
+        for _ in 0..<50 {
+            await readEntitlement(store)
+            if store.isPro { return }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+    }
+
     override func setUp() async throws {
         ProAccess.testSellsPro = true            // behave like the Mac App Store build
         ProAccess.testOverride = nil
@@ -27,6 +36,8 @@ final class ProPurchaseFlowTests: XCTestCase {
         ProAccess.testSellsPro = false
         ProAccess.testOverride = nil
         session?.clearTransactions()
+        // A transaction the store was still announcing must not land in the next test.
+        try? await Task.sleep(nanoseconds: 400_000_000)
         UserDefaults.standard.removeObject(forKey: StoreManager.proStatusKey)
         StoreManager.shared.isPro = false
     }
@@ -43,7 +54,7 @@ final class ProPurchaseFlowTests: XCTestCase {
         // The system purchase sheet cannot be shown from a test; the simulated store completes the purchase and the app
         // must recognise the transaction it finds.
         _ = try await session.buyProduct(identifier: "com.ivy.whisperer.pro")
-        await store.checkPurchased()
+        await readEntitlement(store)
 
         XCTAssertTrue(store.isPro)
         for feature in ProFeature.allCases { XCTAssertTrue(ProAccess.allows(feature), "\(feature) must open after purchase") }
@@ -60,7 +71,7 @@ final class ProPurchaseFlowTests: XCTestCase {
         store.isPro = false
         XCTAssertFalse(ProAccess.isPro)
 
-        await store.checkPurchased()
+        await readEntitlement(store)
 
         XCTAssertTrue(store.isPro)
         XCTAssertTrue(ProAccess.isPro)
