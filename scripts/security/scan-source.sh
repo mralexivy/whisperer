@@ -24,7 +24,7 @@ antidbg=$(grep -rEn 'PT_DENY_ATTACH|ptrace\(|sysctl.*P_TRACED' Whisperer --inclu
 plutil -lint Whisperer/PrivacyInfo.xcprivacy >/dev/null 2>&1 || report "privacy manifest is not a valid plist" ""
 
 # Shipping configs must be optimized (unset = -Onone).
-for cfg in Release AppStore; do
+for cfg in Release AppStore AppStoreChina; do
   lvl=$(xcodebuild -project Whisperer.xcodeproj -scheme whisperer -configuration "$cfg" -showBuildSettings 2>/dev/null | awk -F' = ' '/ SWIFT_OPTIMIZATION_LEVEL /{print $2; exit}')
   [ "$lvl" = "-O" ] || report "$cfg builds with SWIFT_OPTIMIZATION_LEVEL='$lvl' (want -O)" ""
 done

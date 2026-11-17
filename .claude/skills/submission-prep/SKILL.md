@@ -132,6 +132,17 @@ REG=build/whisperer.xcarchive/Products/Applications/whisperer.app
 /usr/bin/strings "$CN/Contents/MacOS/whisperer"  | grep -c "whisperer-edition=china-mainland"   # 1
 /usr/bin/strings "$REG/Contents/MacOS/whisperer" | grep -c "whisperer-edition=china-mainland"   # 0
 ```
+Neither archive may contain the Privacy Shield audio driver (voice alteration is not offered in the App Store builds, and never in China):
+```bash
+for A in build/whisperer.xcarchive build/whisperer-china.xcarchive; do
+  find "$A" -iname "*.driver" -o -name "install-driver.sh" -o -iname "PrivacyShield" | grep . && echo "STOP: driver in $A"
+done                                  # must print nothing
+scripts/security/audit-app.sh build/whisperer.xcarchive/Products/Applications/whisperer.app --app-store
+scripts/security/audit-app.sh build/whisperer-china.xcarchive/Products/Applications/whisperer.app --app-store
+scripts/security/scan-source.sh
+```
+(History: the first China archive on 2026-11-17 contained the driver because `Tools/privacy-shield/embed-driver.sh` only knew the `AppStore` configuration name. Any script that branches on the configuration name must treat `AppStoreChina` like `AppStore`.)
+
 Any other result: stop. The marker string exists only when `CHINA_EDITION` is compiled in, so it proves which edition a binary is. Both archives must carry the same `CFBundleShortVersionString` / `CFBundleVersion`.
 
 Model sources for the China edition (needs network access to modelscope.cn):
@@ -181,6 +192,7 @@ Do once when the China record does not exist, and re-check every release. Only t
 
 ### Build Fails
 - Check Xcode command line tools: `xcode-select -p`; use `export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
+- Export asks for an Apple Account (not signed in on this Mac): add `-allowProvisioningUpdates -authenticationKeyPath "$ASC_KEY_PATH" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID"` after `set -a; . ~/.appstoreconnect/env; set +a` (never print them)
 - Project uses automatic signing — do not pass `CODE_SIGN_IDENTITY`
 
 ### Archive Fails

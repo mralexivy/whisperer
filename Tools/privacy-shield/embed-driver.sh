@@ -9,7 +9,8 @@ case "$DEST" in
   */whisperer.app/Contents/Resources/PrivacyShield) ;;
   *) echo 'Unexpected driver resource destination' >&2; exit 1 ;;
 esac
-if [[ ${CONFIGURATION:-} == AppStore ]]; then
+# Both App Store editions ship without the driver (voice alteration is not offered in the China edition at all).
+if [[ ${CONFIGURATION:-} == AppStore || ${CONFIGURATION:-} == AppStoreChina ]]; then
   rm -rf "$DEST"
   exit 0
 fi
