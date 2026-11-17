@@ -48,26 +48,27 @@ Note: "Whisperer V3" is two different things (a Whisper large-v3-turbo-Q5 transc
 | Meeting title, overview, local summary, local polish (Qwen) | no (text rewriting, not chat/image/video/voice) | **keep** — Qwen becomes the only LLM |
 | **Ask AI** | **yes: it is an AI chatbot** | **off** |
 | Cloud providers (OpenAI, Anthropic, Gemini, ChatGPT) | third-party AI + foreign servers | **off** |
-| Claude Code / Codex / Antigravity, MCP server and installer, Command Mode | foreign AI tooling | **off** |
+| Claude Code / Codex / Antigravity **as AI providers** (they send meeting text to a foreign cloud), Command Mode | foreign cloud AI / terminal agent | **off** |
+| **MCP server and its connect page** | no: it is local, our data never leaves the Mac, and any client (Chinese ones too) can connect | **keep** |
 | Privacy Shield (voice reshaping) | yes: voice alteration | **not shipped** (already direct-only; stays out of the China build entirely) |
 | Whisperer Cloud (E2E sync) | not messaging, but data leaves China | stays off (`isLive = false`) |
 
-Result: answer **No / No** on both forms with Ask AI, cloud AI, coding-tool integrations, MCP and voice reshaping disabled by region.
+Result: answer **No / No** on both forms with Ask AI, cloud AI (including the CLI providers) and voice reshaping disabled by region. MCP stays.
 
 Open point worth asking Apple (App Review notes or Developer Support), not a lawyer: whether on-device summaries and rewrites count as an "AI service". Their list does not include them.
 
 ## 5. Detecting China
 
 - App Store build: `Storefront.current?.countryCode == "CHN"` (ISO 3166-1 alpha-3; StoreKit, macOS 12+), re-checked on `Storefront.updates`. The storefront is the account's App Store country, so it can differ from the device region.
-- Cache the last value so offline launches behave; **unknown is treated as restricted** for anything that needs a network (cloud AI, MCP, sync) — it costs other users nothing because those need a connection anyway.
+- Cache the last value so offline launches behave; **unknown is treated as restricted** for anything that needs a network (cloud AI, sync) — it costs other users nothing because those need a connection anyway.
 - Direct build has no storefront: use the system region (`CN`) as a conservative rule. Apple's forms do not cover that channel.
 
 ## 6. Implementation
 
 1. `RegionPolicy` (`Whisperer/Compliance/`): `Region` (`.chinaMainland`, `.other`, `.unknown`), `RegulatedFeature`, `allows(_:)` with a reason string; injectable `StorefrontProviding`; debug override `WHISPERER_FORCE_REGION=CHN`.
-2. Enforce in layers: UI hides the entry points with a plain "not available in your region" note; services refuse before building a prompt (`ConnectedAIStore.availableProviders/activeProviderID`, `MeetingAIService.ask`, MCP server start); stored provider, consent and keys stay dormant in China and return when the storefront changes.
+2. Enforce in layers: UI hides the entry points with a plain "not available in your region" note; services refuse before building a prompt (`ConnectedAIStore.availableProviders/activeProviderID`, `MeetingAIService.ask`); stored provider, consent and keys stay dormant in China and return when the storefront changes.
 3. Ask AI tab removed in the China profile; meeting notes keep the local Qwen title/overview.
-4. Direct build: also gate rewrite-selection, Command Mode, CLI providers, MCP auto-install, Privacy Shield by region.
+4. Direct build: also gate rewrite-selection, Command Mode, CLI providers, Privacy Shield by region (MCP stays: it is local).
 5. Tests: with a simulated CHN storefront, every `RegulatedFeature` entry point is closed; a grep test fails if a regulated service is referenced outside the policy.
 6. Hide Google sign-in in China (unreachable there); keep Apple Calendar and Microsoft.
 7. **Model delivery**: huggingface.co is unreliable from mainland China and the code has no mirror. Options: Apple-hosted Background Assets, or our own CDN. Needs its own plan; without it a China user cannot download a model.
