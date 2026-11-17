@@ -828,6 +828,7 @@ final class MeetingDetector {
     }
 
     private func detectionIsEnabled() -> Bool {
+        guard ProAccess.allows(.meetingDetection) else { return false }
         guard UserDefaults.standard.object(forKey: "meetingDetectionEnabled") != nil else { return true }
         return UserDefaults.standard.bool(forKey: "meetingDetectionEnabled")
     }

@@ -145,6 +145,9 @@ actor MeetingAIService {
     func ask(question: String, meetingID: UUID, segments: [MeetingSegment],
              history: [(question: String, answer: String)] = [],
              onPartial: (@Sendable (String) -> Void)? = nil) async -> RAGAnswer {
+        guard ProAccess.allows(.ai) else {
+            return RAGAnswer(text: ProAccess.lockedMessage(for: .ai), sources: [], usedRAG: false)
+        }
         // Defence in depth: the UI hides Ask AI in restricted markets; the service refuses too.
         guard MarketPolicy.allows(.askAIChat) else {
             return RAGAnswer(text: "Ask AI isn't available in your region.", sources: [], usedRAG: false)
@@ -257,6 +260,7 @@ actor MeetingAIService {
     /// start of that sequence — by the time the artifact returns, the user may have typed
     /// their own name into the row.
     func generateTitle(meetingID: UUID) async {
+        guard ProAccess.allows(.ai) else { return }
         let eligible = await mayRename(meetingID: meetingID)
         pendingTitleEligibility[meetingID] = eligible
         if !eligible {
@@ -312,6 +316,7 @@ actor MeetingAIService {
     /// rather than the raw transcript, so the surviving prefill is bounded too.
     func generateOverview(segments: [MeetingSegment], meetingID: UUID,
                           using choice: ProviderChoice = .automatic) async {
+        guard ProAccess.allows(.ai) else { return }
         let plain = Self.plainTranscript(segments)
         guard !plain.isEmpty else {
             Logger.warning("Meeting overview: skipped — transcript is empty", subsystem: .transcription)

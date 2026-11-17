@@ -97,6 +97,7 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
     var isAvailableInThisBuild: Bool {
         // The market decides first: in mainland China no third-party AI service is offered (MarketPolicy).
         guard MarketPolicy.allows(kind == .cli ? .cliAIProviders : .connectedCloudAI) else { return false }
+        guard ProAccess.allows(.ai) else { return false }
         #if APP_STORE
         return kind != .cli
         #else

@@ -53,7 +53,8 @@ class StoreManager: ObservableObject {
     private nonisolated static let entitlingIds: Set<String> = ["com.ivy.whisperer.pro", "com.ivy.whisperer.propack"]
 
     // UserDefaults key for caching pro status
-    private let proStatusKey = "whisperer_pro_status"
+    nonisolated static let proStatusKey = "whisperer_pro_status"
+    private var proStatusKey: String { Self.proStatusKey }
 
     // Transaction update listener task
     private var transactionUpdateTask: Task<Void, Never>?

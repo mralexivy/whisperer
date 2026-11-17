@@ -741,6 +741,12 @@ class AppState: ObservableObject {
     // LLM post-processing
     @Published var llmEnabled: Bool = false {
         didSet {
+            // AI dictation modes are a Pro feature: refuse to turn them on without it.
+            if llmEnabled, !ProAccess.allows(.ai) {
+                llmEnabled = false
+                errorMessage = ProAccess.lockedMessage(for: .ai)
+                return
+            }
             UserDefaults.standard.set(llmEnabled, forKey: "llmEnabled")
             if llmEnabled {
                 preloadLLM()
@@ -1244,7 +1250,7 @@ class AppState: ObservableObject {
 
         // Load LLM settings
         if UserDefaults.standard.object(forKey: "llmEnabled") != nil {
-            _llmEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "llmEnabled"))
+            _llmEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "llmEnabled") && ProAccess.allows(.ai))
         }
         // The key is written only in selectedLLMModel's didSet, so its absence means the user never
         // touched the picker — they fall through to the current default (Qwen3.5-4B MTP, the model

@@ -34,6 +34,10 @@ actor WhispererMCPServer {
     // MARK: - Lifecycle
 
     func start(port: Int) async {
+        guard ProAccess.allows(.mcp) else {
+            Logger.info("MCP server not started: Pro feature", subsystem: .app)
+            return
+        }
         guard listener == nil else { return }
 
         listeningPort = port

@@ -604,6 +604,7 @@ nonisolated struct MicrosoftCalendarSource: RemoteCalendarSource {
 extension CalendarAccountProvider {
     /// The providers offered in this market (Google is unreachable in mainland China).
     static var available: [CalendarAccountProvider] {
-        allCases.filter { $0 != .google || MarketPolicy.allows(.googleCalendar) }
+        guard ProAccess.allows(.calendar) else { return [] }
+        return allCases.filter { $0 != .google || MarketPolicy.allows(.googleCalendar) }
     }
 }

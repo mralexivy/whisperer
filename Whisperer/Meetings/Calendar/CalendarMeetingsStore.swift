@@ -192,6 +192,7 @@ final class CalendarMeetingsStore: ObservableObject {
     // MARK: - Refresh
 
     func refresh(reason: String) async {
+        guard ProAccess.allows(.calendar) else { return }
         guard !accounts.isEmpty else {
             upcoming = []
             calendars = []

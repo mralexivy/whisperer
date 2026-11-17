@@ -214,6 +214,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // turned meetings off never pay for the download.
         #if canImport(FluidAudio)
         if !AppEnvironment.isRunningTests,
+           ProAccess.allows(.meetings),
            UserDefaults.standard.object(forKey: "meetingDetectionEnabled") == nil
             || UserDefaults.standard.bool(forKey: "meetingDetectionEnabled") {
             MeetingDiarizerService.shared.prefetch()
@@ -264,6 +265,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         await WhispererMCPServer.shared.stop()
                     }
                 }
+            }
+            .store(in: &mcpCancellables)
+        // The server refuses to start without Pro; start it when Pro is bought during this session.
+        StoreManager.shared.$isPro
+            .removeDuplicates()
+            .filter { $0 }
+            .sink { [weak self] _ in
+                guard let self, self.appState.mcpEnabled, !AppEnvironment.isRunningTests else { return }
+                let port = self.appState.mcpPort
+                Task { await WhispererMCPServer.shared.start(port: port) }
             }
             .store(in: &mcpCancellables)
         appState.$mcpPort

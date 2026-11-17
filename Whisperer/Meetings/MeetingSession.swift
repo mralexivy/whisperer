@@ -326,6 +326,11 @@ class MeetingSession: ObservableObject {
 
     func startRecording(title: String, surface: MeetingLiveSurface,
                         sourceBundleID: String? = nil, sourceAppName: String? = nil) async {
+        // Meetings are a Pro feature; every entry point (menu, detected call, calendar reminder) lands here.
+        guard ProAccess.allows(.meetings) else {
+            AppState.shared.errorMessage = ProAccess.lockedMessage(for: .meetings)
+            return
+        }
         guard AppState.shared.allowCaptureDuringAudioSetup() else { return }
         guard !isRecording, !isStarting else { return }
         // Every entry point lands here, so the one-time acknowledgment cannot be skipped.

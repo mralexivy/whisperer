@@ -14,6 +14,7 @@ import SwiftUI
 enum RecordingStarter {
     /// Why a new meeting cannot start right now, or nil.
     static func meetingBlocker(session: MeetingSession) -> String? {
+        if !ProAccess.allows(.meetings) { return ProAccess.lockedMessage(for: .meetings) }
         if session.isRecording { return "A meeting is already being recorded." }
         if AppState.shared.pendingMeetingStarts > 0 { return "A meeting is starting…" }
         if AppState.shared.state.isRecording { return "Finish the dictation first." }
