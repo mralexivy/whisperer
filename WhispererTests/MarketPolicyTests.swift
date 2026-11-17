@@ -105,3 +105,17 @@ final class MarketPolicyTests: XCTestCase {
         #endif
     }
 }
+
+/// The China edition offers one speech engine and one text model, both Qwen.
+final class ChinaEditionLimitsTests: XCTestCase {
+    func testChinaEditionOffersOnlyQwen() {
+        #if CHINA_EDITION
+        XCTAssertEqual(BackendType.selectable, [.qwen3asr])
+        XCTAssertEqual(LLMModelVariant.available.count, 1)
+        XCTAssertEqual(LLMModelVariant.available.first, LLMModelVariant.marketDefault)
+        #else
+        XCTAssertFalse(MarketPolicy.isChinaEdition)
+        XCTAssertGreaterThan(BackendType.selectable.count, 1)
+        #endif
+    }
+}

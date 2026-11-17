@@ -91,6 +91,7 @@ When asked to debug app behavior, check what the app just did, or verify a chang
   **The `gcloud` default project on this Mac is `travel-12e28` — a different app.** Never rely on the default:
   pass `--project whisperer-491716` (or `--billing-project`) on every command. The same Google account also owns
   other apps' projects (Reelstrip, Lumen, Biteslog, …); touch only this one for Whisperer.
+- **App Store Connect (China edition):** app "Whisperer Voice to Text CN", bundle `com.ivy.whisperer.cn`, app id `6835744579`, SKU `whisperer-macos-cn-1`; availability China mainland only (set 2026-11-17).
 - **App Store Connect:** app "Whisperer - Voice to Text", bundle id `com.ivy.whisperer`, app id `6758626671`, SKU
   `whisperer-macos-1`. API access uses the **shared key for all apps** in `~/.appstoreconnect/` (`asc.py`,
   `env`, `private_keys/`): `python3 ~/.appstoreconnect/asc.py GET /v1/apps/6758626671/...`. Never print, copy

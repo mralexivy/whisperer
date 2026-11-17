@@ -57,6 +57,15 @@ nonisolated enum ComplianceFeature: String, CaseIterable, Sendable {
 }
 
 nonisolated enum MarketPolicy {
+    /// True only in the China edition binary, which offers a single speech engine and a single text model (both Qwen).
+    static var isChinaEdition: Bool {
+        #if CHINA_EDITION
+        true
+        #else
+        false
+        #endif
+    }
+
     #if CHINA_EDITION
     /// A string only the China edition contains, so the submission checklist can prove which binary it holds.
     static let editionMarker = "whisperer-edition=china-mainland"

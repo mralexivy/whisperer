@@ -56,7 +56,13 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
     var isAvailableInThisMarket: Bool { ModelSources.isReachable(repo: huggingFaceId) }
 
     /// The variants this market offers.
-    static var available: [LLMModelVariant] { allCases.filter(\.isAvailableInThisMarket) }
+    /// The China edition offers exactly one: the best Qwen it can download.
+    static var available: [LLMModelVariant] {
+        let reachable = allCases.filter(\.isAvailableInThisMarket)
+        guard MarketPolicy.isChinaEdition else { return reachable }
+        let one = [qwen3_5_4B_mtp, qwen3_5_4B].first(where: reachable.contains) ?? reachable.first
+        return one.map { [$0] } ?? []
+    }
 
     /// The default LLM: the recommended MTP build, or the plain 4B where only that one can be downloaded.
     static var marketDefault: LLMModelVariant {

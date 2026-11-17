@@ -1223,6 +1223,10 @@ class AppState: ObservableObject {
                 selectedBackendType = BackendType.defaultBackend
                 UserDefaults.standard.set(selectedBackendType.rawValue, forKey: "selectedBackendType")
                 Logger.info("Migrated engine \(backend.displayName) → \(selectedBackendType.displayName)", subsystem: .model)
+            } else if MarketPolicy.isChinaEdition, !BackendType.selectable.contains(backend) {
+                // The China edition offers Qwen3-ASR only.
+                selectedBackendType = BackendType.defaultBackend
+                UserDefaults.standard.set(selectedBackendType.rawValue, forKey: "selectedBackendType")
             } else {
                 selectedBackendType = backend
             }
@@ -1252,7 +1256,7 @@ class AppState: ObservableObject {
             // Migrate old default 4B to the faster MTP variant
             // (and a stored model this market cannot download falls back to the market default)
             var migrated: LLMModelVariant = llmModel == .qwen3_5_4B ? LLMModelVariant.marketDefault : llmModel
-            if !migrated.isAvailableInThisMarket { migrated = LLMModelVariant.marketDefault }
+            if !migrated.isAvailableInThisMarket || !LLMModelVariant.available.contains(migrated) { migrated = LLMModelVariant.marketDefault }
             _selectedLLMModel = Published(wrappedValue: migrated)
         }
         // Initialize AIModeManager (triggers migration from legacy LLMTask/PromptProfile)

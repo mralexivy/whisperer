@@ -46,7 +46,9 @@ nonisolated enum BackendType: String, CaseIterable, Identifiable {
     /// Apple Speech — Apple's on-device recognizer already runs for every engine as the live
     /// preview, so offering it again as an engine of its own only duplicated it.
     static var selectable: [BackendType] {
-        allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew && $0 != .speechAnalyzer && $0.isOfferedInThisMarket }
+        // The China edition has one engine: Qwen3-ASR.
+        if MarketPolicy.isChinaEdition { return [.qwen3asr] }
+        return allCases.filter { $0 != .nemotron && $0 != .nemotronHebrew && $0 != .speechAnalyzer && $0.isOfferedInThisMarket }
     }
 
     /// Parakeet and WhisperKit download from Hugging Face only; where that is not the host they are not offered.

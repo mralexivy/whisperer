@@ -113,4 +113,19 @@ final class ModelSourcesTests: XCTestCase {
         XCTAssertEqual(last.value, 1, accuracy: 0.001)
         XCTAssertTrue(ModelScopeFetcher.verify(file, sha256: "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"))
     }
+
+    /// The two models the China edition runs, fully downloaded from modelscope.cn with every file hash-verified.
+    /// Opt-in (about 5.5 GB): `TEST_RUNNER_NETWORK_TESTS=1`.
+    func testRealModelScopeDownloadOfTheChinaEditionQwenModels() async throws {
+        guard ProcessInfo.processInfo.environment["NETWORK_TESTS"] != nil else { throw XCTSkip("set TEST_RUNNER_NETWORK_TESTS=1") }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("ms-qwen-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        for (repo, globs) in [(Qwen3ASREngine.repoId, Qwen3ASREngine.downloadGlobs), (LLMModelVariant.qwen3_5_4B.huggingFaceId, ["*.safetensors", "*.json", "*.jinja"])] {
+            let dir = root.appendingPathComponent(repo.replacingOccurrences(of: "/", with: "_"))
+            try await ModelScopeFetcher.snapshot(repo: ModelSources.modelScopeRepo(for: repo) ?? repo, globs: globs, into: dir) { _ in }
+            let files = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+            XCTAssertTrue(files.contains("config.json"), "\(repo): config.json missing")
+            XCTAssertTrue(files.contains { $0.hasSuffix(".safetensors") }, "\(repo): no weights")
+        }
+    }
 }
