@@ -46,12 +46,14 @@ nonisolated enum ComplianceFeature: String, CaseIterable, Sendable {
     case cloudSync
     /// Google calendar sign-in (Google services are unreachable in mainland China).
     case googleCalendar
+    /// The "AI Modes" page: free-form rewrite/translate/creative prompts run by a language model on dictated text.
+    case aiDictationModes
 
     /// Whether the feature needs the network, so "market unknown" can safely hold it back.
     var needsNetwork: Bool {
         switch self {
         case .connectedCloudAI, .cliAIProviders, .cloudSync, .googleCalendar: return true
-        case .askAIChat, .commandMode, .voiceReshaping: return false
+        case .askAIChat, .commandMode, .voiceReshaping, .aiDictationModes: return false
         }
     }
 }
@@ -113,7 +115,7 @@ nonisolated enum MarketPolicy {
 
     /// What mainland China switches off. Changing this list is the whole compliance decision.
     static let restrictedInChina: Set<ComplianceFeature> = [
-        .askAIChat, .connectedCloudAI, .cliAIProviders, .commandMode, .voiceReshaping, .cloudSync, .googleCalendar,
+        .askAIChat, .connectedCloudAI, .cliAIProviders, .commandMode, .voiceReshaping, .cloudSync, .googleCalendar, .aiDictationModes,
     ]
 
     // MARK: Storefront

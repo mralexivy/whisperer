@@ -142,7 +142,8 @@ enum HistorySidebarItem: String, CaseIterable, Identifiable {
         #else
         let items: [HistorySidebarItem] = [.recordings, .calendar, .dictionary, .aiModes, .llm, .statistics, .mcp, .setup, .settings]
         #endif
-        return items
+        // The China edition has no free-form AI rewrite modes.
+        return MarketPolicy.allows(.aiDictationModes) ? items : items.filter { $0 != .aiModes }
     }
 }
 

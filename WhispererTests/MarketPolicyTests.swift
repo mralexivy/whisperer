@@ -63,7 +63,7 @@ final class MarketPolicyTests: XCTestCase {
         XCTAssertEqual(MarketPolicy.restrictedInChina, Set(ComplianceFeature.allCases),
                        "a feature added to ComplianceFeature must be an explicit decision")
         XCTAssertEqual(Set(ComplianceFeature.allCases.map(\.rawValue)),
-                       ["askAIChat", "connectedCloudAI", "cliAIProviders", "commandMode", "voiceReshaping", "cloudSync", "googleCalendar"])
+                       ["askAIChat", "connectedCloudAI", "cliAIProviders", "commandMode", "voiceReshaping", "cloudSync", "googleCalendar", "aiDictationModes"])
     }
 
     func testConnectedProvidersDisappearInChinaAndCliKindsToo() throws {
@@ -116,6 +116,33 @@ final class ChinaEditionLimitsTests: XCTestCase {
         #else
         XCTAssertFalse(MarketPolicy.isChinaEdition)
         XCTAssertGreaterThan(BackendType.selectable.count, 1)
+        #endif
+    }
+}
+
+/// The China edition has no free-form AI rewrite modes: no sidebar page, and the model cannot be switched on.
+@MainActor
+final class ChinaAIModesTests: XCTestCase {
+    override func tearDown() async throws {
+        #if DEBUG
+        MarketPolicy.testOverride = nil
+        #endif
+    }
+
+    func testAIModesPageAndSwitchAreClosedInChina() throws {
+        #if DEBUG
+        MarketPolicy.testOverride = .chinaMainland
+        XCTAssertFalse(HistorySidebarItem.visibleItems.contains(.aiModes))
+        let state = AppState.shared
+        let before = state.llmEnabled
+        defer { state.llmEnabled = before }
+        state.llmEnabled = true
+        XCTAssertFalse(state.llmEnabled)
+
+        MarketPolicy.testOverride = .other
+        XCTAssertTrue(HistorySidebarItem.visibleItems.contains(.aiModes))
+        #else
+        throw XCTSkip("needs the Debug market override")
         #endif
     }
 }

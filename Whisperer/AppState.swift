@@ -741,6 +741,11 @@ class AppState: ObservableObject {
     // LLM post-processing
     @Published var llmEnabled: Bool = false {
         didSet {
+            // Never in the China edition, whatever was stored.
+            if llmEnabled, !MarketPolicy.allows(.aiDictationModes) {
+                llmEnabled = false
+                return
+            }
             // AI dictation modes are a Pro feature: refuse to turn them on without it.
             if llmEnabled, !ProAccess.allows(.ai) {
                 llmEnabled = false
@@ -1250,7 +1255,7 @@ class AppState: ObservableObject {
 
         // Load LLM settings
         if UserDefaults.standard.object(forKey: "llmEnabled") != nil {
-            _llmEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "llmEnabled") && ProAccess.allows(.ai))
+            _llmEnabled = Published(wrappedValue: UserDefaults.standard.bool(forKey: "llmEnabled") && ProAccess.allows(.ai) && MarketPolicy.allows(.aiDictationModes))
         }
         // The key is written only in selectedLLMModel's didSet, so its absence means the user never
         // touched the picker — they fall through to the current default (Qwen3.5-4B MTP, the model
