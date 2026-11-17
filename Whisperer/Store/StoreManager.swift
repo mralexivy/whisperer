@@ -43,8 +43,14 @@ class StoreManager: ObservableObject {
     @Published var isPurchasing: Bool = false
     @Published var errorMessage: String?
 
-    // Pro Pack product ID
+    // Pro Pack product IDs. A product ID cannot be reused inside an App Store Connect record once it has existed there,
+    // so the regular app sells `.pro` and the China record (a separate record) sells `.propack`. Either grants Pro.
+    #if CHINA_EDITION
     private let productId = "com.ivy.whisperer.propack"
+    #else
+    private let productId = "com.ivy.whisperer.pro"
+    #endif
+    private nonisolated static let entitlingIds: Set<String> = ["com.ivy.whisperer.pro", "com.ivy.whisperer.propack"]
 
     // UserDefaults key for caching pro status
     private let proStatusKey = "whisperer_pro_status"
@@ -147,7 +153,7 @@ class StoreManager: ObservableObject {
         // Iterate through all transactions
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result {
-                if transaction.productID == productId {
+                if Self.entitlingIds.contains(transaction.productID) {
                     hasPro = true
                     break
                 }
@@ -168,7 +174,6 @@ class StoreManager: ObservableObject {
 
     /// Listen for transaction updates
     private func listenForTransactions() -> Task<Void, Never> {
-        let productId = self.productId
         return Task.detached { [weak self] in
             for await result in Transaction.updates {
                 guard let self = self else { return }
@@ -178,7 +183,7 @@ class StoreManager: ObservableObject {
                     // Update pro status
                     await MainActor.run { [weak self] in
                         guard let self = self else { return }
-                        if transaction.productID == productId {
+                        if Self.entitlingIds.contains(transaction.productID) {
                             self.isPro = true
                             self.saveProStatus(true)
                             Logger.info("Transaction update: Pro Pack activated", subsystem: .app)

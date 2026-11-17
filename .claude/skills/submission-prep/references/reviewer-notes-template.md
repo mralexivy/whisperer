@@ -46,5 +46,5 @@ NO SIGN-IN REQUIRED — uncheck "Sign-in required."
 PRIVACY: 100% offline. No data transmitted. No accounts. No analytics.
 EXPORT: HTTPS only (exempt). No proprietary encryption.
 CHINA (Guideline 5): No ChatGPT/OpenAI cloud. whisper.cpp runs on-device. No network needed for transcription.
-IAP: com.ivy.whisperer.propack (Non-Consumable)
+IAP: com.ivy.whisperer.pro (Non-Consumable, $14.99; the app is $4.99)
 ```
