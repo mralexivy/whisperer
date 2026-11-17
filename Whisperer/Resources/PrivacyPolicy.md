@@ -39,8 +39,12 @@ Whisperer can detect a video or audio call and offer to take notes.
 - Before the first meeting recording, Whisperer shows a consent screen explaining what is recorded
   and where it is stored.
 - A recording indicator stays visible for the whole recording.
-- **You are responsible for obtaining consent from other participants where the law requires it.**
-  Recording laws differ by country and by state. Whisperer does not provide legal advice.
+- **You decide what to record, and you are responsible for it, including notice to and consent from
+  other participants where the law requires it.** Recording laws differ by country and by state.
+  Whisperer does not provide legal advice and takes no responsibility for your recordings.
+- Recording and transcription run locally on your Mac and are not sent to the cloud.
+- If you choose to use your own AI provider, that is your decision and the provider's responsibility,
+  not ours.
 - Meeting transcripts and audio stay on your Mac under the same retention rules as dictation.
 
 ## Network Usage
