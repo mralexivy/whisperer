@@ -39,7 +39,21 @@ nonisolated enum ProAccess {
     #if DEBUG
     /// Tests and previews: nil follows the real rule.
     nonisolated(unsafe) static var testOverride: Bool?
+    /// Tests: pretend to be the App Store build (which sells Pro) and read the stored purchase.
+    nonisolated(unsafe) static var testSellsPro = false
     #endif
+
+    /// True in the builds that sell Pro (the Mac App Store builds). Direct builds have no store and stay unlocked.
+    static var sellsPro: Bool {
+        #if DEBUG
+        if testSellsPro { return true }
+        #endif
+        #if APP_STORE
+        return true
+        #else
+        return false
+        #endif
+    }
 
     /// True when this build sells Pro and the user has not bought it.
     static var isLocked: Bool { !isPro }
@@ -48,11 +62,8 @@ nonisolated enum ProAccess {
         #if DEBUG
         if let testOverride { return testOverride }
         #endif
-        #if APP_STORE
+        guard sellsPro else { return true }
         return UserDefaults.standard.bool(forKey: StoreManager.proStatusKey)
-        #else
-        return true
-        #endif
     }
 
     static func allows(_ feature: ProFeature) -> Bool { isPro }

@@ -49,6 +49,7 @@ struct CalendarPageView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                ProUpsellCard(feature: .calendar)
                 hero
                 connectSection
                 if connected {

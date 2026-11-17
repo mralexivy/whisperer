@@ -54,6 +54,7 @@ struct MCPConnectPageView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 30) {
+                    ProUpsellCard(feature: .mcp)
                     hero
                     appsSection(proxy: proxy)
                     advancedSection

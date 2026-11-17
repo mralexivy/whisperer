@@ -40,7 +40,7 @@ struct PurchaseView: View {
                     .font(.system(size: 24))
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Pro Pack Activated")
+                    Text("Whisperer Pro Activated")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white)
 
@@ -59,10 +59,9 @@ struct PurchaseView: View {
                 .foregroundColor(.white.opacity(0.5))
 
             VStack(alignment: .leading, spacing: 6) {
-                proFeatureRow(icon: "keyboard", title: "Code Mode", description: "Spoken symbols & casing")
-                proFeatureRow(icon: "app.badge", title: "Per-App Profiles", description: "Auto-switch settings per app")
-                proFeatureRow(icon: "book.closed", title: "Personal Dictionary", description: "Custom words & names")
-                proFeatureRow(icon: "arrow.up.doc", title: "Pro Text Entry", description: "Clipboard-safe paste & fallbacks")
+                ForEach(ProPitch.rows) { row in
+                    proFeatureRow(icon: row.icon, title: row.title, description: row.detail)
+                }
             }
         }
     }
@@ -73,11 +72,11 @@ struct PurchaseView: View {
         VStack(alignment: .leading, spacing: 14) {
             // Header
             VStack(alignment: .leading, spacing: 4) {
-                Text("Upgrade to Pro Pack")
+                Text("Upgrade to Whisperer Pro")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("Unlock powerful features for developers and power users")
+                Text("Meetings, calendar, AI notes and the MCP server. One purchase, no subscription.")
                     .font(.system(size: 12))
                     .foregroundColor(.white.opacity(0.5))
             }
@@ -92,29 +91,9 @@ struct PurchaseView: View {
                     .foregroundColor(.white)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    proFeatureRow(
-                        icon: "keyboard",
-                        title: "Code Mode",
-                        description: "Speak parentheses, brackets, arrows, and use casing commands (camelCase, snake_case)"
-                    )
-
-                    proFeatureRow(
-                        icon: "app.badge",
-                        title: "Per-App Profiles",
-                        description: "Auto-switch settings for Slack, VS Code, Terminal, and other apps"
-                    )
-
-                    proFeatureRow(
-                        icon: "book.closed",
-                        title: "Personal Dictionary",
-                        description: "Add custom words, names, and technical terms for better accuracy"
-                    )
-
-                    proFeatureRow(
-                        icon: "arrow.up.doc",
-                        title: "Pro Text Entry",
-                        description: "Clipboard-safe paste with app-specific workarounds"
-                    )
+                    ForEach(ProPitch.rows) { row in
+                        proFeatureRow(icon: row.icon, title: row.title, description: row.detail)
+                    }
                 }
             }
 
@@ -140,7 +119,7 @@ struct PurchaseView: View {
                                     .padding(.trailing, 4)
                             }
 
-                            Text(storeManager.isPurchasing ? "Processing..." : "Unlock Pro Pack")
+                            Text(storeManager.isPurchasing ? "Processing..." : "Unlock Pro")
                                 .font(.system(size: 13, weight: .semibold))
 
                             Spacer()
@@ -182,7 +161,7 @@ struct PurchaseView: View {
                 HStack {
                     ProgressView()
                         .scaleEffect(0.7)
-                    Text("Loading Pro Pack...")
+                    Text("Loading Pro...")
                         .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.5))
                 }
@@ -202,7 +181,7 @@ struct PurchaseView: View {
             }
 
             // One-time purchase note
-            Text("One-time purchase. Includes all future Pro Pack features.")
+            Text("One-time purchase. Includes future Pro features.")
                 .font(.system(size: 10))
                 .foregroundColor(.white.opacity(0.35))
                 .multilineTextAlignment(.center)

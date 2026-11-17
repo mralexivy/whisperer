@@ -562,17 +562,21 @@ class GlobalKeyListener {
         unregisterHandsFreeHotKey()
         // Only post the Delete keystroke when the Carbon hotkey did NOT intercept the key,
         // meaning the 'l' may have reached the focused app via the polling fallback path.
-        // CGEvent.post (posting events) is an approved API — distinct from CGEventTap (monitoring).
+        // The Mac App Store build posts no synthetic keystrokes at all (Guideline 2.4.5), so it relies on the
+        // Carbon hotkey intercepting the key and never removes a character from another app.
+        #if !APP_STORE
         if !keyWasIntercepted {
             deleteLastCharacter()
         }
+        #endif
         DispatchQueue.main.async { [weak self] in
             self?.onHandsFreeActivated?()
         }
     }
 
+    #if !APP_STORE
     /// Posts a synthetic Delete (backspace) keystroke to remove the "l" character
-    /// that may have been inserted into the focused text field.
+    /// that may have been inserted into the focused text field. Direct builds only.
     private func deleteLastCharacter() {
         let deleteKeyCode: CGKeyCode = 51  // Delete/Backspace
         guard let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: deleteKeyCode, keyDown: true),
@@ -583,6 +587,7 @@ class GlobalKeyListener {
         keyDown.post(tap: .cgAnnotatedSessionEventTap)
         keyUp.post(tap: .cgAnnotatedSessionEventTap)
     }
+    #endif
 
     // MARK: - Carbon Hot Key (for key+modifier shortcuts)
 

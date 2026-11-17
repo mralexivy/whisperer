@@ -1,0 +1,20 @@
+{
+  "identifier" : "A1C0FFEF",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "14.99",
+      "familyShareable" : false,
+      "internalID" : "6700000101",
+      "localizations" : [
+        { "description" : "Meetings, calendar, your own AI and MCP. Pay once.", "displayName" : "Whisperer Pro", "locale" : "en_US" }
+      ],
+      "productID" : "com.ivy.whisperer.pro",
+      "referenceName" : "Whisperer Pro",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : { "_failTransactionsEnabled" : false, "_storeKitErrors" : [] },
+  "subscriptionGroups" : [],
+  "version" : { "major" : 4, "minor" : 0 }
+}

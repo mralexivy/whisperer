@@ -50,7 +50,7 @@ class StoreManager: ObservableObject {
     #else
     private let productId = "com.ivy.whisperer.pro"
     #endif
-    private nonisolated static let entitlingIds: Set<String> = ["com.ivy.whisperer.pro", "com.ivy.whisperer.propack"]
+    nonisolated static let entitlingIds: Set<String> = ["com.ivy.whisperer.pro", "com.ivy.whisperer.propack"]
 
     // UserDefaults key for caching pro status
     nonisolated static let proStatusKey = "whisperer_pro_status"
@@ -65,6 +65,12 @@ class StoreManager: ObservableObject {
 
         // Start listening for transaction updates
         transactionUpdateTask = listenForTransactions()
+
+        // Entitlements are re-read at every launch: a purchase made on another Mac, a reinstall or a refund must
+        // show up without the user opening the purchase screen. Not in tests (they drive StoreKit themselves).
+        if ProAccess.sellsPro, !AppEnvironment.isRunningTests {
+            Task { [weak self] in await self?.checkPurchased() }
+        }
     }
 
     deinit {
@@ -98,6 +104,7 @@ class StoreManager: ObservableObject {
 
         isPurchasing = true
         errorMessage = nil
+        defer { isPurchasing = false }
 
         do {
             let result = try await product.purchase()
@@ -131,7 +138,6 @@ class StoreManager: ObservableObject {
             throw error
         }
 
-        isPurchasing = false
     }
 
     /// Restore previous purchases

@@ -39,13 +39,15 @@ Whisperer can detect a video or audio call and offer to take notes.
 
 ## Network Usage
 
-Whisperer uses the network for one purpose: downloading AI model weights.
+Whisperer uses the network to download AI model weights. It reaches a calendar or an AI provider only if you connect one.
 
 - Model weights are **data files**, not executable code. The transcription and language engines are
   compiled into the app itself.
 - Models are downloaded from Hugging Face (from ModelScope, modelscope.cn, in the China mainland edition). The speech model is about 2.5 GB. The language model
   used for meeting overviews is about 3.2 GB.
 - No personal information is transmitted during a download.
+- Calendar (optional): if you sign in to Google or Microsoft, the app reads your events directly from that service.
+- AI providers (optional): if you connect ChatGPT, OpenAI, Anthropic or Gemini for meeting notes or Ask AI, the text transcript of that meeting and your question are sent from your Mac straight to the provider, with your own sign-in or API key. Audio is never sent. Whisperer's developer receives none of it.
 
 Once the models are on disk, **transcription works completely offline**.
 

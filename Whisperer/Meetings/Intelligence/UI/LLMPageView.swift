@@ -43,6 +43,7 @@ struct LLMPageView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                ProUpsellCard(feature: .ai)
                 header
                 if let notice = store.lastNotice { noticeBanner(notice) }
                 meetingSection

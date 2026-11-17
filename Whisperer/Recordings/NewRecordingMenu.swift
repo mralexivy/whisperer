@@ -82,11 +82,18 @@ struct NewRecordingMenu: View {
         VStack(alignment: .leading, spacing: 4) {
             Text("NEW").font(.system(size: 10, weight: .bold)).tracking(1.0)
                 .foregroundColor(Color.white.opacity(0.35)).padding(.horizontal, 12).padding(.top, 8).padding(.bottom, 2)
+            let meetingsLocked = !ProAccess.allows(.meetings)
             row(kind: .meeting, title: "Meeting or call",
-                subtitle: "Records your mic and the call, with speakers.",
-                blocker: RecordingStarter.meetingBlocker(session: session), id: "meeting") {
+                subtitle: meetingsLocked
+                    ? "Part of Pro. Tap to unlock for \(StoreManager.shared.proPackPrice ?? "$14.99")."
+                    : "Records your mic and the call, with speakers.",
+                blocker: meetingsLocked ? nil : RecordingStarter.meetingBlocker(session: session), id: "meeting") {
                 dismiss()
-                RecordingStarter.startMeeting(session: session)
+                if meetingsLocked {
+                    Task { try? await StoreManager.shared.purchase() }
+                } else {
+                    RecordingStarter.startMeeting(session: session)
+                }
             }
             row(kind: .dictation, title: "Dictation",
                 subtitle: "Speak hands-free; the text is saved here.",
