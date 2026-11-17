@@ -1,6 +1,6 @@
 # Whisperer Privacy Policy
 
-**Last Updated:** October 13, 2026
+**Last Updated:** November 17, 2026
 
 ## Overview
 
@@ -14,7 +14,13 @@ on your Mac.
 
 There are no accounts, no sign-in, no telemetry, no analytics, and no advertising. Whisperer does
 not use Google Analytics, Mixpanel, Segment, or any comparable platform. No crash reporter
-transmits data off the device.
+transmits data off the device. Whisperer has no servers, so nothing you say, write or record ever
+reaches its developer.
+
+The only time text leaves your Mac is when you yourself connect a third-party service (a calendar
+or an AI provider) with your own sign-in or API key. It then goes straight from your Mac to the
+provider you chose, never through us. We do not see it or keep a copy, and you can disconnect at
+any time.
 
 ## Audio and Transcripts
 
@@ -47,7 +53,8 @@ Whisperer uses the network to download AI model weights. It reaches a calendar o
   used for meeting overviews is about 3.2 GB.
 - No personal information is transmitted during a download.
 - Calendar (optional): if you sign in to Google or Microsoft, the app reads your events directly from that service.
-- AI providers (optional): if you connect ChatGPT, OpenAI, Anthropic or Gemini for meeting notes or Ask AI, the text transcript of that meeting and your question are sent from your Mac straight to the provider, with your own sign-in or API key. Audio is never sent. Whisperer's developer receives none of it.
+- AI providers (optional): if you connect ChatGPT, OpenAI, Anthropic or Gemini for meeting notes or Ask AI, the text transcript of that meeting and your question are sent from your Mac straight to the provider, with your own sign-in or API key. Audio is never sent, and neither is dictation text. Whisperer's developer is not a party to that exchange and receives none of it. The provider's own terms and privacy policy apply to what it receives.
+- China edition: Whisperer China has no cloud AI provider, no Ask AI and no Google Calendar sign-in. Meeting text is never sent to an AI service.
 
 Once the models are on disk, **transcription works completely offline**.
 
@@ -111,7 +118,7 @@ Everything stays on your device:
 
 ## In-App Purchases
 
-The Pro Pack is a one-time purchase, not a subscription.
+Whisperer Pro is a one-time purchase, not a subscription.
 
 - Apple processes the purchase and handles all payment information under Apple's privacy policy.
 - Whisperer receives only a confirmation that the purchase completed.
