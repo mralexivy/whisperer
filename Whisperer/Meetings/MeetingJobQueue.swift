@@ -342,14 +342,20 @@ final class MeetingJobQueue: ObservableObject {
 
         // MARK: naming
         if [MeetingJobStage.fineTuning, .naming, .finalizing].contains(stage) {
+            // The stage is recorded either way so a resumed job lands in the right place, but the
+            // banner only says "Naming" when a title will actually be written. A meeting that
+            // arrived with a calendar title (or one the user typed) is never named, and showing
+            // the stage for it was a flash of work that does not happen.
             transition(meetingID: meetingID, to: .naming, status: .running)
-            MeetingManager.shared.setProcessing(.naming, for: meetingID)
 
             if segments.isEmpty, let existing = await MeetingManager.shared.meeting(id: meetingID) {
                 segments = existing.segments
             }
 
-            await MeetingAIService.shared.generateTitle(meetingID: meetingID)
+            // The eligibility lookup is a store read, so the banner is set after it answers.
+            if await MeetingAIService.shared.generateTitle(meetingID: meetingID) {
+                MeetingManager.shared.setProcessing(.naming, for: meetingID)
+            }
         }
 
         if Task.isCancelled { return await finishCancelled(meetingID: meetingID) }

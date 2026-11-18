@@ -276,13 +276,19 @@ actor MeetingAIService {
     /// sequence with `generateOverview`, and because the user-set-title check belongs at the
     /// start of that sequence — by the time the artifact returns, the user may have typed
     /// their own name into the row.
-    func generateTitle(meetingID: UUID) async {
-        guard ProAccess.allows(.ai) else { return }
+    ///
+    /// Returns whether a title will be written, so the caller shows a "Naming" stage only when
+    /// there is naming to do. A calendar event arrives with the user's own title and is never
+    /// renamed, so for it this is false and the stage must not appear.
+    @discardableResult
+    func generateTitle(meetingID: UUID) async -> Bool {
+        guard ProAccess.allows(.ai) else { return false }
         let eligible = await mayRename(meetingID: meetingID)
         pendingTitleEligibility[meetingID] = eligible
         if !eligible {
-            Logger.info("Meeting title: skipped — user-set title on \(meetingID)", subsystem: .transcription)
+            Logger.info("Meeting title: skipped — \(meetingID) already has a title", subsystem: .transcription)
         }
+        return eligible
     }
 
     /// Returns true when the LLM is allowed to rename this meeting.
