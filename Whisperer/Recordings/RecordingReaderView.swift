@@ -66,6 +66,8 @@ struct RecordingReaderView: View {
     let style: Style
     @ObservedObject var playback: RecordingPlaybackController
     @ObservedObject var search: RecordingSearchModel
+    /// Set for a recording whose speakers can be named; nil leaves the names read-only.
+    var renameSpeaker: SpeakerRenameAction? = nil
 
     private static let columnWidth: CGFloat = 860
 
@@ -84,7 +86,8 @@ struct RecordingReaderView: View {
                             isPlayhead: playback.playheadParagraphID == paragraph.id,
                             isMatch: search.isActive && search.matchIDs.contains(paragraph.id),
                             isCurrentMatch: search.currentID == paragraph.id,
-                            query: search.isActive ? search.query.trimmingCharacters(in: .whitespaces) : "")
+                            query: search.isActive ? search.query.trimmingCharacters(in: .whitespaces) : "",
+                            renameSpeaker: renameSpeaker)
                             .id(paragraph.id)
                     }
                 }
@@ -116,6 +119,7 @@ private struct RecordingParagraphRow: View {
     let isMatch: Bool
     let isCurrentMatch: Bool
     let query: String
+    let renameSpeaker: SpeakerRenameAction?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
@@ -166,7 +170,9 @@ private struct RecordingParagraphRow: View {
                 .overlay(Circle().stroke(tint.opacity(0.35), lineWidth: 1))
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text(paragraph.speakerName ?? "").font(.system(size: 14, weight: .semibold)).foregroundColor(tint)
+                    MeetingLiveSpeakerHeader(name: paragraph.speakerName ?? "", index: paragraph.speakerIndex ?? 0,
+                                             seconds: paragraph.start ?? 0, isRTL: false, rename: renameSpeaker,
+                                             fontSize: 14, showsTime: false)
                     Spacer()
                     timeLabel
                 }

@@ -324,12 +324,25 @@ struct MeetingLiveWindowView: View {
         case .transcript:
             MeetingLiveTranscriptView(session: session,
                                       meeting: meeting,
-                                      segments: transcriptSegments)
+                                      segments: transcriptSegments,
+                                      renameSpeaker: speakerRename)
         case .notes:
             LiveNotesPane(session: session, meeting: meeting)
         case .overview:
             MeetingOverviewView(meeting: meeting)
         }
+    }
+
+    /// Naming a voice from the window. While recording the session owns the cards; after the stop the
+    /// window shows the stored copy, so that one is updated too (`SpeakerRenamer` stores either way).
+    private var speakerRename: SpeakerRenameAction? {
+        guard let meetingID = meeting?.id else { return nil }
+        let roster = { transcriptSegments.speakerRoster }
+        return SpeakerRenamer.action(
+            meetingID: meetingID, session: session,
+            participants: { session.meetingID == meetingID ? session.participants : (meeting?.participants ?? []) },
+            roster: session.isRecording && session.meetingID == meetingID ? nil : roster,
+            afterRename: { index, name in detailVM.renameSpeakerInMemory(index: index, to: name) })
     }
 
     /// Same handoff rule as `MeetingDetailView`: keep rendering the live array until the

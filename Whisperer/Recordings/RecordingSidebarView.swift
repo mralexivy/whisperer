@@ -152,7 +152,14 @@ struct RecordingSidebarView: View {
                 RecordingNotesPane(documentID: document.id, initial: document.legacyNotes ?? "").id(document.id.key)
             }
         case .people:
-            SpeakersPane(meeting: meetingRecord, session: session, onSpeakerRenamed: { _, _ in detail.reload() })
+            SpeakersPane(meeting: meetingRecord, session: session, onSpeakerRenamed: { index, name in
+                // This callback used to only reload, so a name typed here was never stored.
+                let id = document.id.uuid
+                Task {
+                    await SpeakerRenamer.rename(meetingID: id, speakerIndex: index, to: name, session: session)
+                    detail.reload()
+                }
+            })
                 .id(document.id.key)
         case .details:
             DictationDetailsPane(document: document, detail: detail)

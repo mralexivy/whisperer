@@ -1193,6 +1193,32 @@ class MeetingSession: ObservableObject {
         if speakerIndex == liveSpeakerIndex { liveSpeakerName = trimmed }
     }
 
+    /// A rename typed by the user, applied and stored in one step. The in-memory copy changes
+    /// first (the screen and every later flush use it at once), then the write waits for cards
+    /// still on their way to CoreData: a card flushed under the old name just before the rename
+    /// would otherwise land after it and leave one stale label in the stored meeting.
+    func renameSpeaker(speakerIndex: Int, newName: String) async {
+        guard let id = meetingID else { return }
+        updateSpeaker(speakerIndex: speakerIndex, newName: newName)
+        await pendingPersistence?.value
+        await MeetingManager.shared.renameSpeaker(meetingID: id, speakerIndex: speakerIndex,
+                                                  newName: newName.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// Every voice heard so far with the name it carries now — committed cards plus the voice
+    /// speaking at this moment, which may not have a card yet.
+    var speakerRoster: [(index: Int, name: String)] {
+        var seen = Set<Int>()
+        var roster: [(index: Int, name: String)] = []
+        for segment in segments where seen.insert(segment.speakerIndex).inserted {
+            roster.append((segment.speakerIndex, segment.speakerName))
+        }
+        if hasSpeakerSignal, seen.insert(liveSpeakerIndex).inserted {
+            roster.append((liveSpeakerIndex, liveSpeakerName))
+        }
+        return roster
+    }
+
     /// Names speakers from the invite: the voice at this Mac's microphone is the user, and in a
     /// 1:1 the call's voice is the other attendee (see `SpeakerSourceAttribution`). Re-run as
     /// cards land, at most every 10 s of audio, and once more at stop; a later answer can still

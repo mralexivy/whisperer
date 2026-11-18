@@ -332,9 +332,25 @@ struct RecordingDetailView: View {
                 notice("There is no transcript for this recording.")
             } else {
                 RecordingReaderView(paragraphs: visibleParagraphs, language: TranscriptionLanguage(rawValue: document.language),
-                                    style: RecordingReaderView.style(for: document), playback: playback, search: search)
+                                    style: RecordingReaderView.style(for: document), playback: playback, search: search,
+                                    renameSpeaker: speakerRename(document))
             }
         }
+    }
+
+    /// Double-click a speaker's name to rename the voice. Only a meeting has voices to name.
+    private func speakerRename(_ document: TranscriptDocument) -> SpeakerRenameAction? {
+        guard document.kind == .meeting, document.hasSpeakers else { return nil }
+        let paragraphs = detail.shownParagraphs
+        let roster: () -> [(index: Int, name: String)] = {
+            var seen = Set<Int>()
+            return paragraphs.compactMap { p in
+                let index = p.speakerIndex ?? 0
+                return seen.insert(index).inserted ? (index, p.speakerName ?? "") : nil
+            }
+        }
+        return SpeakerRenamer.action(meetingID: document.id.uuid, session: session,
+                                     participants: { document.participants }, roster: roster)
     }
 
     private func toolbar(_ document: TranscriptDocument) -> some View {
@@ -504,7 +520,11 @@ struct RecordingDetailView: View {
             }
             .padding(.horizontal, 28).padding(.top, 6).padding(.bottom, 14)
             Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
-            MeetingLiveTranscriptView(session: session, meeting: detail.meetingRecord, segments: session.segments)
+            MeetingLiveTranscriptView(session: session, meeting: detail.meetingRecord, segments: session.segments,
+                                      renameSpeaker: SpeakerRenamer.action(
+                                        meetingID: document.id.uuid, session: session,
+                                        participants: { session.participants },
+                                        afterRename: { _, _ in }))
                 .id(document.id.key)
         }
         .onAppear { titleDraft = document.title }

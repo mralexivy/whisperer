@@ -1023,12 +1023,7 @@ struct MeetingDetailView: View {
         // Rename every segment this speaker owns — keyed by index so two speakers that share
         // a name are always updated independently.
         detailVM.renameSpeakerInMemory(index: speakerIndex, to: trimmed)
-        await MeetingManager.shared.renameSpeaker(meetingID: meetingID,
-                                                   speakerIndex: speakerIndex,
-                                                   newName: trimmed)
-        if session.meetingID == meetingID {
-            session.updateSpeaker(speakerIndex: speakerIndex, newName: trimmed)
-        }
+        await SpeakerRenamer.rename(meetingID: meetingID, speakerIndex: speakerIndex, to: trimmed, session: session)
     }
 
     private func handleTagToggle(segID: UUID, tag: SegmentTag) async {

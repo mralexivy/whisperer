@@ -82,6 +82,12 @@ extension Array where Element == MeetingSegment {
         }
     }
 
+    /// Every voice in the transcript with the name it carries, in order of first appearance.
+    var speakerRoster: [(index: Int, name: String)] {
+        var seen = Set<Int>()
+        return compactMap { seen.insert($0.speakerIndex).inserted ? ($0.speakerIndex, $0.speakerName) : nil }
+    }
+
     /// "Speaker 3" — the generated label, as opposed to a name the user typed.
     static func isDefaultSpeakerName(_ name: String) -> Bool {
         guard name.hasPrefix("Speaker ") else { return false }
