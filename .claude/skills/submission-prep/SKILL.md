@@ -139,6 +139,11 @@ for A in build/whisperer.xcarchive build/whisperer-china.xcarchive; do
 done                                  # must print nothing
 scripts/security/audit-app.sh build/whisperer.xcarchive/Products/Applications/whisperer.app --app-store
 scripts/security/audit-app.sh build/whisperer-china.xcarchive/Products/Applications/whisperer.app --app-store
+
+# Entitlements vs. features, and public text vs. code (added after the 2026-11-17 China rejection, see docs/knowledge/app-store/)
+scripts/security/audit-entitlements.sh "$PWD/build/whisperer.xcarchive/Products/Applications/whisperer.app"
+scripts/security/audit-entitlements.sh "$PWD/build/whisperer-china.xcarchive/Products/Applications/whisperer.app"
+# Both must end "audit-entitlements: OK". `scripts/release-editions.sh` runs the whole archive → verify → upload sequence.
 scripts/security/scan-source.sh
 ```
 (History: the first China archive on 2026-11-17 contained the driver because `Tools/privacy-shield/embed-driver.sh` only knew the `AppStore` configuration name. Any script that branches on the configuration name must treat `AppStoreChina` like `AppStore`.)

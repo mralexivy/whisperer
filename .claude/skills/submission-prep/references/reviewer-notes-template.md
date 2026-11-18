@@ -47,4 +47,10 @@ PRIVACY: 100% offline. No data transmitted. No accounts. No analytics.
 EXPORT: HTTPS only (exempt). No proprietary encryption.
 CHINA (Guideline 5): No ChatGPT/OpenAI cloud. whisper.cpp runs on-device. No network needed for transcription.
 IAP: com.ivy.whisperer.pro (Non-Consumable, $14.99; the app is $4.99)
+ENTITLEMENTS (state each one; Apple's automated review rejects an entitlement it cannot match to a feature):
+- com.apple.security.network.client: model downloads, optional calendar and AI sign-in.
+- com.apple.security.network.server: loopback only (127.0.0.1). (1) The optional local MCP server, OFF by default, bearer token required. (2) The one-shot OAuth redirect listener of the ChatGPT sign-in. Neither opens a port to the network.
+- com.apple.security.device.audio-input: microphone for dictation and meetings.
+- com.apple.security.device.camera: only checks whether the camera is in use (opt-in), never captures video.
+- com.apple.security.files.user-selected.read-write: file import and export through open/save panels.
 ```

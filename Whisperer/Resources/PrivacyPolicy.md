@@ -34,8 +34,11 @@ any time.
 
 Whisperer can detect a video or audio call and offer to take notes.
 
-- **Whisperer records your microphone only.** It never records system audio, and it never records
-  the audio streams of other participants.
+- **Whisperer records your microphone and, by default, the audio your call app plays**, so the other
+  participants are in the transcript. Call audio uses the macOS "Screen & System Audio Recording"
+  permission, captures only the call app's audio (not your screen, not other apps), and only while a
+  meeting is being recorded. You can turn it off in Settings, and without the permission only your
+  microphone is recorded. It is transcribed on your Mac and never uploaded.
 - Before the first meeting recording, Whisperer shows a consent screen explaining what is recorded
   and where it is stored.
 - A recording indicator stays visible for the whole recording.
