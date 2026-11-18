@@ -17,3 +17,8 @@
    step. `PATCH /v1/appStoreVersions/{id}` `releaseType` works while the version waits for review.
 8. **Say what was checked and what was not.** Never report approval odds from the banned-API scan alone: the entitlement audit and the
    public-claims grep are part of "checked".
+
+- **A tax notice from Apple is audited against the real configuration, not assumed.** Read the app's and each IAP's tax category in the web
+  UI (the API does not expose it), the base storefront and the scheduled `automaticPrices`; the answer for Whisperer on 2026-11-18 was
+  "App Store software, nothing to change" (see `knowledge.md`). Re-audit when a subscription or Whisperer Cloud is added.
+

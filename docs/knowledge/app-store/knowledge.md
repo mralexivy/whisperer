@@ -23,6 +23,36 @@ reading both would have caught it. All documents now describe call audio and the
 `audit-entitlements.sh` fails when a document says "microphone only" while the tap is compiled in. When a feature is added or removed,
 grep the public text for the opposite claim.
 
+## 2026-11-18: tax and price update audit (Apple notice of 2026-11-17)
+
+Apple's notice (the news index dates it Nov 17) announced: automatic prices for apps and non-subscription IAPs in Botswana, Colombia, Egypt,
+Rwanda and Türkiye on 2026-12-03 (not for auto-renewable subscriptions, not for a storefront chosen as base); a new "Software as a Service
+(SaaS)" tax attribute under App Store Software, Software Training Material, Dating and Boosting; and California sales/use tax on those
+categories from 2027-01-01 (USA prices are shown exclusive of tax, proceeds unchanged). Apple does not define SaaS in the notice or in the
+help pages we could read.
+
+What is configured (checked in the API and in the web UI, read-only):
+
+- **Both records** (`com.ivy.whisperer`, `com.ivy.whisperer.cn`): app tax category **App Store software**, no attributes. The Pro IAP on each
+  (`com.ivy.whisperer.pro`, `com.ivy.whisperer.propack`, non-consumable, $14.99) is **Match to parent app**. No subscriptions exist; the
+  "Whisperer Cloud" group is empty.
+- Base storefront is USA, app $4.99, IAP $14.99, so both take the 12-03 change on the five storefronts: COL falls (24 900 → 19 900 COP app,
+  69 900 → 59 900 IAP), EGP/TRY rise (249.99 → 299.99 app, 799.99 → 999.99 IAP), RWA $4.99 → $5.99 and $14.99 → $17.99, BWA unchanged. The
+  new prices are already scheduled in `automaticPrices` with `startDate 2026-12-03`. The China record is sold in CN only, so none of it applies.
+- Verdict: nothing to change. Whisperer is local software sold as a one-time unlock, so App Store software without SaaS is the honest
+  classification (our judgement, not an Apple definition). **Revisit when Whisperer Cloud (server-side sync) ships**: that is the first
+  thing that could be a hosted service.
+
+How to check next time:
+
+- The tax category is **not in the App Store Connect API** (no relationship on apps, IAPs or subscriptions, no `appTaxCategories`). Read it in
+  the web UI: app → Pricing and Availability → Tax Category; IAP page → Tax Category. A logged-in Chrome is attached to the chrome-devtools
+  MCP, so `new_page` on `appstoreconnect.apple.com/apps/<id>/distribution/pricing` works without a login.
+- `asc.py` prints at most 6000 characters, which breaks `json.loads` on a long list. Import it and call `asc.call("GET", path)` instead.
+- The upcoming price rows are `GET /v1/inAppPurchasePriceSchedules/{iap}/automaticPrices` and `/v1/appPriceSchedules/{app}/automaticPrices`
+  (`include=territory,<pricePoint>`); a row with an `endDate` is the old price, the one with a `startDate` is the new one.
+- The same Google/Apple account also holds ReelStrip, Biteslog and others in App Store Connect. Audit only the two Whisperer records.
+
 ## Process facts worth remembering
 
 - A rejected or developer-cancelled version can take a new build with `PATCH /v1/appStoreVersions/{id}/relationships/build`; its state
