@@ -13,3 +13,7 @@
    marker only in China, no AX/CGEvent symbols, no driver, `audit-app.sh`, `audit-entitlements.sh`.
 6. **The compliance-guard hook inspects the command text.** Release commands live in a script file that exports `APP_STORE_GUARD_OK=1`;
    the hook's findings in `whisper.cpp/examples` and `Tools/dict-audit` are not shipped code. Re-check that claim, do not assume it.
+7. **Release type is `AFTER_APPROVAL` (automatic) for both records.** The user wants an approved version to go live without a manual
+   step. `PATCH /v1/appStoreVersions/{id}` `releaseType` works while the version waits for review.
+8. **Say what was checked and what was not.** Never report approval odds from the banned-API scan alone: the entitlement audit and the
+   public-claims grep are part of "checked".
