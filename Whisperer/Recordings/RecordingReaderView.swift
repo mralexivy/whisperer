@@ -210,7 +210,8 @@ private struct RecordingParagraphRow: View {
 
     @ViewBuilder private var text: some View {
         if isRTL {
-            ReaderRTLText(text: paragraph.text, size: 17)
+            MeetingSegmentTextView(text: paragraph.text, highlightQuery: query, isRTL: true, fontSize: 17,
+                                   color: NSColor.white.withAlphaComponent(0.9), lineSpacing: 9)
         } else {
             Text(highlighted)
                 .font(.system(size: 17, weight: .regular))
@@ -279,43 +280,5 @@ private struct RecordingParagraphRow: View {
         .buttonStyle(.plain)
         .help("Copy paragraph")
         .accessibilityLabel("Copy paragraph")
-    }
-}
-
-/// Right-to-left paragraph: SwiftUI `Text` cannot set a paragraph's base writing direction, so this is an
-/// AppKit text field (CLAUDE.md, "RTL text in SwiftUI"). Selectable; wraps to the proposed width.
-private struct ReaderRTLText: NSViewRepresentable {
-    let text: String
-    var size: CGFloat = 15
-
-    func makeNSView(context: Context) -> NSTextField {
-        let field = NSTextField(wrappingLabelWithString: "")
-        field.isEditable = false
-        field.isSelectable = true
-        field.drawsBackground = false
-        field.isBordered = false
-        field.lineBreakMode = .byWordWrapping
-        field.maximumNumberOfLines = 0
-        field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        return field
-    }
-
-    func updateNSView(_ field: NSTextField, context: Context) {
-        let style = NSMutableParagraphStyle()
-        style.lineSpacing = 9
-        style.baseWritingDirection = .rightToLeft
-        style.alignment = .right
-        field.attributedStringValue = NSAttributedString(string: text, attributes: [
-            .font: NSFont.systemFont(ofSize: size, weight: .regular),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.9),
-            .paragraphStyle: style,
-        ])
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: NSTextField, context: Context) -> CGSize? {
-        let width = proposal.width ?? 600
-        field.preferredMaxLayoutWidth = width
-        let size = field.sizeThatFits(NSSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: width, height: ceil(size.height))
     }
 }
