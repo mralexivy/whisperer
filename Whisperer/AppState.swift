@@ -72,6 +72,10 @@ class AppState: ObservableObject {
                 pendingActivationAfterDownload = nil
                 DispatchQueue.main.async { [weak self] in self?.activateBackendAfterDownload(backend) }
             }
+            if case .recording = state {} else {
+                micConnectingName = nil
+                muteDeferredUntilInputLive = false
+            }
             if state == .idle, captureFailure?.isTerminal == false {
                 // A warning is about the recording in progress ("trying to restart the
                 // microphone…"). With the recording over it is no longer true, and it sat on
@@ -128,7 +132,7 @@ class AppState: ObservableObject {
         let isTerminal: Bool
         let occurredAt: Date
 
-        var message: String { verdict.userMessage }
+        var message: String { isTerminal ? verdict.terminalMessage : verdict.userMessage }
         /// Offer in-app repair only for the two conditions Whisperer can actually fix itself.
         var canSelfRepair: Bool { verdict.isSelfRepairable }
     }
@@ -137,6 +141,14 @@ class AppState: ObservableObject {
     func reportCaptureTrouble(_ verdict: InputHealthVerdict) {
         // Don't downgrade a terminal failure back to a warning.
         if captureFailure?.isTerminal == true { return }
+        // Silence from a device that otherwise looks fine is something recovery fixes by moving
+        // to another microphone, usually within a second. An error sound, a system notification
+        // and a red banner for that is the ugly part — stay quiet, and say something only if the
+        // recovery fails (`reportCaptureFailure`) or succeeds (`noteInputSwitched`).
+        if verdict == .healthy {
+            Logger.info("Input silent — recovering quietly", subsystem: .audio)
+            return
+        }
         captureFailure = CaptureFailure(verdict: verdict, isTerminal: false, occurredAt: Date())
         announceCaptureFailure(verdict, isTerminal: false)
     }
@@ -144,8 +156,58 @@ class AppState: ObservableObject {
     /// Capture has failed for good.
     func reportCaptureFailure(_ verdict: InputHealthVerdict) {
         captureFailure = CaptureFailure(verdict: verdict, isTerminal: true, occurredAt: Date())
-        errorMessage = verdict.userMessage
+        errorMessage = verdict.terminalMessage
         announceCaptureFailure(verdict, isTerminal: true)
+    }
+
+    /// Short, calm note shown after recovery moved the recording to another microphone.
+    @Published var inputSwitchNotice: String?
+    /// Name of the Bluetooth microphone that is still waking up, or nil. The HUD shows
+    /// "Connecting AirPods…" instead of "Listening…" so the user does not talk into a dead link.
+    @Published var micConnectingName: String?
+    /// Output muting waits for the Bluetooth input to carry sound: a call-mode link negotiating
+    /// while its output is being muted is the worst moment to touch that device.
+    private var muteDeferredUntilInputLive = false
+
+    func noteInputConnecting(_ name: String?) {
+        guard micConnectingName != name else { return }
+        micConnectingName = name
+        guard name == nil, muteDeferredUntilInputLive else { return }
+        muteDeferredUntilInputLive = false
+        if muteOtherAudioDuringRecording, case .recording = state { audioMuter?.muteSystemAudio() }
+    }
+
+    /// Mutes now, or once the Bluetooth input is live. Returns after scheduling either.
+    private func muteOtherAudioWhenInputLive() {
+        guard muteOtherAudioDuringRecording else { return }
+        if audioRecorder?.isInputConnecting == true {
+            muteDeferredUntilInputLive = true
+        } else {
+            audioMuter?.muteSystemAudio()
+        }
+    }
+    private var inputSwitchNoticeTask: Task<Void, Never>?
+
+    func noteInputSwitched(to deviceName: String) {
+        Logger.info("Input switched to \(deviceName) — recording continues", subsystem: .audio)
+        inputSwitchNotice = "Your microphone wasn't responding — switched to \(deviceName)."
+        // The recording is healthy again; a lingering warning would contradict the notice.
+        if captureFailure?.isTerminal == false { captureFailure = nil }
+        inputSwitchNoticeTask?.cancel()
+        inputSwitchNoticeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 8_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.inputSwitchNotice = nil
+        }
+    }
+
+    /// The input hardware changed (plugged, unplugged, default switched): whatever a previous
+    /// failure said about the old setup no longer applies, and leaving it up made the menu bar
+    /// panel read "No sound is reaching Whisperer" next to "Ready".
+    func clearStaleCaptureFailureAfterDeviceChange() {
+        guard state == .idle, let failure = captureFailure else { return }
+        if errorMessage == failure.message { errorMessage = nil }
+        captureFailure = nil
     }
 
     /// Audio came back on its own.
@@ -4658,6 +4720,7 @@ class AppState: ObservableObject {
                 // a fast failure.
                 audioRecorder?.recordingDirectory = nil
                 let audioURL = try await audioRecorder?.startRecording(route: route, recovery: .dictation)
+                if let failure = captureFailure, errorMessage == failure.message { errorMessage = nil }
                 captureFailure = nil
                 currentAudioURL = audioURL
                 cancelStateWatchdog()  // Startup succeeded, audio is flowing
@@ -4672,9 +4735,7 @@ class AppState: ObservableObject {
                 // Mute AFTER engine is running and aggregate device is stable.
                 // Muting during engine startup can break the AUHAL bus connection (kAudioUnitErr_NoConnection
                 // / -10877), causing the engine to produce zero-filled buffers silently.
-                if muteOtherAudioDuringRecording {
-                    audioMuter?.muteSystemAudio()
-                }
+                muteOtherAudioWhenInputLive()
 
                 // Guard: if stopRecording() was called while audio was starting, stop the recorder
                 guard case .recording = state else {

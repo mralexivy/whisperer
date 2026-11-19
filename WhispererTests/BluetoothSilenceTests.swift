@@ -28,8 +28,8 @@ final class BluetoothSilenceTests: XCTestCase {
     }
 
     func testAirPodsBeforeTheFirstWord() {
-        XCTAssertFalse(AudioRecorder.silenceMeansDeadInput(silentSeconds: 4, isBluetooth: true, hasHeardSignal: false))
-        XCTAssertTrue(AudioRecorder.silenceMeansDeadInput(silentSeconds: 6, isBluetooth: true, hasHeardSignal: false))
+        XCTAssertFalse(AudioRecorder.silenceMeansDeadInput(silentSeconds: 3.9, isBluetooth: true, hasHeardSignal: false))
+        XCTAssertTrue(AudioRecorder.silenceMeansDeadInput(silentSeconds: 4, isBluetooth: true, hasHeardSignal: false))
     }
 }
 

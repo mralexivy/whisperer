@@ -92,6 +92,17 @@ nonisolated enum InputHealthVerdict: Equatable {
         }
     }
 
+    /// Shown when recovery is truly over — every microphone was tried. The in-progress copy
+    /// ("Trying to restart the microphone…") is a lie at that point: nothing is being tried.
+    var terminalMessage: String {
+        switch self {
+        case .healthy:
+            return "None of your microphones is delivering sound. Check System Settings ▸ Sound ▸ Input, then try again."
+        default:
+            return userMessage
+        }
+    }
+
     /// Whether tearing down and rebuilding the audio engine could plausibly help.
     ///
     /// Rebuilding a graph cannot un-mute a device, restore a gain slider or grant a TCC

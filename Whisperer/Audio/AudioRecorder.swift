@@ -118,6 +118,15 @@ class AudioRecorder: NSObject {
     var onCaptureTrouble: ((InputHealthVerdict) -> Void)?
     /// Audio came back after an episode of silence.
     var onCaptureRecovered: (() -> Void)?
+    /// Recovery moved the recording to a different microphone and it is delivering. Carries the
+    /// new device's name. This is a success report, not a failure — the user keeps talking.
+    var onInputSwitched: ((String) -> Void)?
+    /// A Bluetooth input is bound but has not carried sound yet (call-mode links take a few
+    /// seconds to wake). Carries the device name while connecting, `nil` once the input is live,
+    /// replaced or the recording ends. Drives the "Connecting AirPods…" indicator.
+    var onInputConnecting: ((String?) -> Void)?
+    /// True while a Bluetooth input is bound and has not yet carried sound.
+    var isInputConnecting: Bool { isRecording && inputIsBluetooth && !hasEverReceivedNonSilentAudio }
 
     // MARK: - Audio flow tracking
 
@@ -245,10 +254,16 @@ class AudioRecorder: NSObject {
     /// declared dead: 6 s before the wearer has said anything (a cold link that never woke is
     /// still caught by the first-buffer gate and the flow watchdog), 20 s once it has carried
     /// speech. A link that actually stops delivering buffers is the flow watchdog's job, not this.
+    ///
+    /// The never-heard-signal limit is 4 s, not 6 (the HUD shows "Connecting…" meanwhile): the recovery for that case now moves the
+    /// recording to the built-in microphone (`recoveryRoute`), which still hears a user who was
+    /// merely quiet, so a false positive costs nothing — while a headset whose call-mode link
+    /// never woke (2026-11-19, AirPods default input, 6 s of zeros, key already released) used
+    /// to cost the whole dictation.
     nonisolated static func silenceMeansDeadInput(silentSeconds: Double, isBluetooth: Bool,
                                                   hasHeardSignal: Bool) -> Bool {
         let limit: Double
-        if !isBluetooth { limit = 1.5 } else { limit = hasHeardSignal ? 20 : 6 }
+        if !isBluetooth { limit = 1.5 } else { limit = hasHeardSignal ? 20 : 4 }
         return silentSeconds >= limit
     }
     /// Guards `onCaptureTrouble` so one silence episode produces one warning, not one per buffer.
@@ -555,8 +570,18 @@ class AudioRecorder: NSObject {
         recorderState = .starting(generation: generation)
         recordingStartTime = Date()
 
+        // A Bluetooth input that failed attempt 1 is not retried: the same cold link would cost
+        // another settle delay for nothing. Go to the built-in microphone now.
+        let attempt1WasBluetooth = attempt1DeviceID.map { InputRouteQuarantine.isWirelessInput($0) } ?? false
+        if attempt1WasBluetooth, let id = attempt1DeviceID,
+           let uid = AudioDeviceManager.getDeviceUID(deviceID: id) {
+            InputRouteQuarantine.shared.markSuspect(uid: uid)
+        }
+        let attempt2Route: ResolvedInputRoute = attempt1WasBluetooth
+            ? recoveryRoute(attempt: 2, avoiding: attempt1DeviceID)
+            : .systemDefault
         do {
-            return try await startRecordingInternal(route: .systemDefault, generation: generation,
+            return try await startRecordingInternal(route: attempt2Route, generation: generation,
                                                     preflightReadiness: nil)
         } catch {
             guard isGenerationCurrent(generation) else { throw RecordingError.engineCleanedUp }
@@ -731,6 +756,11 @@ class AudioRecorder: NSObject {
             return transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE
         } ?? false
         if let deviceID = cachedEngineDeviceID { raiseHeadsetLevelIfQuiet(deviceID) }
+        // Tell the user a Bluetooth link is still waking, instead of letting them talk into it.
+        let connectingName: String? = (inputIsBluetooth && !hasEverReceivedNonSilentAudio)
+            ? cachedEngineDeviceID.flatMap { AudioDeviceManager.getDeviceName(deviceID: $0) } ?? "Bluetooth microphone"
+            : nil
+        DispatchQueue.main.async { [weak self] in self?.onInputConnecting?(connectingName) }
         let gen = await engineLifecycle.generation
 
         isRecording = true
@@ -837,12 +867,16 @@ class AudioRecorder: NSObject {
             }
         } else {
             let wasSilent = hasReportedSilenceEpisode
+            let firstSignal = !hasEverReceivedNonSilentAudio
             consecutiveSilentCallbacks = 0
             silentSeconds = 0
             hasEverReceivedNonSilentAudio = true
             hasReportedSilenceEpisode = false
             if recoveryAttemptCount > 0 {
                 recoveryAttemptCount = 0
+            }
+            if firstSignal && inputIsBluetooth {
+                DispatchQueue.main.async { [weak self] in self?.onInputConnecting?(nil) }
             }
             if wasSilent {
                 DispatchQueue.main.async { [weak self] in self?.onCaptureRecovered?() }
@@ -1156,18 +1190,39 @@ class AudioRecorder: NSObject {
         // Escalate the route rather than re-binding the device that just failed. All four
         // rebuilds on 2026-09-14 targeted the same built-in mic (id=96) while five other live
         // inputs sat unused.
-        let route = recoveryRoute(attempt: recoveryAttemptCount, avoiding: diagnosis.otherDeviceCanHelp ? failedDeviceID : nil)
+        //
+        // A Bluetooth input that never carried a single non-silent buffer is a link that did not
+        // wake (AirPods stuck in A2DP, call mode never negotiated). Rebuilding on it again just
+        // renegotiates the same dead link, so attempt 1 skips straight to another device — the
+        // built-in microphone first — instead of burning the user's push-to-talk on a retry.
+        let skipDeadBluetooth = inputIsBluetooth && !hasEverReceivedNonSilentAudio
+        if skipDeadBluetooth, let failedDeviceID, let uid = AudioDeviceManager.getDeviceUID(deviceID: failedDeviceID) {
+            // Remember it: the next press must not start on the same dead link.
+            InputRouteQuarantine.shared.markSuspect(uid: uid)
+        }
+        let route = recoveryRoute(attempt: skipDeadBluetooth ? max(2, recoveryAttemptCount) : recoveryAttemptCount,
+                                  avoiding: (diagnosis.otherDeviceCanHelp || skipDeadBluetooth) ? failedDeviceID : nil)
 
         recorderState = .starting(generation: generation)
         recordingStartTime = Date()
         do {
             _ = try await startRecordingInternal(route: route, generation: generation, isRecovery: true)
             Logger.event(.recStart, .audio, ["recovery": .bool(true), "route": .string("\(route)"), "gen": .int(generation)])
+            let switchedTo: String? = {
+                guard case .explicit(_, let id) = route, id != failedDeviceID else { return nil }
+                return AudioDeviceManager.getDeviceName(deviceID: id)
+            }()
             DispatchQueue.main.async { [weak self] in
                 self?.onDeviceRecovery?(.deviceLostDuringRecording)
+                if let switchedTo { self?.onInputSwitched?(switchedTo) }
             }
         } catch {
             Logger.event(.recFail, .audio, ["recovery": .bool(true), "err": .string(error.localizedDescription)], level: .error)
+
+            // The user let go while the rebuild was in flight: `stopRecording` already closed the
+            // recording and moved on. Reporting an audio-flow failure now only paints a sticky
+            // error banner over a recording that ended normally.
+            guard isGenerationCurrent(generation) else { return }
 
             // A failed rebuild is not the end for a long-form session — the device may come back.
             // The recorder keeps the session open and the next silent buffer (or the flow

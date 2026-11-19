@@ -211,7 +211,8 @@ struct LiveTranscriptionCard: View {
                                     words: textUpdater.words,
                                     firstIndex: textUpdater.firstWordID,
                                     isStreaming: textUpdater.isActive,
-                                    scale: scale
+                                    scale: scale,
+                                    placeholder: appState.micConnectingName.map { "Connecting \($0)…" } ?? "Listening…"
                                 )
                             }
                         }
@@ -386,7 +387,7 @@ struct LiveTranscriptionCard: View {
     /// cannot have it.
     private var rtlDisplayText: String {
         let text = textUpdater.displayedText
-        if text.isEmpty { return "Listening…" }
+        if text.isEmpty { return appState.micConnectingName.map { "Connecting \($0)…" } ?? "Listening…" }
         let cursor = showCursor && !textUpdater.isActive ? " |" : ""
         return text + cursor
     }

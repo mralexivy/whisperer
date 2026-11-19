@@ -87,6 +87,8 @@ class AudioDeviceManager: ObservableObject {
                 let added = newUIDs.subtracting(self.cachedDeviceUIDs)
                 let removed = self.cachedDeviceUIDs.subtracting(newUIDs)
                 self.cachedDeviceUIDs = newUIDs
+                // A reconnect renegotiates the link, so a device that vanished gets a clean slate.
+                InputRouteQuarantine.shared.forgetDevices(notIn: newUIDs)
 
                 let selection = self.updateSelectedDevice(previousDevices: previousDevices)
 
@@ -94,6 +96,7 @@ class AudioDeviceManager: ObservableObject {
                 // every HAL notification and every wake, and used to cost three lines
                 // each time. One record, only when the set or the selection moved.
                 guard !added.isEmpty || !removed.isEmpty || selection.changed else { return }
+                AppState.shared.clearStaleCaptureFailureAfterDeviceChange()
 
                 var fields: [String: MetadataValue] = [
                     "n": .int(devices.count),
@@ -189,11 +192,29 @@ class AudioDeviceManager: ObservableObject {
     /// `nonisolated static`: pure HAL reads, called from `AudioRecorder`'s recovery task.
     nonisolated static func usableInputDevicesForRecovery(excluding: AudioDeviceID?) -> [AudioDevice] {
         let defaultID = currentDefaultInputDeviceID()
-        return enumerateInputDevices().filter { device in
+        let usable = enumerateInputDevices().filter { device in
             guard device.id != excluding, device.id != defaultID else { return false }
             guard !device.uid.hasPrefix(kCADefaultDeviceAggregatePrefix) else { return false }
             let (_, verdict) = InputHealthProbe.probe(deviceID: device.id)
             return verdict == .healthy
+        }
+        // Built-in first, wired/USB next, wireless last: the HAL's enumeration order put
+        // "Misha's iPhone Microphone" (Continuity) ahead of the MacBook's own mic, and a
+        // Bluetooth or phone link is the least likely thing to be awake when recovery runs.
+        func rank(_ device: AudioDevice) -> Int {
+            InputTransportRank.rank(transport: InputRoutePreflight.transportType(device.id))
+        }
+        return usable.enumerated()
+            .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+            .map(\.element)
+    }
+
+    /// The Mac's own microphone, if it has one and it is usable. The one input that is always
+    /// present and never asleep — the floor every recovery ladder must be able to reach.
+    nonisolated static func builtInInputDevice() -> AudioDevice? {
+        enumerateInputDevices().first { device in
+            InputRoutePreflight.transportType(device.id) == kAudioDeviceTransportTypeBuiltIn
+                && InputHealthProbe.probe(deviceID: device.id).verdict == .healthy
         }
     }
 
@@ -233,7 +254,7 @@ class AudioDeviceManager: ObservableObject {
         return status == noErr && propertySize > 0
     }
 
-    private nonisolated static func getDeviceName(deviceID: AudioDeviceID) -> String? {
+    nonisolated static func getDeviceName(deviceID: AudioDeviceID) -> String? {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceNameCFString,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -258,7 +279,7 @@ class AudioDeviceManager: ObservableObject {
         return name as String
     }
 
-    private nonisolated static func getDeviceUID(deviceID: AudioDeviceID) -> String? {
+    nonisolated static func getDeviceUID(deviceID: AudioDeviceID) -> String? {
         var propertyAddress = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,
             mScope: kAudioObjectPropertyScopeGlobal,
@@ -382,6 +403,11 @@ class AudioDeviceManager: ObservableObject {
     /// If the user has a preferred device, resolves its UID to a current AudioDeviceID
     /// via a fresh CoreAudio query. Returns .systemDefault if no preference or device not found.
     func resolveInputRouteForRecording() -> ResolvedInputRoute {
+        let route = resolvePreferredRoute()
+        return Self.avoidingQuarantine(route)
+    }
+
+    private func resolvePreferredRoute() -> ResolvedInputRoute {
         guard let preferredUID = preferredDeviceUID else {
             return .systemDefault
         }
@@ -391,6 +417,23 @@ class AudioDeviceManager: ObservableObject {
         Logger.event(.devFail, .audio, ["at": .string("resolve"), "uid": .string(preferredUID),
                                         "fallback": .string("default")], level: .warning)
         return .systemDefault
+    }
+
+    /// If the route lands on an input that recently delivered only silence, start on the
+    /// built-in microphone instead. The user pressed the key to talk now, not to learn again
+    /// that their headset is asleep.
+    nonisolated static func avoidingQuarantine(_ route: ResolvedInputRoute,
+                                               quarantine: InputRouteQuarantine = .shared) -> ResolvedInputRoute {
+        let targetUID: String?
+        switch route {
+        case .explicit(let uid, _): targetUID = uid
+        case .systemDefault: targetUID = currentDefaultInputDeviceID().flatMap { getDeviceUID(deviceID: $0) }
+        }
+        guard let targetUID, quarantine.isSuspect(uid: targetUID),
+              let builtIn = builtInInputDevice(), builtIn.uid != targetUID else { return route }
+        Logger.event(.devSelect, .audio, ["id": .int(Int(builtIn.id)), "name": .string(builtIn.name),
+                                          "action": .string("avoid_suspect_input")])
+        return .explicit(uid: builtIn.uid, deviceID: builtIn.id)
     }
 
     /// Pure HAL lookup: resolve a device UID to its current AudioDeviceID.

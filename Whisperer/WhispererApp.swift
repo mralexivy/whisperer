@@ -323,6 +323,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
 
+        appState.audioRecorder?.onInputConnecting = { [weak self] name in
+            Task { @MainActor in
+                self?.appState.noteInputConnecting(name)
+            }
+        }
+
+        appState.audioRecorder?.onInputSwitched = { [weak self] name in
+            Task { @MainActor in
+                self?.appState.noteInputSwitched(to: name)
+            }
+        }
+
         appState.audioRecorder?.onCaptureRecovered = { [weak self] in
             Task { @MainActor in
                 self?.appState.clearCaptureFailure()
@@ -757,6 +769,9 @@ struct MenuBarView: View {
             if let error = appState.errorMessage {
                 errorBanner(error)
             }
+            if let notice = appState.inputSwitchNotice {
+                infoBanner(notice)
+            }
         }
         .padding(16)
         .background(
@@ -796,6 +811,23 @@ struct MenuBarView: View {
         }
     }
 
+    /// A recovery that worked — calm, not an alarm.
+    private func infoBanner(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "mic.fill")
+                .foregroundColor(MBColors.accent)
+            Text(text)
+                .font(.caption)
+                .foregroundColor(.white.opacity(0.85))
+                .lineLimit(3)
+            Spacer()
+        }
+        .padding(10)
+        .background(MBColors.accent.opacity(0.12))
+        .cornerRadius(8)
+        .transition(.opacity)
+    }
+
     private func errorBanner(_ error: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -807,6 +839,18 @@ struct MenuBarView: View {
                 .lineLimit(2)
 
             Spacer()
+
+            if appState.captureFailure != nil {
+                // The one thing the user can do: pick a working input.
+                Button("Sound Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.plain).pointerOnHover()
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.white)
+            }
 
             Button(action: {
                 NSPasteboard.general.clearContents()
