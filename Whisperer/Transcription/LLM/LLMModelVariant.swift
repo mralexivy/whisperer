@@ -64,7 +64,12 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
         self == .appleIntelligence ? Self.appleIntelligenceIsAvailable : ModelSources.isReachable(repo: huggingFaceId)
     }
 
-    static var appleIntelligenceIsAvailable: Bool { SystemLanguageModel.default.isAvailable }
+    /// macOS reports whether this Mac has it — except in mainland China, where the edition's
+    /// declared model list is Qwen only (App Review notes, `china-edition.md`), so the built-in
+    /// model is not offered even if macOS has one.
+    static var appleIntelligenceIsAvailable: Bool {
+        MarketPolicy.current != .chinaMainland && SystemLanguageModel.default.isAvailable
+    }
 
     /// Models that run through MLX weights Whisperer downloads.
     private static var downloadable: [LLMModelVariant] { allCases.filter { $0 != .appleIntelligence } }
@@ -73,7 +78,7 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
     /// The China edition offers exactly one: the best Qwen it can download.
     static var available: [LLMModelVariant] {
         let reachable = downloadable.filter(\.isAvailableInThisMarket)
-        // The model built into macOS is offered wherever macOS has it, the China edition included.
+        // The model built into macOS is offered wherever macOS has it, except mainland China.
         let builtIn: [LLMModelVariant] = appleIntelligenceIsAvailable ? [.appleIntelligence] : []
         guard MarketPolicy.isChinaEdition else { return reachable + builtIn }
         let one = [qwen3_5_4B_mtp, qwen3_5_4B].first(where: reachable.contains) ?? reachable.first
