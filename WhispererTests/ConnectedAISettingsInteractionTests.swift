@@ -253,7 +253,7 @@ final class ConnectedAISettingsInteractionTests: XCTestCase {
 
     func testPageListsEveryAvailableProviderOnce() {
         let (c, store) = makeController()
-        let shown = c.subscriptionProviders + c.apiKeyProviders
+        let shown = c.onDeviceProviders + c.subscriptionProviders + c.apiKeyProviders
         XCTAssertEqual(Set(shown), Set(store.availableProviders))
         XCTAssertEqual(shown.count, store.availableProviders.count)
         XCTAssertTrue(c.apiKeyProviders.allSatisfy { $0.kind == .apiKey })

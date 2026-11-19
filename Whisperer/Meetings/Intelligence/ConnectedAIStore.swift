@@ -72,8 +72,9 @@ final class ConnectedAIStore: ObservableObject {
 
     /// The provider meeting AI uses right now, or nil for "on this Mac".
     var activeProviderID: AIProviderID? {
-        guard !keepLocalOnly, let id = selectedProvider,
-              availableProviders.contains(id), consented.contains(id) else { return nil }
+        guard let id = selectedProvider, availableProviders.contains(id), hasConsent(id) else { return nil }
+        // "Keep all meeting AI on this Mac" stops only providers that send text elsewhere.
+        if keepLocalOnly && id.leavesTheMac { return nil }
         return id
     }
 
@@ -83,7 +84,8 @@ final class ConnectedAIStore: ObservableObject {
 
     // MARK: Consent
 
-    func hasConsent(_ id: AIProviderID) -> Bool { consented.contains(id) }
+    /// A provider that keeps the text on this Mac has nothing to ask permission for.
+    func hasConsent(_ id: AIProviderID) -> Bool { !id.leavesTheMac || consented.contains(id) }
 
     func grantConsent(_ id: AIProviderID) {
         consented.insert(id)
@@ -135,6 +137,8 @@ final class ConnectedAIStore: ObservableObject {
         #else
         case .claudeCode, .codex, .antigravity: return nil
         #endif
+        case .appleIntelligence:
+            return AppleIntelligenceProvider()
         case .chatGPT:
             var p = OpenAIResponsesProvider(
                 id: .chatGPT, model: model.isEmpty ? "gpt-5" : model,
@@ -233,6 +237,7 @@ final class ConnectedAIStore: ObservableObject {
             switch id.kind {
             case .apiKey: return .unavailable("Key rejected")
             case .oauth:  return .notSignedIn(hint: "Continue with ChatGPT")
+            case .onDevice: return .unavailable(error.localizedDescription)
             case .cli:
                 #if !APP_STORE
                 return .notSignedIn(hint: CLIDiscovery.signInCommand(for: id) ?? "")

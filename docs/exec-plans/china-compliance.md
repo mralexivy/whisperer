@@ -120,6 +120,12 @@ It needs an approved filing number and an authorization from the model's owner n
 3. **Manual App Store Connect steps** (skill Step 14): App ID and second record, availability, forms, IAP re-creation, zh-Hans metadata.
 4. **Apple's view on on-device summaries.** Not in Apple's trigger list; if App Review objects, the local title/overview is one flag away.
 5. Background Assets (Apple-hosted) as a later alternative to ModelScope.
+6. **Models built into macOS are not restricted in China (decision 2026-11-19).** Apple's on-device speech
+   recognizer (live preview) and Apple Intelligence (Foundation Models, `AppleIntelligenceProvider`) are used in every
+   edition and market whenever macOS reports them available; there is no per-market or per-edition list for them. The
+   rule above applies to third-party models Whisperer downloads. Consequences: the China edition's meeting title,
+   overview and polish may be written by Apple's model instead of Qwen (the user picks it on the LLM page), so the
+   review notes must say "Qwen or the model built into macOS". Ask AI is still off in China (`askAIChat`).
 
 ## 10. Submission log
 

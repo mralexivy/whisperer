@@ -25,18 +25,26 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
     case openAIKey
     case anthropicKey
     case geminiKey
+    /// The model macOS ships (Foundation Models). Runs on this Mac: no account, no key, no consent.
+    case appleIntelligence
 
     var id: String { rawValue }
 
-    enum Kind: Sendable { case cli, oauth, apiKey }
+    enum Kind: Sendable { case cli, oauth, apiKey, onDevice }
 
     var kind: Kind {
         switch self {
         case .claudeCode, .codex, .antigravity: return .cli
         case .chatGPT:                           return .oauth
         case .openAIKey, .anthropicKey, .geminiKey: return .apiKey
+        case .appleIntelligence:                 return .onDevice
         }
     }
+
+    /// Whether the meeting text is sent to someone. Only a provider that leaves the Mac needs
+    /// the user's permission, and only one that leaves the Mac is stopped by "keep all meeting
+    /// AI on this Mac".
+    var leavesTheMac: Bool { kind != .onDevice }
 
     var displayName: String {
         switch self {
@@ -47,6 +55,7 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
         case .openAIKey:    return "OpenAI API"
         case .anthropicKey: return "Anthropic API"
         case .geminiKey:    return "Gemini API"
+        case .appleIntelligence: return "Apple Intelligence"
         }
     }
 
@@ -60,6 +69,7 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
         case .openAIKey:    return "Billed to your OpenAI API key"
         case .anthropicKey: return "Billed to your Anthropic API key"
         case .geminiKey:    return "Billed to your Google AI Studio key"
+        case .appleIntelligence: return "Built into macOS. Private and offline."
         }
     }
 
@@ -72,6 +82,7 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
         case .openAIKey:    return "key.fill"
         case .anthropicKey: return "key.horizontal.fill"
         case .geminiKey:    return "diamond.fill"
+        case .appleIntelligence: return "apple.intelligence"
         }
     }
 
@@ -81,6 +92,7 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
         case .claudeCode, .anthropicKey: return "Anthropic"
         case .codex, .chatGPT, .openAIKey: return "OpenAI"
         case .antigravity, .geminiKey:   return "Google"
+        case .appleIntelligence:         return "Apple"
         }
     }
 
@@ -88,6 +100,7 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
         switch recipient {
         case "Anthropic": return URL(string: "https://www.anthropic.com/legal/privacy")
         case "OpenAI":    return URL(string: "https://openai.com/policies/privacy-policy")
+        case "Apple":     return nil   // nothing is sent
         default:          return URL(string: "https://policies.google.com/privacy")
         }
     }
@@ -95,6 +108,10 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
     /// CLI adapters need to launch a user-installed binary that reads its own credentials
     /// from the home directory. The App Store sandbox forbids both.
     var isAvailableInThisBuild: Bool {
+        // A model built into macOS is not a third-party AI service and nothing leaves the Mac, so neither
+        // the market nor the edition gates it: macOS itself reports whether it is available (`readiness`).
+        // Ask AI keeps its own market switch (`ComplianceFeature.askAIChat`), whichever model answers.
+        if kind == .onDevice { return ProAccess.allows(.ai) }
         // The market decides first: in mainland China no third-party AI service is offered (MarketPolicy).
         guard MarketPolicy.allows(kind == .cli ? .cliAIProviders : .connectedCloudAI) else { return false }
         guard ProAccess.allows(.ai) else { return false }
@@ -149,6 +166,8 @@ nonisolated enum MeetingAIProviderError: Error, Equatable, Sendable, LocalizedEr
     case timeout
     case offline
     case contextTooLong
+    case unsupportedLanguage
+    case refused
     case schemaMismatch(raw: String)
     case processFailed(exitCode: Int32, stderrTail: String)
     case server(status: Int, body: String)
@@ -165,6 +184,8 @@ nonisolated enum MeetingAIProviderError: Error, Equatable, Sendable, LocalizedEr
         case .timeout:                       return "The request took too long."
         case .offline:                       return "No internet connection."
         case .contextTooLong:                return "This meeting is too long for the selected AI."
+        case .unsupportedLanguage:           return "The AI doesn't support this language."
+        case .refused:                       return "The AI declined to answer this text."
         case .schemaMismatch:                return "The AI replied in an unexpected format."
         case .processFailed(let code, _):    return "The command-line tool failed (exit \(code))."
         case .server(let status, _):         return "The AI service returned an error (\(status))."
@@ -220,8 +241,15 @@ nonisolated protocol MeetingIntelligenceProvider: Sendable {
     var id: AIProviderID { get }
     /// The model the provider will use, for provenance. Nil when the CLI chooses.
     var modelLabel: String? { get }
-    /// Characters of transcript the provider takes in one request.
+    /// Characters of transcript the provider takes in one question (Ask AI), after the
+    /// transcript has been narrowed to what the question needs.
     var maxTranscriptChars: Int { get }
+    /// Characters of transcript the provider takes for notes. A provider with a small context
+    /// window can exceed its per-request size here by summarizing in stages itself.
+    var maxNotesChars: Int { get }
+    /// True when the provider's model is small enough that polish should use the plain
+    /// `id | text` line format in small chunks, as the MLX model does, instead of JSON.
+    var polishesInLines: Bool { get }
 
     func readiness() async -> ProviderReadiness
     func generateNotes(_ input: MeetingNotesInput,
@@ -250,4 +278,6 @@ nonisolated extension MeetingIntelligenceProvider {
     /// ~200k tokens is the floor across the supported cloud models; leave room for the
     /// instructions and the answer.
     var maxTranscriptChars: Int { 400_000 }
+    var maxNotesChars: Int { maxTranscriptChars }
+    var polishesInLines: Bool { false }
 }

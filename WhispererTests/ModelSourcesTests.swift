@@ -94,7 +94,8 @@ final class ModelSourcesTests: XCTestCase {
         MarketPolicy.testOverride = .other
         XCTAssertEqual(BackendType.defaultBackend, .whisperCpp)
         XCTAssertEqual(LLMModelVariant.marketDefault, .qwen3_5_4B_mtp)
-        XCTAssertEqual(LLMModelVariant.available.count, LLMModelVariant.allCases.count)
+        XCTAssertEqual(LLMModelVariant.available.filter { $0 != .appleIntelligence }.count,
+                       LLMModelVariant.allCases.filter { $0 != .appleIntelligence }.count)
         XCTAssertEqual(WhisperModel.primaryOrder, [.largeTurboQ5, .ivritLargeTurbo, .largeTurbo])
         XCTAssertTrue(MeetingEngine.speakers.isAvailableInThisMarket)
         XCTAssertTrue(BackendType.selectable.contains(.parakeet))

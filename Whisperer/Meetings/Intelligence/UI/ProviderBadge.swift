@@ -24,6 +24,7 @@ extension AIProviderID {
         case .claudeCode, .anthropicKey:   return Color(hex: "D97757")
         case .codex, .chatGPT, .openAIKey: return Color(hex: "10A37F")
         case .antigravity, .geminiKey:     return Color(hex: "4285F4")
+        case .appleIntelligence:           return Color(hex: "A855F7")
         }
     }
 
@@ -36,6 +37,7 @@ extension AIProviderID {
         case .chatGPT, .openAIKey: return "ChatGPT"
         case .antigravity:  return "Antigravity"
         case .geminiKey:    return "Gemini"
+        case .appleIntelligence: return "Apple Intelligence"
         }
     }
 
@@ -46,6 +48,7 @@ extension AIProviderID {
         case .codex:                       return "chevron.left.forwardslash.chevron.right"
         case .chatGPT, .openAIKey:         return "circle.hexagongrid.fill"
         case .antigravity, .geminiKey:     return "sparkle"
+        case .appleIntelligence:           return "apple.intelligence"
         }
     }
 
@@ -67,6 +70,8 @@ extension AIProviderID {
             return apps(["Antigravity", "Gemini"])
         case .geminiKey:
             return apps(["Gemini", "Antigravity"])
+        case .appleIntelligence:
+            return []   // no vendor app; the glyph is the mark
         }
     }
 }

@@ -198,6 +198,7 @@ class LLMPostProcessor: ObservableObject {
 
     /// Whether the model's files are on disk, so `loadModel` will not touch the network.
     static func isOnDisk(_ variant: LLMModelVariant) -> Bool {
+        if variant == .appleIntelligence { return true }   // nothing to download
         let dir = ModelConfiguration(id: variant.huggingFaceId).modelDirectory(hub: HubApi())
         return FileManager.default.fileExists(atPath: dir.appendingPathComponent("config.json").path)
     }
@@ -223,6 +224,7 @@ class LLMPostProcessor: ObservableObject {
     }
 
     func loadModel(_ variant: LLMModelVariant) async throws {
+        if variant == .appleIntelligence { try loadAppleIntelligence(); return }
         guard !isLoading else {
             Logger.debug("LLM load already in progress, skipping", subsystem: .model)
             return
@@ -308,9 +310,20 @@ class LLMPostProcessor: ObservableObject {
             case .qwen3_5_4B:     256
             case .qwen3_5_4B_mtp: 256
             case .qwen3_5_9B:     512
+            case .appleIntelligence: 256   // unreachable: handled above
         }
         Memory.cacheLimit = cacheMB * 1024 * 1024
         Logger.info("LLM \(variant.displayName) loaded (MLX cache limit: \(cacheMB) MB, active: \(Memory.activeMemory / (1024 * 1024)) MB)", subsystem: .model)
+    }
+
+    /// `loadedVariant` is `private(set)`; the Apple Intelligence extension reports readiness through here.
+    func setAppleIntelligenceLoaded() {
+        modelContainer = nil
+        loadedVariant = .appleIntelligence
+        isModelLoaded = true
+        isLoading = false
+        loadPhase = .ready
+        errorMessage = nil
     }
 
     func unloadModel() async {
@@ -598,6 +611,12 @@ class LLMPostProcessor: ObservableObject {
             return try await hook(systemPrompt, userMessage, assistantPrefill)
         }
         #endif
+        if loadedVariant == .appleIntelligence {
+            return try await processAppleIntelligence(
+                text: text, systemPrompt: systemPrompt, userMessage: userMessage, targetLanguage: targetLanguage,
+                maxTokens: min(maxTokensCap, outputTokensHint ?? maxTokensCap),
+                onPartialText: onPartialText, throwOnFallback: throwOnFallback, priority: priority)
+        }
         guard let container = modelContainer else {
             Logger.warning("LLM not loaded, returning original text", subsystem: .transcription)
             if throwOnFallback { throw LLMFallbackError.noModelLoaded }

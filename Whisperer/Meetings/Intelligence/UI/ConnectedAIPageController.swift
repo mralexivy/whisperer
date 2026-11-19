@@ -42,7 +42,9 @@ final class ConnectedAIPageController: ObservableObject {
         cancellable = store.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
-    var subscriptionProviders: [AIProviderID] { store.availableProviders.filter { $0.kind != .apiKey } }
+    /// Models built into macOS: listed under "On this Mac", not among the accounts.
+    var onDeviceProviders: [AIProviderID] { store.availableProviders.filter { $0.kind == .onDevice } }
+    var subscriptionProviders: [AIProviderID] { store.availableProviders.filter { $0.kind != .apiKey && $0.kind != .onDevice } }
     var apiKeyProviders: [AIProviderID] { store.availableProviders.filter { $0.kind == .apiKey } }
 
     // MARK: - Chooser
@@ -150,6 +152,9 @@ final class ConnectedAIPageController: ObservableObject {
         if store.keepLocalOnly { return "“Keep all meeting AI on this Mac” is on — nothing is sent." }
         guard let id = store.activeProviderID else {
             return "Meeting notes and Ask AI run on this Mac. Nothing leaves it."
+        }
+        if !id.leavesTheMac {
+            return "Meeting notes and Ask AI use \(id.displayName), on this Mac. Nothing leaves it. If it can't handle a meeting, the built-in model takes over."
         }
         return "Meeting notes and Ask AI use \(id.displayName). If it's unavailable, this Mac takes over. Dictation always stays on this Mac."
     }

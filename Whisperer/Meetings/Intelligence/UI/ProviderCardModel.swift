@@ -40,7 +40,7 @@ nonisolated struct ProviderCardModel: Equatable, Sendable {
                      keepLocalOnly: Bool,
                      installURL: URL?,
                      signInCommand: String?) -> ProviderCardModel {
-        let inUse = isSelected && hasConsent && !keepLocalOnly
+        let inUse = isSelected && hasConsent && !(keepLocalOnly && id.leavesTheMac)
         var model = ProviderCardModel(
             id: id,
             statusText: isChecking ? "Checking…" : (readiness?.statusText ?? "Not checked"),
@@ -69,6 +69,7 @@ nonisolated struct ProviderCardModel: Equatable, Sendable {
             case .oauth: model.primary = .connectChatGPT
             case .cli:   model.primary = (signInCommand ?? (hint.isEmpty ? nil : hint)).map(Action.copySignInCommand)
             case .apiKey: model.primary = .enterKey
+            case .onDevice: model.primary = .test
             }
             model.secondary = [.test]
         case .needsKey?:
@@ -89,7 +90,7 @@ nonisolated struct ProviderCardModel: Equatable, Sendable {
         if id.kind == .oauth, readiness?.isReady == true {
             model.secondary.append(.disconnectChatGPT)
         }
-        if hasConsent { model.secondary.append(.revokePermission) }
+        if hasConsent && id.leavesTheMac { model.secondary.append(.revokePermission) }
         if isChecking { model.primary = nil }
         return model
     }

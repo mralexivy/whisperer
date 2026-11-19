@@ -107,10 +107,11 @@ struct LLMPageView: View {
 
             CurrentChoiceBanner(colorScheme: colorScheme,
                                 provider: store.activeProviderID,
-                                keepLocal: store.keepLocalOnly)
+                                keepLocal: store.keepLocalOnly && store.activeProviderID == nil)
 
             VStack(spacing: 8) {
                 localRow
+                ForEach(controller.onDeviceProviders) { id in providerRow(id) }
                 if !orderedSubscriptions.isEmpty {
                     groupLabel("YOUR AI SUBSCRIPTIONS", hint: subscriptionHint)
                     ForEach(orderedSubscriptions) { id in providerRow(id) }
@@ -234,10 +235,17 @@ struct LLMPageView: View {
                     }
                     .uiTestFrame("llm.manage.signout.\(id.rawValue)")
                 }
-                SecondaryButton(title: "Stop sending meetings here", colorScheme: colorScheme) {
-                    controller.perform(.revokePermission, id: id)
+                if id.leavesTheMac {
+                    SecondaryButton(title: "Stop sending meetings here", colorScheme: colorScheme) {
+                        controller.perform(.revokePermission, id: id)
+                    }
+                    .uiTestFrame("llm.manage.revoke.\(id.rawValue)")
+                } else {
+                    SecondaryButton(title: "Use the built-in model instead", colorScheme: colorScheme) {
+                        controller.localTapped()
+                    }
+                    .uiTestFrame("llm.manage.local.\(id.rawValue)")
                 }
-                .uiTestFrame("llm.manage.revoke.\(id.rawValue)")
             }
             if let message = controller.testMessages[id] {
                 Text(message)
@@ -516,7 +524,7 @@ private struct CurrentChoiceBanner: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(WhispererColors.primaryText(colorScheme))
                     .contentTransition(.opacity)
-                Text(provider == nil || keepLocal ? "Nothing leaves your Mac" : "If it's unavailable, this Mac takes over")
+                Text(provider == nil || keepLocal || provider?.leavesTheMac == false ? "Nothing leaves your Mac" : "If it's unavailable, this Mac takes over")
                     .font(.system(size: 11))
                     .foregroundColor(WhispererColors.secondaryText(colorScheme))
             }

@@ -144,6 +144,19 @@ extension LLMPostProcessor {
         #endif
         let timeoutSeconds = timeoutSeconds ?? Self.defaultTimeout(rowCount: requests.count)
 
+        if loadedVariant == .appleIntelligence, !instructions.isEmpty {
+            // One request at a time: the system model serves a single request at once, so a batch is a loop.
+            var out: [String] = []
+            for request in requests {
+                if Task.isCancelled { out.append(request.text); continue }
+                let reply = try? await processAppleIntelligence(
+                    text: request.text, systemPrompt: instructions, userMessage: request.userMessage,
+                    targetLanguage: nil, maxTokens: request.maxTokens, onPartialText: nil,
+                    throwOnFallback: false, priority: priority)
+                out.append(reply ?? request.text)
+            }
+            return out
+        }
         guard let container = modelContainer, !instructions.isEmpty else {
             return requests.map(\.text)
         }

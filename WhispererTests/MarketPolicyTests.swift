@@ -69,10 +69,11 @@ final class MarketPolicyTests: XCTestCase {
     func testConnectedProvidersDisappearInChinaAndCliKindsToo() throws {
         #if DEBUG && !CHINA_EDITION
         MarketPolicy.testOverride = .chinaMainland
-        for id in AIProviderID.allCases { XCTAssertFalse(id.isAvailableInThisBuild, "\(id) must not be offered in China") }
+        // Third-party AI is off. A model built into macOS is not third-party and is left to macOS (see the provider).
+        for id in AIProviderID.allCases where id.leavesTheMac { XCTAssertFalse(id.isAvailableInThisBuild, "\(id) must not be offered in China") }
         let defaults = UserDefaults(suiteName: "market-\(UUID().uuidString)")!
         let store = ConnectedAIStore(defaults: defaults, keychain: KeychainStore(service: "com.ivy.whisperer.tests.\(UUID().uuidString)"))
-        XCTAssertTrue(store.availableProviders.isEmpty)
+        XCTAssertEqual(store.availableProviders.filter(\.leavesTheMac), [])
         // a provider chosen and consented before the market changed must not come back to life
         store.grantConsent(.openAIKey)
         store.selectedProvider = .openAIKey
@@ -111,8 +112,10 @@ final class ChinaEditionLimitsTests: XCTestCase {
     func testChinaEditionOffersOnlyQwen() {
         #if CHINA_EDITION
         XCTAssertEqual(BackendType.selectable, [.qwen3asr])
-        XCTAssertEqual(LLMModelVariant.available.count, 1)
-        XCTAssertEqual(LLMModelVariant.available.first, LLMModelVariant.marketDefault)
+        // One downloadable model; the model built into macOS is offered on top wherever macOS has it.
+        let downloadable = LLMModelVariant.available.filter { $0 != .appleIntelligence }
+        XCTAssertEqual(downloadable.count, 1)
+        XCTAssertEqual(downloadable.first, LLMModelVariant.marketDefault)
         #else
         XCTAssertFalse(MarketPolicy.isChinaEdition)
         XCTAssertGreaterThan(BackendType.selectable.count, 1)

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import FoundationModels
 
 nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
     case qwen2_5_1_5B = "Qwen2.5-1.5B"
@@ -14,6 +15,8 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
     case qwen3_5_4B = "Qwen3.5-4B"
     case qwen3_5_2B = "Qwen3.5-2B"
     case qwen3_5_9B = "Qwen3.5-9B"
+    /// The model macOS ships (Foundation Models). Nothing to download; used only where macOS reports it available.
+    case appleIntelligence = "Apple Intelligence"
 
     var id: String { rawValue }
 
@@ -25,6 +28,7 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
         case .qwen3_5_4B:     return "mlx-community/Qwen3.5-4B-MLX-4bit"
         case .qwen3_5_2B:     return "mlx-community/Qwen3.5-2B-MLX-4bit"
         case .qwen3_5_9B:     return "mlx-community/Qwen3.5-9B-MLX-4bit"
+        case .appleIntelligence: return ""   // not a download
         }
     }
 
@@ -38,6 +42,7 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
         case .qwen3_5_4B:     return "~2.8 GB"
         case .qwen3_5_2B:     return "~1.6 GB"
         case .qwen3_5_9B:     return "~5.5 GB"
+        case .appleIntelligence: return "Built into macOS"
         }
     }
 
@@ -49,19 +54,30 @@ nonisolated enum LLMModelVariant: String, CaseIterable, Identifiable {
         case .qwen3_5_4B:     return "Balanced"
         case .qwen3_5_2B:     return "Fast"
         case .qwen3_5_9B:     return "Best quality"
+        case .appleIntelligence: return "No download · Multilingual"
         }
     }
 
     /// Whether the weights can be downloaded in this market (`ModelSources`).
-    var isAvailableInThisMarket: Bool { ModelSources.isReachable(repo: huggingFaceId) }
+    /// Apple Intelligence is not a download: macOS itself says whether this Mac has it, in every market.
+    var isAvailableInThisMarket: Bool {
+        self == .appleIntelligence ? Self.appleIntelligenceIsAvailable : ModelSources.isReachable(repo: huggingFaceId)
+    }
+
+    static var appleIntelligenceIsAvailable: Bool { SystemLanguageModel.default.isAvailable }
+
+    /// Models that run through MLX weights Whisperer downloads.
+    private static var downloadable: [LLMModelVariant] { allCases.filter { $0 != .appleIntelligence } }
 
     /// The variants this market offers.
     /// The China edition offers exactly one: the best Qwen it can download.
     static var available: [LLMModelVariant] {
-        let reachable = allCases.filter(\.isAvailableInThisMarket)
-        guard MarketPolicy.isChinaEdition else { return reachable }
+        let reachable = downloadable.filter(\.isAvailableInThisMarket)
+        // The model built into macOS is offered wherever macOS has it, the China edition included.
+        let builtIn: [LLMModelVariant] = appleIntelligenceIsAvailable ? [.appleIntelligence] : []
+        guard MarketPolicy.isChinaEdition else { return reachable + builtIn }
         let one = [qwen3_5_4B_mtp, qwen3_5_4B].first(where: reachable.contains) ?? reachable.first
-        return one.map { [$0] } ?? []
+        return (one.map { [$0] } ?? []) + builtIn
     }
 
     /// The default LLM: the recommended MTP build, or the plain 4B where only that one can be downloaded.

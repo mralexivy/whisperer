@@ -405,6 +405,9 @@ final class ConnectedAISettingsUITests: XCTestCase {
         XCTAssertEqual(AIProviderID.claudeCode.recipient, "Anthropic")
         XCTAssertEqual(AIProviderID.codex.recipient, "OpenAI")
         XCTAssertEqual(AIProviderID.antigravity.recipient, "Google")
-        for id in AIProviderID.allCases { XCTAssertNotNil(id.privacyPolicyURL) }
+        // Every provider that sends text somewhere links the policy of whoever receives it; one that
+        // keeps it on this Mac has no recipient to link.
+        for id in AIProviderID.allCases where id.leavesTheMac { XCTAssertNotNil(id.privacyPolicyURL) }
+        XCTAssertNil(AIProviderID.appleIntelligence.privacyPolicyURL)
     }
 }

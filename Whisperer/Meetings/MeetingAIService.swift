@@ -1236,7 +1236,7 @@ extension MeetingAIService {
             mayTitle = await mayRename(meetingID: meetingID)
         }
 
-        var notesTranscript = Self.connectedTranscript(segments, maxChars: provider.maxTranscriptChars)
+        var notesTranscript = Self.connectedTranscript(segments, maxChars: provider.maxNotesChars)
         if let notes = Self.notesBlock(await MeetingNotesService.notes(meetingID: meetingID) ?? []) {
             notesTranscript += "\n\n" + notes
         }

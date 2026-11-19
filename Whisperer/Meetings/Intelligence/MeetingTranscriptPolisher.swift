@@ -183,6 +183,12 @@ nonisolated enum MeetingTranscriptPolisher {
     static func polish(_ segments: [MeetingSegment], with provider: any MeetingIntelligenceProvider,
                        languageName: String?,
                        onProgress: @escaping @Sendable (Int, Int) -> Void) async throws -> Outcome {
+        if provider.polishesInLines {
+            return try await polishLocally(
+                segments, languageName: languageName,
+                complete: { instructions, input in try await provider.complete(instructions: instructions, input: input, jsonSchema: nil) },
+                onProgress: onProgress)
+        }
         let plan = chunks(for: segments)
         let prompt = instructions(languageName: languageName)
         onProgress(0, plan.count)

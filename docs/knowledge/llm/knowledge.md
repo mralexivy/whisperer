@@ -647,3 +647,22 @@ whose contents are meaningless without the `offset`/`_idx` in `meta_state`. Gemm
 cold outputs then still diverge by roughly one word in 200 — the ring buffer holds the same
 window in a different rotation, so the arithmetic differs slightly. Qwen's warm output is
 byte-identical to cold.
+
+## Apple Intelligence (Foundation Models) as an on-device LLM — measured 2026-11-19, M2 Pro, macOS 27.2
+
+- **`supportsLocale` is not the gate.** It says false for Hebrew, Russian and Arabic (24 supported languages),
+  yet dictation rewrite, line-format polish and notes all ran in Hebrew and Russian and stayed in their language.
+  The provider does not refuse on it; a model refusal (`unsupportedLanguageOrLocale`) falls back to MLX.
+- **`contextSize` is 8192 on this Mac**, not 4096; read it at runtime. Budget ~2 chars/token for Hebrew and
+  Russian and reserve ~2400 tokens for instructions, schema and reply. A meeting is digested window by window
+  (`@Generable` digest per window), then one title + overview is written from the window summaries.
+- **A 3B model copies concrete examples.** A good/bad example pair with real names ("Lena", "Ravi", ad spend)
+  appeared in the English and Hebrew notes of unrelated transcripts. Use placeholders (`<who> agreed to <what>`).
+  Words in the instructions leak too: naming "tools" and "reasons" produced an invented "Google Calendar" and a
+  date. Say only what the output must contain.
+- **Quality ceiling.** English notes were faithful. Hebrew notes had meaning errors (a proposal reported as a
+  rejection), weak titles and loose action items. Not benchmarked against the gold corpus; do that before
+  making it a default for he/ru.
+- **Dictation runs through `LLMPostProcessor`** with `LLMModelVariant.appleIntelligence`: "loading" only checks
+  availability, `process`/`processBatch` call the system model one request at a time. Never the default.
+- Notes and polish wait on `ForegroundGate` between requests (dictation preempts); Ask AI does not.
