@@ -10,10 +10,11 @@ Whisperer China is the China-mainland edition of our macOS app "Whisperer - Voic
 CHINA COMPLIANCE FORMS (AI-Generated or Synthetic Content; Security Assessment): both answered No.
 This edition offers no AI chatbot, no image or video generation, no voice or face alteration and no end-to-end encrypted messaging. These features exist in our other edition and are disabled in this one: the build is fixed to the China-mainland market, their entry points are removed from the UI and their services refuse to run. Disabled here: Ask AI chat over transcripts; the AI Modes page (free-form rewrite prompts); connected cloud AI providers and coding-tool providers (third-party AI services); voice reshaping (Privacy Shield); Command Mode; cloud sync; Google Calendar sign-in. No transcript or audio is ever sent to a third-party AI service from this edition.
 
-MODELS (complete list). The only AI models offered are Alibaba's Qwen models:
+MODELS (complete list). The models this edition downloads are Alibaba's Qwen models:
 1. Qwen3-ASR-1.7B (8-bit MLX) for speech recognition (default engine).
 2. Qwen3.5-4B (4-bit MLX), used only by the Pro in-app purchase, on the Mac: a title and a short overview (decisions, action items) of a recorded meeting. There is no chat, no free-form prompt box and no rewrite or generation of text for the user in this edition.
-Both are downloaded once, on first use, from ModelScope (modelscope.cn, repositories mlx-community/Qwen3-ASR-1.7B-8bit and mlx-community/Qwen3.5-4B-MLX-4bit); files are verified against ModelScope's published SHA-256. Hugging Face is not used in this edition.
+3. Apple's own built-in on-device language model (Foundation Models framework, Apple Intelligence). It is provided by macOS, not downloaded or bundled by us, and macOS alone decides whether it is available on a given Mac and in a given region. Where macOS reports it available it can write the same Pro meeting title and short overview instead of Qwen; nothing else: no chat, no free-form prompt, no rewrite or generation of text for the user. Nothing leaves the Mac.
+Models 1 and 2 are downloaded once, on first use, from ModelScope (modelscope.cn, repositories mlx-community/Qwen3-ASR-1.7B-8bit and mlx-community/Qwen3.5-4B-MLX-4bit); files are verified against ModelScope's published SHA-256. Hugging Face is not used in this edition.
 Also used, neither generative: (a) Apple's built-in on-device speech recogniser, for the live preview while speaking; (b) Silero VAD (about 0.9 MB, MIT licence), a voice-activity detector downloaded from ModelScope (ggml-org/whisper-vad). No other model is offered or downloaded.
 
 HOW TO TEST
@@ -28,7 +29,7 @@ EXPORT: HTTPS only (exempt encryption).
 ## Keep the claims true
 
 - The features listed as disabled are disabled at runtime by `MarketPolicy` (the China edition fixes the market at build time). They are **not** compiled out; do not say they are.
-- The model list must match `LLMModelVariant.available`, `BackendType.selectable`, `ModelSources` and `AcknowledgementsView` (China branch). Change all together.
+- The model list must match `LLMModelVariant.available` (Apple's built-in model is offered wherever macOS reports it, declared as model 3 above), `BackendType.selectable`, `ModelSources` and `AcknowledgementsView` (China branch). Change all together.
 - Screenshots must not show: Whisper/Parakeet or any non-Qwen model, several model sizes, Ask AI, cloud AI providers, Accessibility or "Set Up Later", third-party app logos, or a "Pro" badge on Basic features.
 
 ## Verify before submitting

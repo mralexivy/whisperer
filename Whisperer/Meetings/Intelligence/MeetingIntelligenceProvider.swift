@@ -108,14 +108,10 @@ nonisolated enum AIProviderID: String, CaseIterable, Codable, Sendable, Identifi
     /// CLI adapters need to launch a user-installed binary that reads its own credentials
     /// from the home directory. The App Store sandbox forbids both.
     var isAvailableInThisBuild: Bool {
-        // A model built into macOS is not a third-party AI service and nothing leaves the Mac, so the
-        // edition does not gate it: macOS itself reports whether it is available (`readiness`).
-        // Mainland China is the exception: that edition's declared model list is Qwen only.
+        // A model built into macOS is not a third-party AI service and nothing leaves the Mac, so neither
+        // the market nor the edition gates it: macOS itself reports whether it is available (`readiness`).
         // Ask AI keeps its own market switch (`ComplianceFeature.askAIChat`), whichever model answers.
-        if kind == .onDevice {
-            if self == .appleIntelligence && MarketPolicy.current == .chinaMainland { return false }
-            return ProAccess.allows(.ai)
-        }
+        if kind == .onDevice { return ProAccess.allows(.ai) }
         // The market decides first: in mainland China no third-party AI service is offered (MarketPolicy).
         guard MarketPolicy.allows(kind == .cli ? .cliAIProviders : .connectedCloudAI) else { return false }
         guard ProAccess.allows(.ai) else { return false }

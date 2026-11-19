@@ -74,9 +74,6 @@ final class MarketPolicyTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "market-\(UUID().uuidString)")!
         let store = ConnectedAIStore(defaults: defaults, keychain: KeychainStore(service: "com.ivy.whisperer.tests.\(UUID().uuidString)"))
         XCTAssertEqual(store.availableProviders.filter(\.leavesTheMac), [])
-        // The China declaration lists Qwen as the only models: the built-in macOS model is not offered either.
-        XCTAssertFalse(AIProviderID.appleIntelligence.isAvailableInThisBuild)
-        XCTAssertFalse(LLMModelVariant.available.contains(.appleIntelligence))
         // a provider chosen and consented before the market changed must not come back to life
         store.grantConsent(.openAIKey)
         store.selectedProvider = .openAIKey
