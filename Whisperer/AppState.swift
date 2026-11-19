@@ -190,9 +190,14 @@ class AppState: ObservableObject {
 
     func noteInputSwitched(to deviceName: String) {
         Logger.info("Input switched to \(deviceName) — recording continues", subsystem: .audio)
-        inputSwitchNotice = "Your microphone wasn't responding — switched to \(deviceName)."
         // The recording is healthy again; a lingering warning would contradict the notice.
         if captureFailure?.isTerminal == false { captureFailure = nil }
+        showNotice("Your microphone wasn't responding — switched to \(deviceName).")
+    }
+
+    /// A calm, self-expiring line in the menu panel for something Whisperer fixed on its own.
+    func showNotice(_ text: String) {
+        inputSwitchNotice = text
         inputSwitchNoticeTask?.cancel()
         inputSwitchNoticeTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 8_000_000_000)

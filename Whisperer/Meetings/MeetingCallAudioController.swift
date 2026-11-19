@@ -102,6 +102,9 @@ final class MeetingCallAudioController {
         outputRate = outputDeviceID.flatMap { SystemAudioCapture.nominalSampleRate($0) }
         reportedSilence = false
         reportedSoundAfterSilence = false
+        soundingTicks = 0
+        hasRepairedOutput = false
+        loggedOutputState = false
         recorder.systemAudioMixer = mixer
         Logger.info("Meeting call audio: capturing \(target.logLabel)", subsystem: .audio)
 
@@ -154,6 +157,41 @@ final class MeetingCallAudioController {
         refreshProcesses()
         healSilentTap()
         checkForDigitalSilence()
+        guardOutputAudibility()
+    }
+
+    private var soundingTicks = 0
+    private var lastAudibleVolume: Float = 0.5
+    private var hasRepairedOutput = false
+    private var loggedOutputState = false
+
+    /// The tap hears the call before the output's volume is applied, so a muted or zeroed
+    /// output means the user hears nothing while Whisperer transcribes happily. Say so in the
+    /// log with the numbers, and put the output back to the level it last had.
+    private func guardOutputAudibility() {
+        guard let mixer, let device = SystemAudioCapture.defaultOutputDeviceID() else { return }
+        let reading = OutputAudibility.read(device)
+        if let v = reading.volume, v >= 0.1 { lastAudibleVolume = v }
+
+        let recent = mixer.sourceActivity.suffix(60)
+        let sounding = (recent.map(\.callRMS).max() ?? 0) > 0.002
+        soundingTicks = sounding ? soundingTicks + 1 : 0
+
+        if !loggedOutputState || (sounding && reading.isSilentToUser && soundingTicks == 2) {
+            loggedOutputState = true
+            let (route, name) = SystemAudioCapture.currentOutputRoute()
+            Logger.info("Meeting call audio: output \(name) [\(route.rawValue)] volume=\(reading.volume.map { String(format: "%.2f", $0) } ?? "n/a") muted=\(reading.muted.map(String.init) ?? "n/a") callSounding=\(sounding)", subsystem: .audio)
+        }
+
+        guard OutputAudibility.shouldRepair(reading, callSounding: sounding, consecutiveSoundingTicks: soundingTicks),
+              !hasRepairedOutput else { return }
+        hasRepairedOutput = true   // once per meeting: if the user zeroes it again, that is their choice
+        let target = max(lastAudibleVolume, 0.4)
+        if OutputAudibility.repair(device, volume: target) {
+            let (_, name) = SystemAudioCapture.currentOutputRoute()
+            Logger.warning("Meeting call audio: \(name) was muted/at zero while the call was playing — restored to \(String(format: "%.2f", target))", subsystem: .audio)
+            AppState.shared.showNotice("The call was playing but \(name) was silent — turned it back up.")
+        }
     }
 
     /// AirPods keep their device ID but change profile (48 kHz music → 24 kHz headset) the moment a meeting opens
