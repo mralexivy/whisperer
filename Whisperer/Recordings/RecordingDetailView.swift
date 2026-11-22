@@ -374,15 +374,8 @@ struct RecordingDetailView: View {
             plainIcon(workspace.focusMode ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
                       active: workspace.focusMode, help: workspace.focusMode ? "Leave focus mode" : "Focus mode") {
                 withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    // Focus hides only the list; the panel stays whenever the window has room for it.
                     workspace.focusMode.toggle()
-                    // Focus means just the reader; the sidebar button brings the panel back on demand,
-                    // and leaving focus restores whatever was showing before.
-                    if workspace.focusMode {
-                        workspace.sidebarBeforeFocus = sidebarVisible
-                        sidebarVisible = false
-                    } else {
-                        sidebarVisible = workspace.sidebarBeforeFocus
-                    }
                 }
             }
             .uiTestFrame("recordings.focus.toggle")

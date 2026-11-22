@@ -199,14 +199,14 @@ final class RecordingsWorkspacePlayerTests: XCTestCase {
         _ = assertSameSession(since: position, "sidebar shown again")
     }
 
-    func testFocusModeShowsTheCompactPlayerAndLeavingItRestoresTheSidebarPlayer() throws {
+    func testFocusModeKeepsTheSidebarPlayerWhenItFits() throws {
         let audio = try wav()
         try open(fixture(.meeting, audio: audio))
         var position = playback.player.currentTime
 
         try click("recordings.focus.toggle")
         pump(0.6)
-        assertOnePlayer(expecting: "compact", "focus mode")
+        assertOnePlayer(expecting: "full", "focus mode")
         position = assertSameSession(since: position, "focus mode")
 
         try click("recordings.focus.toggle")
