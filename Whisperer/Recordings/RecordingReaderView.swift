@@ -69,7 +69,8 @@ struct RecordingReaderView: View {
     /// Set for a recording whose speakers can be named; nil leaves the names read-only.
     var renameSpeaker: SpeakerRenameAction? = nil
 
-    private static let columnWidth: CGFloat = 860
+    // Wide enough that a big window is not mostly empty margin, narrow enough to keep lines readable.
+    private static let columnWidth: CGFloat = 1240
 
     static func style(for document: TranscriptDocument) -> Style {
         if document.hasSpeakers { return .speakers }

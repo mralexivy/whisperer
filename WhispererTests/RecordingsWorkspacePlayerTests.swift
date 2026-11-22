@@ -217,7 +217,9 @@ final class RecordingsWorkspacePlayerTests: XCTestCase {
 
     func testANarrowWindowFallsBackToTheCompactPlayer() throws {
         let audio = try wav()
-        try open(fixture(.file, audio: audio), size: CGSize(width: 900, height: 700))
+        // 900 fits the sidebar by yielding the list (see testLayoutRules); only a window too small for the
+        // reader plus a minimum sidebar falls back to the compact player.
+        try open(fixture(.file, audio: audio), size: CGSize(width: 640, height: 700))
         assertOnePlayer(expecting: "compact", "narrow window")
         _ = assertSameSession(since: 0, "narrow window")
     }
@@ -232,12 +234,23 @@ final class RecordingsWorkspacePlayerTests: XCTestCase {
     }
 
     func testLayoutRules() {
-        XCTAssertTrue(RecordingsWorkspaceLayout(total: 1320, sidebarWidth: 340, wantsSidebar: true, focus: false, hasDocument: true).showsSidebar)
-        XCTAssertFalse(RecordingsWorkspaceLayout(total: 900, sidebarWidth: 340, wantsSidebar: true, focus: false, hasDocument: true).showsSidebar)
-        let focus = RecordingsWorkspaceLayout(total: 1320, sidebarWidth: 340, wantsSidebar: true, focus: true, hasDocument: true)
-        XCTAssertFalse(focus.showsSidebar)
-        XCTAssertFalse(focus.showsList)
-        XCTAssertFalse(RecordingsWorkspaceLayout(total: 1320, sidebarWidth: 340, wantsSidebar: false, focus: false, hasDocument: true).showsSidebar)
-        XCTAssertFalse(RecordingsWorkspaceLayout(total: 1320, sidebarWidth: 340, wantsSidebar: true, focus: false, hasDocument: false).showsSidebar)
+        func layout(_ total: CGFloat, wants: Bool = true, focus: Bool = false, doc: Bool = true) -> RecordingsWorkspaceLayout {
+            RecordingsWorkspaceLayout(total: total, sidebarWidth: 340, wantsSidebar: wants, focus: focus, hasDocument: doc)
+        }
+        // Roomy: list, reader and the sidebar at its chosen width.
+        let roomy = layout(1320)
+        XCTAssertTrue(roomy.showsList); XCTAssertTrue(roomy.showsSidebar); XCTAssertEqual(roomy.sidebarWidth, 340)
+        // A 14" window: the list yields so the requested sidebar always appears.
+        let small = layout(830)
+        XCTAssertTrue(small.showsSidebar); XCTAssertFalse(small.showsList)
+        XCTAssertGreaterThanOrEqual(830 - small.sidebarWidth - 6, RecordingsWorkspaceLayout.minReader)
+        // Focus hides the list only; the sidebar follows its own toggle.
+        let focus = layout(1320, focus: true)
+        XCTAssertTrue(focus.showsSidebar); XCTAssertFalse(focus.showsList)
+        XCTAssertFalse(layout(1320, wants: false, focus: true).showsSidebar)
+        XCTAssertFalse(layout(1320, wants: false).showsSidebar)
+        XCTAssertFalse(layout(1320, doc: false).showsSidebar)
+        // Too small even for the reader plus a minimum sidebar.
+        XCTAssertFalse(layout(640).showsSidebar)
     }
 }

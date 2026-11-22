@@ -42,7 +42,7 @@ struct RecordingsWorkspaceView: View {
     @AppStorage("recordings.sidebarWidth") private var sidebarWidth = 340.0
 
     private static let listWidth = RecordingsWorkspaceLayout.listWidth
-    private static let sidebarRange: ClosedRange<Double> = 300...480
+    private static let sidebarRange: ClosedRange<Double> = Double(RecordingsWorkspaceLayout.minSidebar)...Double(RecordingsWorkspaceLayout.maxSidebar)
 
     private var session: MeetingSession { testSession ?? appState.activeMeetingSession ?? localSession }
 
@@ -65,7 +65,7 @@ struct RecordingsWorkspaceView: View {
                         document: document, meetingRecord: record, playback: playback, session: session, detail: detail,
                         tab: $sidebarTab, onCitation: { openCitation($0) }, onCollapse: { withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) { sidebarVisible = false } },
                         isLive: document.kind == .meeting && session.isRecording && session.meetingID == document.id.uuid)
-                        .frame(width: CGFloat(sidebarWidth))
+                        .frame(width: layout.sidebarWidth)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
@@ -164,18 +164,38 @@ private struct ResizeHandle: View {
     }
 }
 
-/// Which columns fit. The sidebar yields before the reader gets narrower than the minimum, and the
-/// compact player takes over exactly when the sidebar (with its full player) is not shown.
+/// Which columns fit, adapting to the window instead of ignoring the user's choice. A wanted sidebar
+/// always appears: it first narrows (down to `minSidebar`), then the recordings list yields, and only a
+/// window too small for even the reader plus a minimum sidebar hides it. Focus mode hides the list only;
+/// the sidebar follows its own toggle, so its button never does nothing. The compact player takes over
+/// exactly when the sidebar (with its full player) is not shown.
 struct RecordingsWorkspaceLayout: Equatable {
     static let listWidth: CGFloat = 308
-    static let minReader: CGFloat = 460
+    static let minReader: CGFloat = 420
+    static let minSidebar: CGFloat = 280
+    static let maxSidebar: CGFloat = 480
 
     let showsList: Bool
     let showsSidebar: Bool
+    /// The width the sidebar is drawn at: the user's choice, narrowed to what fits.
+    let sidebarWidth: CGFloat
 
-    init(total: CGFloat, sidebarWidth: CGFloat, wantsSidebar: Bool, focus: Bool, hasDocument: Bool) {
-        showsList = !focus
-        let used = (focus ? 0 : Self.listWidth + 1) + sidebarWidth + 6
-        showsSidebar = wantsSidebar && !focus && hasDocument && total - used >= Self.minReader
+    init(total: CGFloat, sidebarWidth preferred: CGFloat, wantsSidebar: Bool, focus: Bool, hasDocument: Bool) {
+        let preferred = min(max(preferred, Self.minSidebar), Self.maxSidebar)
+        guard wantsSidebar, hasDocument else {
+            showsList = !focus; showsSidebar = false; sidebarWidth = preferred
+            return
+        }
+        let chrome: CGFloat = 6   // resize handle
+        let withList = total - (focus ? 0 : Self.listWidth + 1) - Self.minReader - chrome
+        if withList >= Self.minSidebar {
+            showsList = !focus; showsSidebar = true; sidebarWidth = min(preferred, withList)
+            return
+        }
+        // Not enough room beside the list: the list yields to the panel the user asked for.
+        let withoutList = total - Self.minReader - chrome
+        showsList = false
+        showsSidebar = withoutList >= Self.minSidebar
+        sidebarWidth = min(preferred, max(withoutList, Self.minSidebar))
     }
 }

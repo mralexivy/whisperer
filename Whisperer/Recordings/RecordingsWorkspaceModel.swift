@@ -42,6 +42,8 @@ final class RecordingsWorkspaceModel: ObservableObject {
     @Published var isImporting = false
     /// Hides the list and the sidebar so the reader has the window.
     @Published var focusMode = false
+    /// Whether the sidebar was showing when focus mode began, so leaving focus brings it back.
+    var sidebarBeforeFocus = true
     /// How many recordings the current kind, pin/flag filter and search match in total — not just the loaded pages.
     @Published private(set) var totalCount = 0
 
