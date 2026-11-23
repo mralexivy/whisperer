@@ -353,34 +353,61 @@ struct RecordingDetailView: View {
                                      participants: { document.participants }, roster: roster)
     }
 
+    /// `ViewThatFits` takes the single row when the reader column is wide enough and otherwise stacks
+    /// it in two, so nothing here wraps mid-word or truncates to "F…" in a narrow column (14" window
+    /// with the list and the details panel open). App Review rejected build 12 for text cut off in
+    /// windows (Guideline 4, 2026-11-23); every label below is also forced to one line.
     private func toolbar(_ document: TranscriptDocument) -> some View {
-        HStack(spacing: 10) {
-            if document.hasSpeakers { speakersMenu(document) } else {
-                Label("Paragraphs", systemImage: "text.alignleft")
-                    .font(.system(size: 13)).foregroundColor(Color.white.opacity(0.45))
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                toolbarLeading(document)
+                Spacer(minLength: 8)
+                toolbarActions(document, compact: false)
             }
-            if document.hasOriginalVersion { versionSwitch(document) }
-            Spacer()
-            if searching { searchField }
-            TranscriptPolishBar(meetingID: document.id.uuid, segments: document.segments, compact: false, quiet: true)
-            plainIcon("doc.on.doc", tint: copied ? Color(hex: "22C55E") : nil, help: "Copy transcript") { copyTranscript(document) }
-            plainIcon("magnifyingglass", active: searching, help: "Search this transcript") {
-                withAnimation(.easeInOut(duration: 0.15)) { searching.toggle() }
-                if searching { searchFocused = true } else { search.clear() }
-            }
-            .keyboardShortcut("f", modifiers: .command)
-            .uiTestFrame("recordings.transcript.search")
-            RetranscribeControl(document: document, onMeeting: { language in startMeetingRetranscribe(document, language) })
-            plainIcon(workspace.focusMode ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
-                      active: workspace.focusMode, help: workspace.focusMode ? "Leave focus mode" : "Focus mode") {
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                    // Focus hides only the list; the panel stays whenever the window has room for it.
-                    workspace.focusMode.toggle()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    toolbarLeading(document)
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    toolbarActions(document, compact: true)
                 }
             }
-            .uiTestFrame("recordings.focus.toggle")
         }
         .padding(.horizontal, 28).padding(.vertical, 12)
+    }
+
+    @ViewBuilder
+    private func toolbarLeading(_ document: TranscriptDocument) -> some View {
+        if document.hasSpeakers { speakersMenu(document) } else {
+            Label("Paragraphs", systemImage: "text.alignleft")
+                .font(.system(size: 13)).foregroundColor(Color.white.opacity(0.45))
+                .lineLimit(1).fixedSize()
+        }
+        if document.hasOriginalVersion { versionSwitch(document) }
+    }
+
+    @ViewBuilder
+    private func toolbarActions(_ document: TranscriptDocument, compact: Bool) -> some View {
+        if searching { searchField }
+        TranscriptPolishBar(meetingID: document.id.uuid, segments: document.segments, compact: compact, quiet: true)
+        plainIcon("doc.on.doc", tint: copied ? Color(hex: "22C55E") : nil, help: "Copy transcript") { copyTranscript(document) }
+        plainIcon("magnifyingglass", active: searching, help: "Search this transcript") {
+            withAnimation(.easeInOut(duration: 0.15)) { searching.toggle() }
+            if searching { searchFocused = true } else { search.clear() }
+        }
+        .keyboardShortcut("f", modifiers: .command)
+        .uiTestFrame("recordings.transcript.search")
+        RetranscribeControl(document: document, onMeeting: { language in startMeetingRetranscribe(document, language) })
+        plainIcon(workspace.focusMode ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right",
+                  active: workspace.focusMode, help: workspace.focusMode ? "Leave focus mode" : "Focus mode") {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                // Focus hides only the list; the panel stays whenever the window has room for it.
+                workspace.focusMode.toggle()
+            }
+        }
+        .uiTestFrame("recordings.focus.toggle")
     }
 
     /// "Speakers ⌄": show everyone, or hide some.
@@ -412,6 +439,7 @@ struct RecordingDetailView: View {
             ForEach([false, true], id: \.self) { original in
                 Button { detail.showOriginal = original } label: {
                     Text(original ? "Original" : (document.enhancementName ?? "Enhanced"))
+                        .lineLimit(1).fixedSize()
                         .font(.system(size: 12, weight: detail.showOriginal == original ? .semibold : .medium))
                         .foregroundColor(detail.showOriginal == original ? .white : Color.white.opacity(0.5))
                         .padding(.horizontal, 12).frame(height: 26)

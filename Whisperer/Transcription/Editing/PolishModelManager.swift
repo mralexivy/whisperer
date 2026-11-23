@@ -62,6 +62,16 @@ final class PolishModelManager: ObservableObject {
     nonisolated var installedDirectory: URL? { Self.installedDirectory }
     nonisolated var isInstalled: Bool { Self.installedDirectory != nil }
 
+    /// Shown on the button that offers the download. The package is ~138 MB.
+    static let downloadSizeLabel = "138 MB"
+
+    /// True when the model is missing, nothing has been started and the user has not agreed yet:
+    /// the menu then offers the download instead of fetching it silently.
+    var isOfferedForDownload: Bool {
+        phase == .notStarted && !isInstalled && !ModelDownloadConsent.hasPolishConsent
+            && ModelSources.isReachable(repo: Self.repo)
+    }
+
     // MARK: - Configuration
 
     private static let repo = "mralexivy/whisperer-polish"
@@ -92,8 +102,13 @@ final class PolishModelManager: ObservableObject {
 
     /// Kick off the fetch if it is needed. Safe to call repeatedly; returns at once.
     /// If a model is already installed, silently checks for a newer version in the background.
-    func start() {
+    ///
+    /// A first download happens only after the user pressed a button that named its size
+    /// (`userInitiated`), never on its own at launch (App Store Guideline 4.2.3(ii)). An installed
+    /// model is unaffected: it still checks for updates.
+    func start(userInitiated: Bool = false) {
         guard task == nil else { return }
+        if userInitiated { ModelDownloadConsent.grantPolish() }
         // The tagger is hosted on Hugging Face only; where that is not reachable Fast Polish runs on its rules.
         guard isInstalled || ModelSources.isReachable(repo: Self.repo) else { return }
         if isInstalled {
@@ -102,6 +117,7 @@ final class PolishModelManager: ObservableObject {
             scheduleUpdateCheck()
             return
         }
+        guard ModelDownloadConsent.hasPolishConsent else { return }
         phase = .downloading
         task = Task { [weak self] in
             await self?.run()

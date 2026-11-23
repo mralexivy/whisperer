@@ -29,7 +29,9 @@ for k in $keys; do
     com.apple.security.network.client) used 'URLSession' && ok "$k: URLSession" || bad "$k has no URLSession use";;
     com.apple.security.network.server) used 'NWListener' && ok "$k: NWListener (MCP server, ChatGPT sign-in redirect)" || bad "$k has no NWListener use";;
     com.apple.security.device.audio-input) used 'AVAudioEngine' && has_string NSMicrophoneUsageDescription && ok "$k: AVAudioEngine + usage string" || bad "$k lacks AVAudioEngine use or NSMicrophoneUsageDescription";;
-    com.apple.security.device.camera) used 'AVCaptureDevice' && has_string NSCameraUsageDescription && ok "$k: AVCaptureDevice + usage string" || bad "$k lacks AVCaptureDevice use or NSCameraUsageDescription";;
+    # 2026-11-23: this used to match any 'AVCaptureDevice', which the microphone code also uses, so the camera entitlement
+    # passed while nothing captured video. Apple (2.4.5(i)) found exactly that. The camera entitlement needs VIDEO capture.
+    com.apple.security.device.camera) used 'AVCaptureSession|AVCaptureVideoDataOutput|AVCaptureDevice\.(default|DiscoverySession)\(.*video|for: *\.video|requestAccess\(for: *\.video' && has_string NSCameraUsageDescription && ok "$k: video capture + usage string" || bad "$k has no video-capture use (the in-use check via CoreMediaIO needs no entitlement in this build): remove it";;
     com.apple.security.files.user-selected.read-write|com.apple.security.files.user-selected.read-only) used 'NSOpenPanel|NSSavePanel|fileImporter' && ok "$k: open/save panels" || bad "$k has no open/save panel use";;
     *) bad "$k is not in the allow-list of this script: justify it in the code, the review notes and here before shipping";;
   esac

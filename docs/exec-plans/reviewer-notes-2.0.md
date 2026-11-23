@@ -26,16 +26,6 @@ All speech processing runs on the device.
 Used to capture your voice for transcription, and to record your own audio during meeting notes.
 Audio is processed on the device and is never uploaded.
 
-### Camera — optional, off by default
-
-Whisperer can use camera activity as one signal for detecting that you are in a video call, which
-helps it distinguish a video meeting from an app that is only using the microphone.
-
-- This is **off by default** and must be turned on in Settings → Meeting Detection.
-- Whisperer only checks **whether** the camera is in use. It never opens a capture session, never
-  records, and never views camera video.
-- The app is fully functional with this turned off.
-
 ### Meeting recording consent
 
 Before the first meeting recording, the app shows a one-time screen explaining that you are
@@ -62,12 +52,15 @@ feature for our developer audience and has its own settings card with a full exp
 
 ### Model downloads
 
-On first use the app downloads AI model **weights** from Hugging Face — roughly 2.5 GB for the
-speech model and 3.2 GB for the language model used to summarize meetings.
+Nothing is downloaded until the user presses a button that names the size. The last onboarding page
+says "needs a one-time download of about 550 MB" and shows a **Download 547 MB** button; the app
+waits for that press (Skip for Now is next to it). The meeting models (the speaker, cleanup and
+notes models, about 3.4 GB in total for Pro, 1.5 GB more when Hebrew is among the user's languages) are offered the same way on the meeting screen with
+"Download about 3.4 GB", and the optional Smart Polish model (138 MB) from a card in the menu bar.
 
-These are **data files, not executable code**. The inference engines are compiled into the binary
-you are reviewing. The app does not download, install, or execute any code. This complies with
-Guideline 2.5.2.
+These are **data files, not executable code**: AI model weights from Hugging Face. The inference
+engines are compiled into the binary you are reviewing. The app does not download, install, or
+execute any code. This complies with Guideline 2.5.2 and 4.2.3.
 
 All models are open source under licenses that permit commercial use (Apache 2.0, MIT, CC-BY-4.0,
 OpenMDW). The app includes an Acknowledgements screen listing every model, its author, and its
@@ -100,5 +93,4 @@ https://whispererapp.com/terms.
 - Microphone permission is requested on first recording.
 - To test meeting detection, start a call in Zoom, Teams, or Google Meet, or any app that uses the
   microphone continuously; a notification offering to take notes appears.
-- The MCP server and the camera signal are both off by default and must be enabled in Settings to
-  be exercised.
+- The MCP server is off by default and must be enabled in Workspace > MCP to be exercised.

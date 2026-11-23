@@ -90,10 +90,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Setup right-click menu on the status bar icon
         setupStatusItemRightClickMenu()
 
-        // Fetch the polish model in the background. `start()` returns immediately and nothing
-        // downstream waits on it — see PolishModelManager's startup contract. Deliberately not
-        // deferred behind a "first recording" trigger: the download is the one thing that cannot
-        // be made instant, so it begins the moment the app does.
+        // Smart Polish model: an installed one is checked for updates; a missing one is only
+        // fetched after the user pressed "Download" on the menu card that names its size
+        // (Guideline 4.2.3(ii)). `start()` returns immediately and nothing downstream waits on it —
+        // see PolishModelManager's startup contract.
         PolishModelManager.shared.start()
 
         // If the weights are already installed from a previous launch, begin compiling and loading
@@ -391,7 +391,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // During onboarding, the model download page (page 5) handles this.
         let onboardingDone = await MainActor.run { appState.hasCompletedOnboarding }
         if onboardingDone {
-            // Backend-aware: Nemotron (the default engine) is not the whisper file, so asking
+            // Backend-aware: the selected engine (Whisperer V3 by default; Qwen3-ASR in China) is not always the whisper file, so asking
             // `ModelDownloader` would fetch the wrong model. The helper also never downloads in
             // the test host. The LLM loads after the transcription model completes, sequentially,
             // to avoid ANE/Metal resource contention during CoreML compilation.
@@ -1045,6 +1045,8 @@ private struct PolishModelCard: View {
                 }
             case .failed:
                 card
+            case .notStarted where manager.isOfferedForDownload:
+                offerCard
             default:
                 EmptyView()
             }
@@ -1055,6 +1057,40 @@ private struct PolishModelCard: View {
                 lingerAfterReady = false
             }
         }
+    }
+
+    /// Asks before downloading: states the size and starts only when the button is pressed.
+    private var offerCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(MBColors.accentGradient)
+                Text("Smart Polish")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(MBColors.textPrimary)
+                Spacer()
+                Text(PolishModelManager.downloadSizeLabel)
+                    .font(.system(size: 11).monospacedDigit())
+                    .foregroundColor(MBColors.textSecondary)
+            }
+            Text("Optional. Smarter punctuation and capitalisation. A one-time download that stays on this Mac.")
+                .font(.system(size: 11))
+                .foregroundColor(MBColors.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Download \(PolishModelManager.downloadSizeLabel)") {
+                manager.start(userInitiated: true)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(MBColors.accentGradient)
+            .accessibilityLabel("Download Smart Polish, \(PolishModelManager.downloadSizeLabel)")
+            .uiTestFrame("polish.offer.download")
+        }
+        .padding(12)
+        .background(MBColors.cardSurface)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(MBColors.border, lineWidth: 1).allowsHitTesting(false))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 
     private var card: some View {
@@ -2640,11 +2676,11 @@ struct SettingsTabView: View {
 
                     // "Prepare now" button when anything is missing
                     if engines.needsPreparation {
-                        Button("Prepare Now") {
+                        Button(engines.pendingDownloadLabel.isEmpty ? "Prepare Now" : "Download \(engines.pendingDownloadLabel)") {
                             // Start the downloads here, then open Meeting Studio, which shows
                             // MeetingPrepView with their progress. Posting the tab switch alone
                             // did nothing while the window was closed — no one was listening.
-                            engines.prefetch()
+                            engines.prefetch(userInitiated: true)
                             HistoryWindowManager.shared.showWindowAndDismissMenu()
                             DispatchQueue.main.async {
                                 NotificationCenter.default.post(name: .switchToMeetingStudioTab, object: nil)

@@ -129,6 +129,9 @@ final class MeetingDiarizerService: ObservableObject {
             warm()
             return
         }
+        // Not on disk: fetch only after the user pressed the meeting download button
+        // (App Store Guideline 4.2.3(ii)).
+        guard ModelDownloadConsent.hasMeetingConsent else { return }
 
         let destination = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("FluidAudio/Models")

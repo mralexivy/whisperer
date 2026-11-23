@@ -291,7 +291,7 @@ final class MeetingEngines: ObservableObject {
         default:
             readiness[.intelligence] = isIntelligenceModelOnDisk()
                 ? .ready
-                : .needsDownload("The meeting intelligence model (~3.2 GB) will be downloaded on first use.")
+                : .needsDownload("The meeting notes model needs a one-time download of \(Self.intelligenceVariant.sizeDescription).")
         }
 
         // .speakers — delegate entirely to MeetingDiarizerService
@@ -304,6 +304,23 @@ final class MeetingEngines: ObservableObject {
         }
 
         updateStatusText()
+    }
+
+    /// "about 3.4 GB": everything a meeting still needs to download, for the button that starts it.
+    /// Empty when nothing is missing.
+    var pendingDownloadLabel: String {
+        var bytes: Double = 0
+        for model in Self.cleanupModelSet() where !ModelDownloader.shared.isModelDownloaded(model) {
+            bytes += model.approximateDownloadBytes
+        }
+        if !isIntelligenceModelOnDisk() {
+            // sizeDescription is "~3.2 GB" / "~0.3 GB".
+            let digits = Self.intelligenceVariant.sizeDescription.filter { "0123456789.".contains($0) }
+            bytes += (Double(digits) ?? 0) * 1_000_000_000
+        }
+        if !MeetingDiarizerService.shared.isReady { bytes += 200_000_000 }
+        guard bytes > 0 else { return "" }
+        return "about " + ModelDownloadProgress.format(bytes: Int64(bytes))
     }
 
     /// Replicates the HubApi directory probe from `LLMPostProcessor.loadModel` without
@@ -335,7 +352,11 @@ final class MeetingEngines: ObservableObject {
 
     /// Downloads and warms each engine that is not yet ready. Idempotent and safe to call
     /// on every app launch and on every meeting detection event.
-    func prefetch() {
+    ///
+    /// `userInitiated` is true only for a button that named the download size. Everything else
+    /// (launch, meeting detection, opening the prep screen) warms what is already on disk and
+    /// never starts a download the user has not agreed to (App Store Guideline 4.2.3(ii)).
+    func prefetch(userInitiated: Bool = false) {
         // Not from a test host. This warms all three engines: a speech-engine load, a model download
         // followed by a blocking Core ML compile the cleanup path itself measures at ~40s, and
         // an MLX LLM load/unload. It is reachable at launch *and* from meeting detection — and
@@ -347,7 +368,10 @@ final class MeetingEngines: ObservableObject {
             return
         }
 
-        // Speakers fully delegated to MeetingDiarizerService — it handles download + warm.
+        if userInitiated { ModelDownloadConsent.grantMeeting() }
+
+        // Speakers fully delegated to MeetingDiarizerService — it handles download + warm, and
+        // downloads only with consent.
         MeetingDiarizerService.shared.prefetch()
 
         // Speech, cleanup, intelligence: start a background task unless one is already
@@ -419,6 +443,10 @@ final class MeetingEngines: ObservableObject {
             // Downloads run plain (not inside ModelWorkQueue) — URLSession transfer contends with
             // nothing, and the queue's 120 s watchdog fires on multi-GB transfers.
             if !ModelDownloader.shared.isModelDownloaded(model) {
+                guard ModelDownloadConsent.hasMeetingConsent else {
+                    readiness[.cleanup] = .needsDownload("Needs a one-time download of \(model.sizeDescription).")
+                    return
+                }
                 readiness[.cleanup] = .downloading(0)
                 updateStatusText()
                 do {
@@ -466,6 +494,12 @@ final class MeetingEngines: ObservableObject {
     }
 
     private func runIntelligence() async {
+        // Never fetch a multi-GB model unasked (Guideline 4.2.3(ii)); wait for the download button.
+        guard isIntelligenceModelOnDisk() || ModelDownloadConsent.hasMeetingConsent else {
+            readiness[.intelligence] = .needsDownload(
+                "Needs a one-time download of \(Self.intelligenceVariant.sizeDescription).")
+            return
+        }
         // Drop the "model on disk" guard: let loadModel handle the download from HuggingFace
         // Hub automatically. The Combine bridge below mirrors loadModel's own progress into
         // our readiness slot so the UI shows accurate download state.

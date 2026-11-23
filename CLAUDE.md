@@ -49,6 +49,7 @@ test-built objects alive for the process, or make the class `nonisolated`.
 IMPORTANT — these prevent real bugs and App Store rejections:
 
 - **NEVER** use `CGEventTap`, `IOHIDManager`, or global `keyDown`/`keyUp` monitors — instant App Store rejection (Guideline 2.4.5)
+- **No silent downloads (Guideline 4.2.3(ii), build 12 rejection 2026-11-23).** A model download starts only from a button that names its size; automatic paths go through `ModelDownloadConsent` and use only what is on disk or already agreed. The onboarding window is a fixed 860×540: content that can grow must flex or scroll inside its own area (see `docs/knowledge/app-store/rules.md` 9–11).
 - `Logger.shared` for all logging — **no `print()` statements**
 - `[weak self]` in all `Task.detached` closures and stored callbacks
 - `SafeLock` (timeout-based NSLock) for whisper.cpp thread safety — **not** Swift actors

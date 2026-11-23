@@ -14,6 +14,30 @@
   `scripts/security/audit-entitlements.sh` now fails an archive when an entitlement has no matching code, no usage string or no
   allow-list entry.
 
+## 2026-11-23: build 12 rejected by a human reviewer (2.4.5(i), 4, 4.2.3(ii)); submission 96f83577, version 2.0 (12)
+
+Reviewed on a MacBook Pro 14" (Nov 2024). Three findings, all real:
+
+- **2.4.5(i): `device.camera` and `network.server` "do not appear to have matching functionality".** The notes already explained both and the
+  reviewer still asked for a reply. The camera entitlement was the actual defect: nothing captures video. `CameraUsageMonitor` only reads CoreMediaIO
+  "is running somewhere", a best-effort extra for telling a video call from audio-only, and it degrades cleanly when no camera is visible. Our own
+  audit missed it because `audit-entitlements.sh` accepted any `AVCaptureDevice` in the source, and the microphone code uses `AVCaptureDevice` too.
+  Fix: removed `device.camera` from the App Store entitlements; the audit now requires video-capture API use. `network.server` stays: it serves the
+  optional local MCP server and the ChatGPT sign-in redirect, and gets a specific reply in Resolution Center.
+- **4: "windows that cut off text".** The onboarding window is a fixed 860 x 540. Its language page (title, 4-line intro, a 240 pt grid, a primary
+  picker and a status list that grows by a row per language) was taller than the window and pushed the bottom navigation, including Continue, out
+  of view, and cut off the title. Found by rendering every page in-process (`OnboardingSnapshotTests`, `WorkspaceSnapshotTests`, opt-in with
+  `TEST_RUNNER_ONBOARDING_SNAPSHOT=<dir>` / `TEST_RUNNER_WORKSPACE_SNAPSHOT=<dir>`) and looking at them. Also found in the Recordings reader toolbar:
+  "Paragraphs" wrapped mid-word and the Fast Polish / Original switch truncated to "F…" in a narrow column; now a `ViewThatFits` that stacks in two rows.
+- **4.2.3(ii): additional resources without disclosing the size and asking.** The last onboarding page started the ~550 MB speech model as soon as it
+  appeared. The meeting engines (about 3.4 GB: speaker model and a 3.2 GB notes model, plus the 1.5 GB Hebrew specialist for Hebrew users) were prefetched in the background at launch
+  and on meeting detection, and the 138 MB Smart Polish model downloaded at every first launch. All now wait for a button that names the size
+  (`ModelDownloadConsent`); automatic paths only use what the user agreed to or what is already on disk.
+
+**Why we missed it.** We checked banned APIs and entitlements-to-code by grep, never the windows a reviewer opens first, and never the question
+"does anything download without asking". A screenshot of every screen at the reviewer's window size and a read of every `startDownload`/`prefetch`
+caller were never part of the checklist.
+
 ## 2026-11-18: the privacy policy said the opposite of what the app does
 
 While auditing entitlements we found the website privacy policy, the terms and the in-app policy all said meetings record the

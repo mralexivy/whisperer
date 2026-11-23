@@ -261,8 +261,10 @@ struct MeetingPrepView: View {
                     appState.startDownload(asset)
                 }
             } else {
-                actionButton("Download", help: message.isEmpty ? "Download \(engine.roleLabel.lowercased())" : message) {
-                    engines.prefetch()
+                let size = engines.pendingDownloadLabel
+                actionButton(size.isEmpty ? "Download" : "Download \(size)",
+                             help: message.isEmpty ? "Download \(engine.roleLabel.lowercased())" : message) {
+                    engines.prefetch(userInitiated: true)
                 }
             }
 
@@ -272,7 +274,7 @@ struct MeetingPrepView: View {
                     .font(.system(size: 11))
                     .foregroundColor(.orange)
                     .help(message)
-                actionButton("Retry", help: message) { engines.prefetch() }
+                actionButton("Retry", help: message) { engines.prefetch(userInitiated: true) }
             }
         }
     }

@@ -743,13 +743,18 @@ struct OnboardingView: View {
         VStack(alignment: .leading, spacing: 0) {
             Spacer()
 
-            VStack(alignment: .leading, spacing: 16) {
+            // The window is a fixed 860 x 540 and this page sits between the close button and the
+            // bottom navigation, so it has about 424 pt. Everything here must fit that, however many
+            // languages are picked: the grid flexes (96...220 pt) and the status list is capped.
+            // Build 12 let this page grow past the window, which pushed Continue out of view and
+            // cut off the title (App Review, Guideline 4, 2026-11-23).
+            VStack(alignment: .leading, spacing: 12) {
                 Text("Your Languages")
                     .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundColor(OnboardingColors.textPrimary)
 
-                Text("Select the languages you speak. Whisperer will automatically detect which one you're using and route to the best model. Apple's on-device dictation is installed for each, so your words appear as you speak.")
-                    .font(.system(size: 14, weight: .regular))
+                Text("Select the languages you speak. Whisperer detects which one you're using and picks the best model. Apple's on-device dictation is installed for each, so your words appear as you speak.")
+                    .font(.system(size: 13, weight: .regular))
                     .foregroundColor(OnboardingColors.textSecondary)
                     .lineSpacing(4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -766,7 +771,7 @@ struct OnboardingView: View {
                         }
                     }
                 }
-                .frame(height: 240)
+                .frame(minHeight: 96, maxHeight: 220)
 
                 // Primary language selector
                 if selectedLanguages.count > 1 {
@@ -881,15 +886,22 @@ struct OnboardingView: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(OnboardingColors.textSecondary)
             }
-            ForEach(ordered, id: \.self) { language in
-                HStack(spacing: 8) {
-                    Text(language.displayName)
-                        .font(.system(size: 12))
-                        .foregroundColor(OnboardingColors.textPrimary)
-                    Spacer()
-                    livePreviewStatusLabel(language)
+            // Capped at three rows and scrolled beyond that, so picking ten languages cannot grow
+            // the page past the window.
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(ordered, id: \.self) { language in
+                        HStack(spacing: 8) {
+                            Text(language.displayName)
+                                .font(.system(size: 12))
+                                .foregroundColor(OnboardingColors.textPrimary)
+                            Spacer()
+                            livePreviewStatusLabel(language)
+                        }
+                    }
                 }
             }
+            .frame(height: min(CGFloat(ordered.count) * 22, 66))
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(OnboardingColors.cardSurface))
@@ -1185,7 +1197,7 @@ struct OnboardingView: View {
                     .font(.system(size: 34, weight: .bold))
                     .foregroundColor(OnboardingColors.textPrimary)
 
-                Text("Downloading \(onboardingEngineName), the speech model\nthat runs on this Mac. Nothing leaves your device.")
+                Text(onboardingIntro)
                     .font(.system(size: 14))
                     .foregroundColor(OnboardingColors.textSecondary)
                     .lineSpacing(3)
@@ -1295,20 +1307,26 @@ struct OnboardingView: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(OnboardingColors.textSecondary)
                     }
-                } else {
-                    // Before the download registers (one runloop tick). The button is the way out
-                    // if it never does, so this state can never be a dead end.
-                    HStack(spacing: 10) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Starting download…")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(OnboardingColors.textSecondary)
-                        Button("Start") { appState.startSelectedEngine() }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(OnboardingColors.accentBlue)
-                            .pointerOnHover()
+                } else if let asset = appState.selectedEngineAsset {
+                    // Nothing is downloaded until the user presses this (App Store Guideline
+                    // 4.2.3(ii)): the size is on the button and in the text above it.
+                    VStack(alignment: .leading, spacing: 8) {
+                        Button(action: { appState.startDownload(asset) }) {
+                            Label("Download \(asset.sizeLabel)", systemImage: "arrow.down.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(OnboardingColors.accentBlue))
+                        }
+                        .buttonStyle(.plain).pointerOnHover()
+                        .accessibilityLabel("Download \(onboardingEngineName), \(asset.sizeLabel)")
+                        .uiTestFrame("onboarding.model.download")
+
+                        Text("A Wi-Fi connection is recommended. Dictation starts as soon as it finishes.")
+                            .font(.system(size: 11))
+                            .foregroundColor(OnboardingColors.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -1337,7 +1355,7 @@ struct OnboardingView: View {
             Spacer()
         }
         .onAppear {
-            startModelDownloadIfNeeded()
+            loadModelIfAlreadyDownloaded()
         }
     }
 
@@ -1393,8 +1411,23 @@ struct OnboardingView: View {
         return "\(asset.sizeLabel) download \u{00B7} stays on this Mac"
     }
 
-    private func startModelDownloadIfNeeded() {
-        appState.startSelectedEngine()
+    /// What the page says before and during the download. The size is stated up front; the
+    /// download itself starts only from the button below.
+    private var onboardingIntro: String {
+        if appState.isSelectedEngineDownloading || appState.isSelectedEngineDownloaded {
+            return "Downloading \(onboardingEngineName), the speech model\nthat runs on this Mac. Nothing leaves your device."
+        }
+        guard let asset = appState.selectedEngineAsset else {
+            return "\(onboardingEngineName) runs on this Mac.\nNothing leaves your device."
+        }
+        return "\(onboardingEngineName) is the speech model that runs on this Mac. It needs a one-time download of \(asset.sizeLabel). Nothing leaves your device."
+    }
+
+    /// Only loads what is already on disk. It never starts a download: that is the button's job.
+    private func loadModelIfAlreadyDownloaded() {
+        if appState.isSelectedEngineDownloaded {
+            appState.startSelectedEngine()
+        }
     }
 
     // MARK: - Reusable Components

@@ -39,7 +39,8 @@ SHORTCUT DETECTION (no keystroke monitoring):
 DOES NOT: create event taps • use IOKit HID • monitor keystrokes • read/write AX elements • request Accessibility • log or transmit input • require Input Monitoring • use ChatGPT/OpenAI cloud
 
 HOW TO TEST:
-Launch → onboarding → microphone permission (button says "Continue") → menu bar icon → hold Fn → speak → release → text copied to clipboard → ⌘V to paste in any app.
+Launch → onboarding → microphone permission (button says "Continue") → last page: press "Download <size>" (nothing downloads until you do) → menu bar icon → hold Fn → speak → release → text copied to clipboard → ⌘V to paste in any app.
+DOWNLOADS (Guideline 4.2.3): every model download starts from a button that names its size: onboarding "Download <size>", the Models list, the meeting screen "Download about 3.4 GB", the Smart Polish card "Download 138 MB". Nothing is fetched at launch.
 Tip: Set Globe key to "Do Nothing" in System Settings → Keyboard → Modifier Keys.
 
 NO SIGN-IN REQUIRED — uncheck "Sign-in required."
@@ -51,6 +52,5 @@ ENTITLEMENTS (state each one; Apple's automated review rejects an entitlement it
 - com.apple.security.network.client: model downloads, optional calendar and AI sign-in.
 - com.apple.security.network.server: loopback only (127.0.0.1). (1) The optional local MCP server, OFF by default, bearer token required. (2) The one-shot OAuth redirect listener of the ChatGPT sign-in. Neither opens a port to the network.
 - com.apple.security.device.audio-input: microphone for dictation and meetings.
-- com.apple.security.device.camera: only checks whether the camera is in use (opt-in), never captures video.
 - com.apple.security.files.user-selected.read-write: file import and export through open/save panels.
 ```

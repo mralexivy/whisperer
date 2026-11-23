@@ -1776,8 +1776,12 @@ class AppState: ObservableObject {
         }
     }
 
-    /// Starts (or retries) the download for `asset`.
+    /// Starts (or retries) the download for `asset`. Only called from something the user pressed
+    /// (a download button that names the size, the onboarding button, a retry), so it records
+    /// consent: later automatic starts of the same model are then allowed. Automatic callers must
+    /// go through `startSelectedEngine()`, which checks consent first (Guideline 4.2.3(ii)).
     func startDownload(_ asset: ModelAsset) {
+        ModelDownloadConsent.grant(asset)
         switch asset {
         case .whisper(let model): Task { await downloadModel(model) }
         case .parakeet(let variant): downloadParakeetModel(variant)
@@ -1927,6 +1931,13 @@ class AppState: ObservableObject {
         if isSelectedEngineDownloaded {
             preloadModel()
         } else if !AppEnvironment.isRunningTests, let asset = selectedEngineAsset {
+            // Never download behind the user's back (Guideline 4.2.3(ii)): this runs at launch and
+            // from onboarding's appearance. Without a recorded "Download" press the model waits;
+            // the onboarding page, the menu bar's Models list and the shortcut prompt ask.
+            guard ModelDownloadConsent.hasConsent(for: asset) else {
+                Logger.info("\(asset.displayName) is not downloaded and the user has not agreed to the download yet — waiting", subsystem: .model)
+                return
+            }
             // Each engine's own downloader — an earlier version fetched the Whisper file for
             // Parakeet, WhisperKit and Nemotron Hebrew users, who then never got a model.
             startDownload(asset)
@@ -4515,11 +4526,15 @@ class AppState: ObservableObject {
             if isModelLoaded == false && !isModelBusy {
                 if isSelectedEngineDownloaded {
                     preloadModel()
-                } else if !isSelectedEngineDownloading && selectedEngineDownloadFailure == nil {
-                    // Nothing on disk and nothing fetching (e.g. onboarding was skipped): pressing
-                    // the shortcut is the user asking for their engine, so start fetching it. A
-                    // failed download is not retried behind their back — the HUD says it failed.
-                    startSelectedEngine()
+                } else if !isSelectedEngineDownloading && selectedEngineDownloadFailure == nil,
+                          let asset = selectedEngineAsset {
+                    // Nothing on disk and nothing fetching (e.g. onboarding was skipped). Pressing
+                    // the shortcut is not consent to a multi-hundred-MB download: ask, naming the
+                    // size, unless the user already agreed to this model. A failed download is not
+                    // retried behind their back — the HUD says it failed.
+                    if ModelDownloadConsent.hasConsent(for: asset) || ModelDownloadPrompt.confirm(asset) {
+                        startDownload(asset)
+                    }
                 }
             }
             return
