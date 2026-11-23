@@ -10,7 +10,7 @@ say() { echo "[$(date +%H:%M:%S)] $*"; }
 for E in "regular:AppStore:build/whisperer.xcarchive" "china:AppStoreChina:build/whisperer-china.xcarchive"; do
   IFS=: read -r n cfg arch <<< "$E"
   say "archive $n"
-  xcodebuild archive -project Whisperer.xcodeproj -scheme whisperer -configuration "$cfg" -destination "generic/platform=macOS" -archivePath "$arch" ARCHS=arm64 -allowProvisioningUpdates 2>&1 | grep -E "ARCHIVE (SUCCEEDED|FAILED)|error:"
+  xcodebuild archive -project Whisperer.xcodeproj -scheme whisperer -configuration "$cfg" -destination "generic/platform=macOS" -archivePath "$arch" ARCHS=arm64 -allowProvisioningUpdates 2>&1 | tee "build/archive-$n.log" | grep -E "ARCHIVE (SUCCEEDED|FAILED)|error:"
   [ -d "$arch" ] || { say "FAILED archive $n"; exit 1; }
 done
 bad=0
